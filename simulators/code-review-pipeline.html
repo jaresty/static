@@ -556,7 +556,10 @@ function simulate(params, weeks) {
 
     // Metrics
     const MTTV = D_eff; // weeks
-    const reworkFraction = reworkRate / Math.max(C, 0.01);
+    // Denominator is human baseline capacity, not AI-inflated C.
+    // Incidents pull humans off work regardless of AI speed.
+    const humanBaseline = params.team_size * params.base_prod;
+    const reworkFraction = reworkRate / Math.max(humanBaseline, 0.01);
     const featureTPweek = reviewTP;
 
     if (i % 10 === 0) {
@@ -743,7 +746,7 @@ const metricDefs = [
     key: 'reworkPct',
     label: 'Rework Fraction',
     unit: 'of capacity lost to bug fixing',
-    def: 'Percentage of the team\'s coding capacity consumed by fixing production bugs instead of building features. 30% means only 70% of your engineers\' time goes to new value.',
+    def: 'Fraction of human engineering capacity lost to fixing production bugs. Measured against baseline human capacity (team size × baseline productivity) — not AI-inflated output — because incidents pull humans off work regardless of how fast the AI was coding.',
     format: v => (v * 100).toFixed(0) + '%',
     thresholds: { warn: v => v > 0.15, danger: v => v > 0.3 },
   },
