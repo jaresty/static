@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Code Review Pipeline Simulator</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f1117;
+    color: #e1e4e8;
+    min-height: 100vh;
+    padding: 32px 24px;
+  }
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #f0f6fc;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 0.85rem;
+    color: #8b949e;
+    margin-bottom: 8px;
+    max-width: 800px;
+  }
+  .model-note {
+    font-size: 0.78rem;
+    color: #6e7681;
+    margin-bottom: 28px;
+    max-width: 800px;
+    line-height: 1.5;
+  }
+  .model-note a {
+    color: #58a6ff;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 32px;
+    max-width: 1200px;
+  }
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .section-header {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #6e7681;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 12px 0 8px;
+    border-bottom: 1px solid #21262d;
+    margin-bottom: 16px;
+  }
+  .control-group {
+    margin-bottom: 20px;
+  }
+  .control-group label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .control-group .value-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+  }
+  .control-group .param-name {
+    font-size: 0.9rem;
+    color: #f0f6fc;
+    font-weight: 500;
+  }
+  .control-group .param-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #58a6ff;
+    font-variant-numeric: tabular-nums;
+    min-width: 3.5rem;
+    text-align: right;
+  }
+  .control-group .param-desc {
+    font-size: 0.72rem;
+    color: #6e7681;
+    margin-top: 6px;
+    line-height: 1.4;
+  }
+  .assumption-tag {
+    font-size: 0.65rem;
+    background: #1c2128;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    border-radius: 3px;
+    padding: 1px 5px;
+    display: inline-block;
+    margin-top: 4px;
+  }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: #30363d;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #58a6ff;
+    cursor: pointer;
+    border: 2px solid #0f1117;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #58a6ff;
+    cursor: pointer;
+    border: 2px solid #0f1117;
+  }
+  .charts {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .metric-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .metric-card.warn {
+    border-color: #f0883e44;
+  }
+  .metric-card.danger {
+    border-color: #f8514944;
+  }
+  .metric-label {
+    font-size: 0.7rem;
+    color: #8b949e;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .metric-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #f0f6fc;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+  .metric-value.warn { color: #f0883e; }
+  .metric-value.danger { color: #f85149; }
+  .metric-unit {
+    font-size: 0.72rem;
+    color: #6e7681;
+    margin-top: 2px;
+  }
+  .metric-def {
+    font-size: 0.68rem;
+    color: #6e7681;
+    margin-top: 6px;
+    line-height: 1.4;
+    border-top: 1px solid #21262d;
+    padding-top: 6px;
+  }
+  .chart-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px 20px;
+  }
+  .chart-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .chart-subtitle {
+    font-size: 0.72rem;
+    color: #6e7681;
+    margin-bottom: 12px;
+  }
+  .chart-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .assumptions-panel {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-top: 0;
+  }
+  .assumptions-panel h3 {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 12px;
+  }
+  .assumption-row {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+    align-items: start;
+  }
+  .assumption-row label {
+    font-size: 0.72rem;
+    color: #6e7681;
+    padding-top: 2px;
+    font-weight: 600;
+  }
+  .assumption-row .inline-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .assumption-row input[type=range] {
+    flex: 1;
+    margin: 0;
+  }
+  .assumption-row .aval {
+    font-size: 0.8rem;
+    color: #58a6ff;
+    font-variant-numeric: tabular-nums;
+    min-width: 3rem;
+    text-align: right;
+    font-weight: 600;
+  }
+  .assumption-row .adesc {
+    font-size: 0.68rem;
+    color: #6e7681;
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+  .divider {
+    height: 1px;
+    background: #21262d;
+    margin: 8px 0 16px;
+  }
+  svg text { font-family: inherit; }
+  .loop-indicator {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .loop-badge {
+    font-size: 0.7rem;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-weight: 600;
+  }
+  .loop-active {
+    background: #f8514920;
+    color: #f85149;
+    border: 1px solid #f8514940;
+  }
+  .loop-stable {
+    background: #3fb95020;
+    color: #3fb950;
+    border: 1px solid #3fb95040;
+  }
+  .tooltip {
+    position: fixed;
+    background: #1c2128;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    color: #e1e4e8;
+    pointer-events: none;
+    z-index: 100;
+    max-width: 220px;
+    line-height: 1.5;
+    display: none;
+  }
+  .scenario-buttons {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .scenario-btn {
+    background: #21262d;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .scenario-btn:hover {
+    border-color: #58a6ff;
+    color: #58a6ff;
+    background: #58a6ff11;
+  }
+  .scenario-btn.active {
+    background: #58a6ff22;
+    border-color: #58a6ff;
+    color: #58a6ff;
+  }
+</style>
+</head>
+<body>
+
+<h1>Code Review Pipeline Simulator</h1>
+<p class="subtitle">How does review speed and thoroughness affect the value your team actually delivers to users?</p>
+<p class="model-note">
+  This is a <strong>queuing + quality model</strong>. Coding creates work-in-progress (WIP); review drains it.
+  Low diligence lets defects escape to production, which generates rework that eats into coding capacity.
+  Both failure modes compound: more WIP → slower reviews → more WIP; more defects → more rework → less coding → fewer features.
+  <strong>Exception: pairing (review delay &lt; 0.1 weeks).</strong> When a reviewer is present during coding there is no queue — WIP cannot accumulate and the review bottleneck disappears. This is why pairing + AI is qualitatively different from async + AI.
+  All assumptions are adjustable below. <a id="toggle-assumptions">Show model assumptions ▾</a>
+</p>
+
+<div class="layout">
+  <div class="controls">
+    <div class="section-header">Main Controls</div>
+
+    <div class="scenario-buttons">
+      <button class="scenario-btn active" data-scenario="baseline">Baseline</button>
+      <button class="scenario-btn" data-scenario="pairing">Pairing</button>
+      <button class="scenario-btn" data-scenario="slow-async">Slow Async</button>
+      <button class="scenario-btn" data-scenario="rework-spiral">AI + Low Diligence</button>
+      <button class="scenario-btn" data-scenario="ai-no-review">AI Overload</button>
+    </div>
+
+    <div class="control-group">
+      <label>Team Size</label>
+      <div class="value-row">
+        <span class="param-name">Developers</span>
+        <span class="param-value" id="val-team_size">4</span>
+      </div>
+      <input type="range" id="slider-team_size" min="1" max="20" step="1" value="4">
+      <div class="param-desc">Number of developers. Each person codes <em>and</em> reviews — reviewer capacity scales with team size. Coding output = team size × AI multiplier × baseline productivity.</div>
+    </div>
+
+    <div class="control-group">
+      <label>AI Speed Multiplier</label>
+      <div class="value-row">
+        <span class="param-name" id="label-speed_mult">1× — Human baseline</span>
+        <span class="param-value" id="val-speed_mult">1.0×</span>
+      </div>
+      <input type="range" id="slider-speed_mult" min="0.5" max="6" step="0.25" value="1">
+      <div class="param-desc">How much faster AI makes each developer. 1× = no AI. 1.5–2× = AI-assisted (GitHub Copilot studies). 3–5× = heavy AI / agent-driven coding. Does not affect review capacity — reviewers still read the same amount of code.</div>
+      <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:#6e7681;margin-top:4px">
+        <span>0.5× slow</span><span>1× human</span><span>2× AI-assist</span><span>5× AI-heavy</span>
+      </div>
+    </div>
+
+    <div class="control-group" style="background:#1c2128;border:1px solid #21262d;border-radius:6px;padding:10px 12px;">
+      <label style="color:#6e7681">Derived: features started / week</label>
+      <div class="value-row" style="margin-bottom:0">
+        <span class="param-name" style="font-size:0.8rem;color:#8b949e">team × multiplier × baseline</span>
+        <span class="param-value" id="val-C-derived" style="color:#3fb950">4.0</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Review Delay (D)</label>
+      <div class="value-row">
+        <span class="param-name">Weeks from done to approved</span>
+        <span class="param-value" id="val-D">0.5</span>
+      </div>
+      <input type="range" id="slider-D" min="0.05" max="4" step="0.05" value="0.5">
+      <div class="param-desc">How long a finished feature sits waiting for review. <strong>Below 0.1 weeks (~half a day) = pairing mode</strong>: reviewer is present during coding, so no queue can form — WIP accumulation is disabled entirely. 0.5 = fast async (2–3 days). 2–4 = very delayed.</div>
+    </div>
+
+    <div class="control-group">
+      <label>Review Diligence (Q)</label>
+      <div class="value-row">
+        <span class="param-name">Fraction of defects caught</span>
+        <span class="param-value" id="val-Q">0.80</span>
+      </div>
+      <input type="range" id="slider-Q" min="0.1" max="1.0" step="0.05" value="0.8">
+      <div class="param-desc">Probability a defect is caught during review. 0.2 = rubber-stamp. 0.8 = careful async. 0.95 = pairing-level thoroughness.</div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-header">Simulation</div>
+    <div class="control-group">
+      <label>Time horizon</label>
+      <div class="value-row">
+        <span class="param-name">Weeks to simulate</span>
+        <span class="param-value" id="val-weeks">26</span>
+      </div>
+      <input type="range" id="slider-weeks" min="4" max="52" step="1" value="26">
+    </div>
+
+    <div id="assumptions-section" style="display:none">
+      <div class="divider"></div>
+      <div class="section-header">Model Assumptions</div>
+      <div class="assumptions-panel">
+        <div class="assumption-row">
+          <label>Base productivity</label>
+          <div>
+            <div class="inline-control">
+              <input type="range" id="slider-base_prod" min="0.25" max="3" step="0.25" value="1">
+              <span class="aval" id="val-base_prod">1.00</span>
+            </div>
+            <div class="adesc">Features one developer ships per week at 1× (human, no AI). ~1 is a common industry estimate after accounting for meetings, reviews, and context-switching. Challenge this if your team is faster or slower.</div>
+          </div>
+        </div>
+        <div class="assumption-row">
+          <label>Review bandwidth</label>
+          <div>
+            <div class="inline-control">
+              <input type="range" id="slider-review_bw" min="0.5" max="4" step="0.25" value="1.5">
+              <span class="aval" id="val-review_bw">1.50</span>
+            </div>
+            <div class="adesc">Features one developer can review per week (on top of their own coding). Review capacity = team size × this value. AI does not increase review bandwidth — reviewers still read every line.</div>
+          </div>
+        </div>
+        <div class="assumption-row">
+          <label>b (bugs/feat)</label>
+          <div>
+            <div class="inline-control">
+              <input type="range" id="slider-b" min="0.5" max="6" step="0.25" value="2">
+              <span class="aval" id="val-b">2.00</span>
+            </div>
+            <div class="adesc">Average defects introduced per feature before review. Varies by codebase complexity.</div>
+          </div>
+        </div>
+        <div class="assumption-row">
+          <label>r_cost (wks)</label>
+          <div>
+            <div class="inline-control">
+              <input type="range" id="slider-rcost" min="0.05" max="1.0" step="0.05" value="0.3">
+              <span class="aval" id="val-rcost">0.30</span>
+            </div>
+            <div class="adesc">Engineering weeks consumed per active production incident. Includes triage, fix, and re-deploy.</div>
+          </div>
+        </div>
+        <div class="assumption-row">
+          <label>μ (resolve/wk)</label>
+          <div>
+            <div class="inline-control">
+              <input type="range" id="slider-mu" min="0.2" max="3" step="0.1" value="1.0">
+              <span class="aval" id="val-mu">1.00</span>
+            </div>
+            <div class="adesc">Rate at which active production incidents are resolved. 1.0 = average incident fixed within 1 week.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="charts">
+    <div class="metrics-grid" id="metrics-grid"></div>
+
+    <div class="loop-indicator" id="loop-indicator"></div>
+
+    <div class="chart-row">
+      <div class="chart-card">
+        <div class="chart-title">Features Delivered to Users</div>
+        <div class="chart-subtitle">Cumulative features reaching production over time</div>
+        <svg id="chart-throughput"></svg>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Time-to-Value</div>
+        <div class="chart-subtitle">How long users wait for a completed feature (weeks)</div>
+        <svg id="chart-mttv"></svg>
+      </div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-card">
+        <div class="chart-title">Defects Shipped to Users / Week</div>
+        <div class="chart-subtitle">Bugs reaching production — customer-visible harm</div>
+        <svg id="chart-defects"></svg>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Rework Fraction</div>
+        <div class="chart-subtitle">Share of engineering capacity consumed by bug fixing (not features)</div>
+        <svg id="chart-rework"></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ── Model ────────────────────────────────────────────────────────────────────
+
+function simulate(params, weeks) {
+  // Derive C and Rcap from team structure and AI speed multiplier
+  const C = params.team_size * params.speed_mult * params.base_prod;
+  const Rcap = params.team_size * params.review_bw;
+  const { D, Q, b, rcost, mu } = params;
+  const dt = 0.1;
+  const steps = Math.round(weeks / dt);
+
+  // Initial conditions: steady-state approximation
+  const initReviewTP = Math.min(C, Rcap / (1 + D));
+  const initEscapeRate = initReviewTP * b * (1 - Q);
+  const initIncidents = initEscapeRate / mu;
+  const initRework = initIncidents * rcost;
+  const initCeff = Math.max(0, C - initRework);
+  const initWIP = initCeff * D;
+
+  let WIP = Math.max(0, initWIP);
+  let Incidents = Math.max(0, initIncidents);
+  let cumulativeDelivered = 0;
+
+  const series = [];
+
+  for (let i = 0; i <= steps; i++) {
+    const t = i * dt;
+
+    // Pairing (D < 0.1): reviewer is co-located — no queue forms, D_eff = D flat.
+    // Async (D >= 0.1): queue delay adds WIP/Rcap on top of base delay.
+    const D_eff = D < 0.1 ? D : D + WIP / Rcap;
+
+    // Review throughput: limited by available WIP and reviewer capacity
+    const reviewTP = D_eff > 0 ? Math.min(WIP, Rcap) / D_eff : Math.min(WIP, Rcap);
+
+    // Defect escape rate
+    const escapeRate = reviewTP * b * (1 - Q);
+
+    // Rework rate from active incidents
+    const reworkRate = Incidents * rcost;
+
+    // Effective coding rate
+    const C_eff = Math.max(0, C - reworkRate);
+
+    // Metrics
+    const MTTV = D_eff; // weeks
+    const reworkFraction = reworkRate / Math.max(C, 0.01);
+    const featureTPweek = reviewTP;
+
+    if (i % 10 === 0) {
+      series.push({
+        t,
+        WIP,
+        Incidents,
+        MTTV,
+        reworkFraction,
+        featureTPweek,
+        escapeRate,
+        C_eff,
+        cumulativeDelivered,
+      });
+    }
+
+    // Euler integration
+    const dWIP = C_eff - reviewTP;
+    const dIncidents = escapeRate - mu * Incidents;
+
+    WIP = Math.max(0, WIP + dWIP * dt);
+    Incidents = Math.max(0, Incidents + dIncidents * dt);
+    cumulativeDelivered += reviewTP * dt;
+  }
+
+  return series;
+}
+
+function steadyState(series) {
+  const last = series[series.length - 1];
+  return last;
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
+// team_size: number of developers
+// speed_mult: AI coding speed multiplier (1=human, 2=AI-assisted, 5=AI-heavy)
+// base_prod: features one developer ships per week at 1× (human baseline)
+// review_bw: features one developer can review per week (reviewer capacity per person)
+// C is derived: C = team_size × speed_mult × base_prod
+// Rcap is derived: Rcap = team_size × review_bw
+const params = {
+  team_size: 4, speed_mult: 1.0, base_prod: 1.0, review_bw: 1.5,
+  D: 0.5, Q: 0.80, b: 2, rcost: 0.3, mu: 1.0,
+};
+let weeks = 26;
+
+const scenarios = {
+  baseline:        { team_size: 4, speed_mult: 1.0, D: 0.5,  Q: 0.80 },
+  pairing:         { team_size: 4, speed_mult: 1.0, D: 0.05, Q: 0.95 },
+  'slow-async':    { team_size: 4, speed_mult: 1.0, D: 2.0,  Q: 0.80 },
+  'rework-spiral': { team_size: 4, speed_mult: 2.0, D: 0.5,  Q: 0.40 },
+  'ai-no-review':  { team_size: 4, speed_mult: 4.0, D: 2.0,  Q: 0.60 },
+};
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+
+const W = 420, H = 180;
+const margin = { top: 8, right: 16, bottom: 28, left: 44 };
+const iW = W - margin.left - margin.right;
+const iH = H - margin.top - margin.bottom;
+
+function initSvg(id) {
+  return d3.select('#' + id)
+    .attr('width', '100%')
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('preserveAspectRatio', 'xMidYMid meet');
+}
+
+function drawLine(svgId, data, yKey, color, yLabel, yFormat) {
+  const svg = d3.select('#' + svgId);
+  svg.selectAll('*').remove();
+
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const xScale = d3.scaleLinear().domain([0, d3.max(data, d => d.t)]).range([0, iW]);
+  const yVals = data.map(d => d[yKey]);
+  const yMax = Math.max(...yVals) * 1.15 || 1;
+  const yScale = d3.scaleLinear().domain([0, yMax]).range([iH, 0]);
+
+  // Grid lines
+  g.append('g')
+    .call(d3.axisLeft(yScale).ticks(4).tickSize(-iW).tickFormat(''))
+    .call(g => g.select('.domain').remove())
+    .call(g => g.selectAll('.tick line').attr('stroke', '#21262d').attr('stroke-dasharray', '2,3'));
+
+  // Axes
+  g.append('g').attr('transform', `translate(0,${iH})`)
+    .call(d3.axisBottom(xScale).ticks(6).tickFormat(d => d + 'w'))
+    .call(g => g.select('.domain').attr('stroke', '#30363d'))
+    .call(g => g.selectAll('text').attr('fill', '#6e7681').attr('font-size', '10'));
+
+  g.append('g')
+    .call(d3.axisLeft(yScale).ticks(4).tickFormat(yFormat || d3.format('.2~f')))
+    .call(g => g.select('.domain').attr('stroke', '#30363d'))
+    .call(g => g.selectAll('text').attr('fill', '#6e7681').attr('font-size', '10'));
+
+  // Area
+  const area = d3.area()
+    .x(d => xScale(d.t))
+    .y0(iH)
+    .y1(d => yScale(d[yKey]))
+    .curve(d3.curveCatmullRom);
+
+  g.append('path')
+    .datum(data)
+    .attr('fill', color + '18')
+    .attr('d', area);
+
+  // Line
+  const line = d3.line()
+    .x(d => xScale(d.t))
+    .y(d => yScale(d[yKey]))
+    .curve(d3.curveCatmullRom);
+
+  g.append('path')
+    .datum(data)
+    .attr('fill', 'none')
+    .attr('stroke', color)
+    .attr('stroke-width', 2)
+    .attr('d', line);
+
+  // Hover overlay
+  const bisect = d3.bisector(d => d.t).left;
+  const tooltip = d3.select('#tooltip');
+
+  const overlay = g.append('rect')
+    .attr('width', iW).attr('height', iH)
+    .attr('fill', 'transparent')
+    .attr('cursor', 'crosshair');
+
+  const dot = g.append('circle').attr('r', 4).attr('fill', color).attr('display', 'none');
+  const vline = g.append('line').attr('stroke', '#30363d').attr('stroke-width', 1).attr('display', 'none');
+
+  overlay.on('mousemove', function(event) {
+    const [mx] = d3.pointer(event, this);
+    const tw = xScale.invert(mx);
+    const idx = bisect(data, tw, 1);
+    const d0 = data[idx - 1], d1 = data[idx];
+    if (!d0 && !d1) return;
+    const d = (!d1 || Math.abs(d0.t - tw) < Math.abs(d1.t - tw)) ? d0 : d1;
+    dot.attr('display', null).attr('cx', xScale(d.t)).attr('cy', yScale(d[yKey]));
+    vline.attr('display', null).attr('x1', xScale(d.t)).attr('x2', xScale(d.t)).attr('y1', 0).attr('y2', iH);
+    const fmt = yFormat || (v => v.toFixed(2));
+    tooltip.style('display', 'block')
+      .style('left', (event.clientX + 14) + 'px')
+      .style('top', (event.clientY - 28) + 'px')
+      .html(`<strong>Week ${d.t.toFixed(1)}</strong><br>${yLabel}: <strong>${fmt(d[yKey])}</strong>`);
+  }).on('mouseleave', function() {
+    dot.attr('display', 'none');
+    vline.attr('display', 'none');
+    tooltip.style('display', 'none');
+  });
+}
+
+// ── Metrics ───────────────────────────────────────────────────────────────────
+
+const metricDefs = [
+  {
+    key: 'featureTPmonth',
+    label: 'Features / Month',
+    unit: 'delivered to users',
+    def: 'How many features actually reach users per month. Counts only items that passed review and were deployed — not features that are coded but waiting.',
+    format: v => v.toFixed(1),
+    thresholds: { warn: v => v < 10, danger: v => v < 5 },
+  },
+  {
+    key: 'MTTVdays',
+    label: 'Time-to-Value',
+    unit: 'days from code-complete to users',
+    def: 'How long a developer waits after finishing a feature until users can use it. Includes review queue wait and review time. A month means users see features once a month.',
+    format: v => v.toFixed(0) + 'd',
+    thresholds: { warn: v => v > 14, danger: v => v > 30 },
+  },
+  {
+    key: 'defectsWeek',
+    label: 'Defects / Week',
+    unit: 'bugs shipped to users',
+    def: 'Defects that escaped review and reached production per week. Each becomes a production incident requiring triage, a fix, and re-deploy — diverting engineers from features.',
+    format: v => v.toFixed(1),
+    thresholds: { warn: v => v > 2, danger: v => v > 5 },
+  },
+  {
+    key: 'reworkPct',
+    label: 'Rework Fraction',
+    unit: 'of capacity lost to bug fixing',
+    def: 'Percentage of the team\'s coding capacity consumed by fixing production bugs instead of building features. 30% means only 70% of your engineers\' time goes to new value.',
+    format: v => (v * 100).toFixed(0) + '%',
+    thresholds: { warn: v => v > 0.15, danger: v => v > 0.3 },
+  },
+];
+
+function renderMetrics(ss) {
+  const data = {
+    featureTPmonth: ss.featureTPweek * 4.33,
+    MTTVdays: ss.MTTV * 7,
+    defectsWeek: ss.escapeRate,
+    reworkPct: ss.reworkFraction,
+  };
+
+  const grid = d3.select('#metrics-grid');
+  grid.selectAll('.metric-card').data(metricDefs).join(
+    enter => {
+      const card = enter.append('div').attr('class', 'metric-card');
+      card.append('div').attr('class', 'metric-label').text(d => d.label);
+      card.append('div').attr('class', 'metric-value');
+      card.append('div').attr('class', 'metric-unit').text(d => d.unit);
+      card.append('div').attr('class', 'metric-def').text(d => d.def);
+      return card;
+    }
+  )
+  .each(function(d) {
+    const v = data[d.key];
+    const isDanger = d.thresholds.danger(v);
+    const isWarn = !isDanger && d.thresholds.warn(v);
+    d3.select(this)
+      .classed('warn', isWarn)
+      .classed('danger', isDanger);
+    d3.select(this).select('.metric-value')
+      .text(d.format(v))
+      .classed('warn', isWarn)
+      .classed('danger', isDanger);
+  });
+}
+
+function renderLoops(ss) {
+  const wipGrowing = ss.C_eff > ss.featureTPweek * 1.05;
+  const reworkHigh = ss.reworkFraction > 0.2;
+
+  const container = d3.select('#loop-indicator');
+  container.html('');
+
+  container.append('span').attr('class', 'loop-badge ' + (wipGrowing ? 'loop-active' : 'loop-stable'))
+    .text(wipGrowing ? '⚠ WIP accumulation active' : '✓ WIP stable');
+
+  container.append('span').attr('class', 'loop-badge ' + (reworkHigh ? 'loop-active' : 'loop-stable'))
+    .text(reworkHigh ? '⚠ Rework spiral active' : '✓ Rework stable');
+}
+
+// ── Wiring ────────────────────────────────────────────────────────────────────
+
+function update() {
+  const data = simulate(params, weeks);
+  const ss = steadyState(data);
+
+  renderMetrics(ss);
+  renderLoops(ss);
+
+  drawLine('chart-throughput', data, 'cumulativeDelivered', '#3fb950', 'Cumulative features', d3.format('.1f'));
+  drawLine('chart-mttv', data, 'MTTV', '#58a6ff', 'MTTV (weeks)', v => (v * 7).toFixed(0) + 'd');
+  drawLine('chart-defects', data, 'escapeRate', '#f0883e', 'Defects/week', d3.format('.2f'));
+  drawLine('chart-rework', data, 'reworkFraction', '#bc8cff', 'Rework fraction', v => (v * 100).toFixed(0) + '%');
+}
+
+const speedLabels = [
+  [0.5, '0.5× — below human baseline'],
+  [1.0, '1× — Human baseline'],
+  [1.5, '1.5× — Light AI assistance'],
+  [2.0, '2× — AI-assisted (Copilot-level)'],
+  [3.0, '3× — Heavy AI assistance'],
+  [4.0, '4× — AI agent-driven coding'],
+  [5.0, '5× — AI-heavy (optimistic)'],
+  [6.0, '6× — Speculative AI ceiling'],
+];
+function speedLabel(v) {
+  let best = speedLabels[0];
+  for (const [val, label] of speedLabels) {
+    if (Math.abs(val - v) < Math.abs(best[0] - v)) best = [val, label];
+  }
+  return best[1];
+}
+
+function updateDerivedC() {
+  const C = params.team_size * params.speed_mult * params.base_prod;
+  document.getElementById('val-C-derived').textContent = C.toFixed(1);
+}
+
+function bindSlider(id, key, displayId, fmt) {
+  const slider = document.getElementById('slider-' + id);
+  const display = document.getElementById('val-' + displayId);
+  slider.addEventListener('input', () => {
+    params[key] = +slider.value;
+    display.textContent = fmt ? fmt(+slider.value) : slider.value;
+    if (key === 'speed_mult') {
+      document.getElementById('label-speed_mult').textContent = speedLabel(+slider.value);
+    }
+    updateDerivedC();
+    clearScenario();
+    update();
+  });
+}
+
+function clearScenario() {
+  document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
+}
+
+function syncSlider(id, key, fmt) {
+  document.getElementById('slider-' + id).value = params[key];
+  document.getElementById('val-' + id).textContent = fmt ? fmt(params[key]) : params[key];
+}
+
+bindSlider('team_size', 'team_size', 'team_size', v => Math.round(v));
+bindSlider('speed_mult', 'speed_mult', 'speed_mult', v => v.toFixed(2) + '×');
+bindSlider('D', 'D', 'D', v => v.toFixed(2));
+bindSlider('Q', 'Q', 'Q', v => v.toFixed(2));
+bindSlider('base_prod', 'base_prod', 'base_prod', v => v.toFixed(2));
+bindSlider('review_bw', 'review_bw', 'review_bw', v => v.toFixed(2));
+bindSlider('b', 'b', 'b', v => v.toFixed(2));
+bindSlider('rcost', 'rcost', 'rcost', v => v.toFixed(2));
+bindSlider('mu', 'mu', 'mu', v => v.toFixed(2));
+
+document.getElementById('slider-weeks').addEventListener('input', function() {
+  weeks = +this.value;
+  document.getElementById('val-weeks').textContent = weeks;
+  update();
+});
+
+document.querySelectorAll('.scenario-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const s = scenarios[this.dataset.scenario];
+    Object.assign(params, s);
+    syncSlider('team_size', 'team_size', v => Math.round(v));
+    syncSlider('speed_mult', 'speed_mult', v => v.toFixed(2) + '×');
+    syncSlider('D', 'D', v => v.toFixed(2));
+    syncSlider('Q', 'Q', v => v.toFixed(2));
+    document.getElementById('label-speed_mult').textContent = speedLabel(params.speed_mult);
+    updateDerivedC();
+    document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    update();
+  });
+});
+
+document.getElementById('toggle-assumptions').addEventListener('click', function() {
+  const panel = document.getElementById('assumptions-section');
+  const visible = panel.style.display !== 'none';
+  panel.style.display = visible ? 'none' : 'block';
+  this.textContent = visible ? 'Show model assumptions ▾' : 'Hide model assumptions ▴';
+});
+
+updateDerivedC();
+update();
+</script>
+</body>
+</html>
