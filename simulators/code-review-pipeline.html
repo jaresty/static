@@ -329,6 +329,34 @@
     border-color: #58a6ff;
     color: #58a6ff;
   }
+  .copy-prompt-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #21262d;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+    margin-top: 4px;
+    width: 100%;
+    justify-content: center;
+  }
+  .copy-prompt-btn:hover {
+    border-color: #58a6ff;
+    color: #58a6ff;
+    background: #58a6ff11;
+  }
+  .copy-prompt-btn.copied {
+    border-color: #3fb950;
+    color: #3fb950;
+    background: #3fb95011;
+  }
 </style>
 </head>
 <body>
@@ -416,6 +444,10 @@
       </div>
       <input type="range" id="slider-weeks" min="4" max="52" step="1" value="26">
     </div>
+
+    <button class="copy-prompt-btn" id="copy-prompt-btn">
+      <span id="copy-prompt-icon">⎘</span><span id="copy-prompt-label"> Copy prompt for AI analysis</span>
+    </button>
 
     <div id="assumptions-section" style="display:none">
       <div class="divider"></div>
@@ -898,6 +930,111 @@ document.getElementById('toggle-assumptions').addEventListener('click', function
   const visible = panel.style.display !== 'none';
   panel.style.display = visible ? 'none' : 'block';
   this.textContent = visible ? 'Show model assumptions ▾' : 'Hide model assumptions ▴';
+});
+
+function buildPrompt() {
+  const C = params.team_size * params.speed_mult * params.base_prod;
+  const Rcap = params.team_size * params.review_bw;
+  const humanBaseline = params.team_size * params.base_prod;
+  const data = simulate(params, weeks);
+  const ss = steadyState(data);
+
+  const mttv_days = (ss.MTTV * 7).toFixed(1);
+  const feat_month = (ss.featureTPweek * 4.33).toFixed(1);
+  const defects_wk = ss.escapeRate.toFixed(2);
+  const rework_pct = (ss.reworkFraction * 100).toFixed(1);
+  const wip = ss.WIP.toFixed(1);
+  const incidents = ss.Incidents.toFixed(2);
+  const wipGrowing = ss.C_eff > ss.featureTPweek * 1.05;
+  const reworkHigh = ss.reworkFraction > 0.2;
+  const pairingMode = params.D < 0.1;
+
+  return `# Code Review Pipeline Simulation — State Snapshot
+
+## Model equations
+
+This is a continuous-time queuing + quality model. Variables:
+- C = coding rate (features/week entering WIP)
+- D = base review delay (weeks); D_eff = effective delay including queue
+- Q = review diligence (fraction of defects caught, 0–1)
+- Rcap = reviewer capacity (max features/week reviewable)
+- b = defects introduced per feature before review
+- r_cost = engineering-weeks consumed per active production incident
+- μ = incident resolution rate (incidents cleared per week)
+
+Equations:
+  C = team_size × speed_mult × base_prod
+  Rcap = team_size × review_bw
+  D_eff = D  (pairing mode, D < 0.1w — no queue forms)
+        = D + WIP/Rcap  (async mode — queue adds to delay)
+  review_throughput = min(WIP, Rcap) / D_eff
+  defect_escape_rate = review_throughput × b × (1 - Q)
+  dWIP/dt = C_eff - review_throughput
+  dIncidents/dt = defect_escape_rate - μ × Incidents
+  rework_rate = Incidents × r_cost
+  C_eff = max(0, C - rework_rate)
+
+Metrics:
+  Features/month = review_throughput × 4.33
+  Time-to-value (MTTV) = D_eff (in weeks)
+  Defects/week shipped = defect_escape_rate
+  Rework fraction = rework_rate / (team_size × base_prod)
+    [denominator is human baseline capacity — AI speed does not reduce incident response cost]
+
+Feedback loops:
+  WIP accumulation (reinforcing): high C + high D → WIP grows → D_eff grows → review_throughput falls → WIP grows faster
+  Rework spiral (reinforcing): low Q → defects escape → incidents accumulate → rework_rate rises → C_eff falls → fewer features coded
+
+## Current parameter values
+
+  Team size: ${params.team_size} developers
+  AI speed multiplier: ${params.speed_mult.toFixed(2)}× (${params.speed_mult <= 1.1 ? 'human baseline' : params.speed_mult <= 2.1 ? 'AI-assisted' : params.speed_mult <= 3.5 ? 'heavy AI assistance' : 'AI agent-driven'})
+  Base productivity: ${params.base_prod.toFixed(2)} features/dev/week (human baseline, no AI)
+  Derived coding rate C: ${C.toFixed(2)} features/week
+  Review delay D: ${params.D.toFixed(2)} weeks${pairingMode ? ' → PAIRING MODE (no queue accumulation)' : ''}
+  Review diligence Q: ${(params.Q * 100).toFixed(0)}% of defects caught
+  Reviewer capacity: ${Rcap.toFixed(1)} features/week (${params.review_bw.toFixed(2)}/dev)
+  Bugs per feature b: ${params.b.toFixed(2)}
+  Rework cost r_cost: ${params.rcost.toFixed(2)} weeks/incident
+  Incident resolution μ: ${params.mu.toFixed(2)}/week
+  Human baseline capacity: ${humanBaseline.toFixed(2)} features/week
+
+## Current steady-state metrics (end of ${weeks}-week simulation)
+
+  Features delivered to users/month: ${feat_month}
+  Mean time-to-value: ${mttv_days} days
+  Defects shipped to users/week: ${defects_wk}
+  Rework fraction (human capacity lost to bug fixing): ${rework_pct}%
+  WIP in queue: ${wip} features
+  Active production incidents: ${incidents}
+
+## Active feedback loop states
+
+  WIP accumulation: ${wipGrowing ? 'ACTIVE — coding rate exceeds review throughput; WIP is growing and pushing D_eff higher' : 'stable — review throughput keeping pace with coding rate'}
+  Rework spiral: ${reworkHigh ? 'ACTIVE — rework fraction exceeds 20%; significant engineering capacity diverted from features' : 'stable — rework load below 20% of human capacity'}
+  Pairing mode: ${pairingMode ? 'YES — review delay < 0.1w; queue accumulation suppressed entirely' : 'NO — async review; WIP queue can accumulate'}
+
+## Questions
+
+1. Given the model equations and current state above, explain in plain English what is driving each of the four business metrics to their current values. Trace the causal chain — don't just restate the numbers.
+
+2. Identify the single highest-leverage parameter change that would most improve value delivery (features/month reaching users). Quantify the expected improvement if possible, and explain why that lever is more effective than the alternatives.`;
+}
+
+document.getElementById('copy-prompt-btn').addEventListener('click', function() {
+  const prompt = buildPrompt();
+  navigator.clipboard.writeText(prompt).then(() => {
+    const btn = document.getElementById('copy-prompt-btn');
+    const icon = document.getElementById('copy-prompt-icon');
+    btn.classList.add('copied');
+    icon.textContent = '✓';
+    document.getElementById('copy-prompt-label').textContent = ' Copied!';
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      icon.textContent = '⎘';
+      document.getElementById('copy-prompt-label').textContent = ' Copy prompt for AI analysis';
+    }, 2000);
+  });
 });
 
 updateDerivedC();
