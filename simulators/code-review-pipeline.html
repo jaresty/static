@@ -544,7 +544,7 @@
 
 <div style="max-width:1200px;margin-top:48px;padding-top:24px;border-top:1px solid #21262d;">
   <div style="font-size:0.7rem;font-weight:700;color:#6e7681;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:16px;">About this model</div>
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:32px;">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
 
     <div>
       <div style="font-size:0.75rem;font-weight:600;color:#8b949e;margin-bottom:8px;">What kind of model this is</div>
@@ -575,6 +575,24 @@
       <div style="font-size:0.72rem;color:#6e7681;line-height:1.6;padding:10px 12px;background:#161b22;border:1px solid #30363d;border-radius:6px;">
         Every assumption in this model is adjustable. If a number feels wrong for your context, open <strong style="color:#8b949e">Model Assumptions</strong> and change it — the model updates immediately. The goal is to make the assumptions explicit enough to argue with.
       </div>
+    </div>
+
+    <div>
+      <div style="font-size:0.75rem;font-weight:600;color:#8b949e;margin-bottom:8px;">Tools and process</div>
+      <p style="font-size:0.72rem;color:#6e7681;line-height:1.6;margin-bottom:12px;">
+        Visualization: <strong style="color:#8b949e">D3.js v7</strong> for charts and DOM rendering. Simulation: plain JavaScript Euler integration (dt = 0.1 weeks), running entirely in the browser with no server.
+      </p>
+      <p style="font-size:0.72rem;color:#6e7681;line-height:1.6;margin-bottom:10px;">
+        The model was designed in a structured three-step session with <strong style="color:#8b949e">Claude</strong> before any UI was written:
+      </p>
+      <ol style="font-size:0.72rem;color:#6e7681;line-height:1.7;padding-left:16px;margin-bottom:12px;">
+        <li style="margin-bottom:6px"><strong style="color:#8b949e">Surface candidates.</strong> The session examined the domain and listed candidate stocks, flows, parameters, and coupling relationships — then paused for a human to confirm, prune, and redirect. The decision to focus on business outcomes (features delivered, time-to-value, defects, rework) rather than engineering metrics came from that exchange.</li>
+        <li style="margin-bottom:6px"><strong style="color:#8b949e">Derive the model.</strong> Each equation was derived from a named assumption by a visible reasoning step — nothing was asserted. The two reinforcing feedback loops (WIP accumulation, rework spiral) were traced explicitly. Three scenarios were verified numerically before any code was written.</li>
+        <li style="margin-bottom:6px"><strong style="color:#8b949e">Build the interactive.</strong> Only after the equations were confirmed did the session produce the UI — sliders, charts, and metric cards were built to expose the already-derived model, not to shape it.</li>
+      </ol>
+      <p style="font-size:0.72rem;color:#6e7681;line-height:1.6;">
+        Subsequent sessions refined the model in response to questions from early readers — including the pairing queue-suppression fix, the rework denominator correction, and this colophon.
+      </p>
     </div>
 
   </div>
