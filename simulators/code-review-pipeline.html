@@ -542,6 +542,44 @@
 
 <div class="tooltip" id="tooltip"></div>
 
+<div style="max-width:1200px;margin-top:48px;padding-top:24px;border-top:1px solid #21262d;">
+  <div style="font-size:0.7rem;font-weight:700;color:#6e7681;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:16px;">About this model</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:32px;">
+
+    <div>
+      <div style="font-size:0.75rem;font-weight:600;color:#8b949e;margin-bottom:8px;">What kind of model this is</div>
+      <p style="font-size:0.72rem;color:#6e7681;line-height:1.6;">
+        This is a <strong style="color:#8b949e">systems dynamics model</strong> — it represents the pipeline as stocks (WIP, incidents) and flows (coding rate, review throughput, defect escape) governed by differential equations, and simulates how they evolve over time. It is not an empirical study or a fitted statistical model. It produces qualitative insight — which levers matter most and why — not precise numerical predictions for your specific team.
+      </p>
+    </div>
+
+    <div>
+      <div style="font-size:0.75rem;font-weight:600;color:#8b949e;margin-bottom:8px;">Key modeling choices</div>
+      <ul style="font-size:0.72rem;color:#6e7681;line-height:1.7;list-style:none;padding:0;">
+        <li style="margin-bottom:6px;padding-left:12px;border-left:2px solid #30363d"><strong style="color:#8b949e">Pairing suppresses queue accumulation entirely</strong> — when D &lt; 0.1w, the reviewer is present during coding so no backlog can form; this is a qualitative regime change, not a quantitative improvement.</li>
+        <li style="margin-bottom:6px;padding-left:12px;border-left:2px solid #30363d"><strong style="color:#8b949e">Rework uses human baseline capacity as denominator</strong> — AI speeds up code generation but incidents still pull humans off work; dividing by AI-inflated throughput would falsely show rework shrinking as AI speed rises.</li>
+        <li style="margin-bottom:6px;padding-left:12px;border-left:2px solid #30363d"><strong style="color:#8b949e">Reviewer capacity scales with team size, not AI speed</strong> — reviewers read the same code regardless of how fast it was written; AI coding multipliers do not increase review bandwidth.</li>
+        <li style="margin-bottom:6px;padding-left:12px;border-left:2px solid #30363d"><strong style="color:#8b949e">Bugs per feature is a fixed assumption</strong> — in practice it likely increases with PR size and AI coding speed; you can adjust it in the assumptions panel to test sensitivity.</li>
+      </ul>
+    </div>
+
+    <div>
+      <div style="font-size:0.75rem;font-weight:600;color:#8b949e;margin-bottom:8px;">What this model cannot tell you</div>
+      <ul style="font-size:0.72rem;color:#6e7681;line-height:1.7;list-style:none;padding:0;margin-bottom:16px;">
+        <li style="margin-bottom:4px">— Coordination overhead as team size grows (Brooks's Law)</li>
+        <li style="margin-bottom:4px">— PR batch size effects on review quality and delay</li>
+        <li style="margin-bottom:4px">— Incident severity distribution (one P0 can dominate all metrics)</li>
+        <li style="margin-bottom:4px">— The actual AI speed multiplier for your team and codebase</li>
+        <li style="margin-bottom:4px">— Whether your reviewers can sustain review bandwidth under load</li>
+      </ul>
+      <div style="font-size:0.72rem;color:#6e7681;line-height:1.6;padding:10px 12px;background:#161b22;border:1px solid #30363d;border-radius:6px;">
+        Every assumption in this model is adjustable. If a number feels wrong for your context, open <strong style="color:#8b949e">Model Assumptions</strong> and change it — the model updates immediately. The goal is to make the assumptions explicit enough to argue with.
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <script>
 // ── Model ────────────────────────────────────────────────────────────────────
 
