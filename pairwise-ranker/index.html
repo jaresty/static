@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Stack Rank — decide one pair at a time</title>
+  <style>
+    :root {
+      --ink: #17211b;
+      --muted: #627068;
+      --paper: #f3f0e7;
+      --surface: #fffdf7;
+      --line: #d8d4c7;
+      --accent: #c7f36b;
+      --accent-strong: #a3df35;
+      --dark: #1e2a23;
+      --danger: #a43d30;
+      --shadow: 0 24px 70px rgba(29, 40, 33, 0.12);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 85% 5%, #e2f7bd 0, transparent 28rem), var(--paper); }
+    button, input, textarea, select { font: inherit; }
+    button { cursor: pointer; }
+    [hidden] { display: none !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+    .shell { width: min(1080px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 64px; }
+    .masthead { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 60px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 820; letter-spacing: -0.035em; }
+    .brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--dark); color: var(--accent); font-size: 18px; transform: rotate(-4deg); }
+    .privacy { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.86rem; }
+    .privacy-dot { width: 8px; height: 8px; border-radius: 50%; background: #5eaa52; box-shadow: 0 0 0 4px rgba(94,170,82,.13); }
+
+    .view { animation: enter .25s ease both; }
+    @keyframes enter { from { opacity: 0; transform: translateY(8px); } }
+    .eyebrow { margin: 0 0 12px; color: #4f6157; font-size: .76rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1, h2 { margin: 0; letter-spacing: -0.052em; line-height: .98; }
+    h1 { max-width: 760px; font-size: clamp(3rem, 8vw, 6.6rem); font-weight: 850; }
+    h2 { font-size: clamp(2.2rem, 5vw, 4rem); }
+    .lede { max-width: 620px; margin: 24px 0 36px; color: var(--muted); font-size: clamp(1rem, 2vw, 1.22rem); line-height: 1.6; }
+
+    .setup-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr); gap: 18px; align-items: start; }
+    .panel { background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid rgba(23,33,27,.12); border-radius: 24px; padding: clamp(22px, 4vw, 38px); box-shadow: var(--shadow); backdrop-filter: blur(12px); }
+    .field + .field { margin-top: 24px; }
+    label, .label { display: block; margin-bottom: 8px; font-size: .85rem; font-weight: 750; }
+    .hint { color: var(--muted); font-weight: 500; }
+    input, textarea, select { width: 100%; border: 1px solid var(--line); border-radius: 13px; background: #fff; color: var(--ink); outline: none; transition: border .15s, box-shadow .15s; }
+    input, select { min-height: 50px; padding: 0 14px; }
+    textarea { min-height: 220px; padding: 14px; line-height: 1.55; resize: vertical; }
+    input:focus, textarea:focus, select:focus { border-color: #7ca63e; box-shadow: 0 0 0 4px rgba(163,223,53,.18); }
+    .field-meta { display: flex; justify-content: space-between; gap: 16px; margin-top: 8px; color: var(--muted); font-size: .78rem; }
+    .error { min-height: 1.4em; margin: 14px 0 0; color: var(--danger); font-size: .86rem; font-weight: 650; }
+
+    .steps { margin: 0; padding: 0; list-style: none; counter-reset: steps; }
+    .steps li { position: relative; padding: 0 0 26px 46px; color: var(--muted); line-height: 1.45; }
+    .steps li:last-child { padding-bottom: 0; }
+    .steps li::before { counter-increment: steps; content: counter(steps); position: absolute; left: 0; top: -3px; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--ink); font-size: .78rem; font-weight: 800; }
+    .steps strong { display: block; color: var(--ink); margin-bottom: 3px; }
+
+    .button { min-height: 48px; border: 1px solid transparent; border-radius: 13px; padding: 0 18px; font-weight: 780; transition: transform .12s, background .12s, border .12s; }
+    .button:hover { transform: translateY(-1px); }
+    .button:active { transform: translateY(0); }
+    .button-primary { background: var(--dark); color: #fff; box-shadow: 0 8px 20px rgba(30,42,35,.17); }
+    .button-primary:hover { background: #2c3b32; }
+    .button-accent { background: var(--accent); color: var(--dark); border-color: #acd958; }
+    .button-accent:hover { background: var(--accent-strong); }
+    .button-secondary { background: transparent; color: var(--ink); border-color: var(--line); }
+    .button-quiet { min-height: auto; padding: 8px 10px; border: 0; background: transparent; color: var(--muted); }
+    .button-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+
+    .compare-head { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 24px; margin-bottom: 26px; }
+    .criterion { color: var(--muted); font-size: 1rem; }
+    .criterion strong { color: var(--ink); }
+    .progress { min-width: 160px; text-align: right; color: var(--muted); font-size: .82rem; }
+    .progress-track { height: 6px; margin-top: 8px; overflow: hidden; border-radius: 99px; background: #dedbcf; }
+    .progress-fill { height: 100%; width: 10%; border-radius: inherit; background: var(--dark); transition: width .2s ease; }
+
+    .versus { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: stretch; }
+    .option { display: flex; min-height: 300px; flex-direction: column; justify-content: space-between; gap: 30px; padding: clamp(22px, 4vw, 36px); border: 1px solid var(--line); border-radius: 24px; background: var(--surface); box-shadow: 0 14px 44px rgba(29,40,33,.08); }
+    .option-letter { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #ece9df; font-size: .78rem; font-weight: 850; }
+    .option-text { margin: auto 0; overflow-wrap: anywhere; font-size: clamp(1.35rem, 3.1vw, 2.5rem); font-weight: 790; letter-spacing: -.035em; line-height: 1.12; }
+    .choice { width: 100%; background: var(--dark); color: #fff; }
+    .versus-mark { align-self: center; color: #839087; font-size: .76rem; font-weight: 850; letter-spacing: .08em; }
+    .comparison-tools { display: grid; grid-template-columns: auto minmax(240px, 1fr) auto; gap: 12px; align-items: center; margin-top: 16px; }
+    .neutral-actions { display: flex; justify-content: center; gap: 8px; }
+    .rationale-wrap { margin-top: 16px; }
+    .rationale-wrap summary { cursor: pointer; color: var(--muted); font-size: .86rem; font-weight: 700; }
+    .rationale-wrap input { margin-top: 10px; }
+
+    .review-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .55fr); gap: 18px; align-items: start; margin-top: 32px; }
+    .ranked-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; counter-reset: ranking; }
+    .ranked-item { display: grid; grid-template-columns: 42px 1fr auto; gap: 12px; align-items: center; min-height: 66px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+    .ranked-item::before { counter-increment: ranking; content: counter(ranking); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--dark); color: var(--accent); font-size: .8rem; font-weight: 850; }
+    .ranked-copy { font-weight: 700; overflow-wrap: anywhere; }
+    .tie-tag, .uncertain-tag { padding: 4px 7px; border-radius: 99px; font-size: .7rem; font-weight: 750; }
+    .tie-tag { background: #eef5dc; color: #4f682b; }
+    .uncertain-tag { background: #fff0d1; color: #805e1f; }
+    .export-panel { position: sticky; top: 20px; }
+    .export-panel textarea { min-height: 210px; margin-top: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .78rem; }
+    .notice { margin: 14px 0 0; padding: 12px 14px; border-radius: 12px; background: #fff3d8; color: #795b20; font-size: .82rem; line-height: 1.45; }
+    .status { min-height: 1.4em; margin-top: 10px; color: var(--muted); font-size: .8rem; }
+
+    .resume-banner { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 20px; padding: 14px 16px; border: 1px solid #b7d77a; border-radius: 14px; background: #edf7d8; }
+    .resume-banner strong { display: block; margin-bottom: 2px; }
+    .resume-banner span { color: #5e6f4a; font-size: .8rem; }
+
+    @media (max-width: 760px) {
+      .shell { width: min(100% - 22px, 680px); padding-top: 18px; }
+      .masthead { margin-bottom: 40px; }
+      .privacy { font-size: 0; }
+      .setup-grid, .review-grid { grid-template-columns: 1fr; }
+      .versus { grid-template-columns: 1fr; }
+      .versus-mark { padding: 0; }
+      .option { min-height: 230px; }
+      .comparison-tools { grid-template-columns: 1fr; }
+      .neutral-actions { order: -1; }
+      .compare-head { grid-template-columns: 1fr; }
+      .progress { text-align: left; }
+      .export-panel { position: static; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell" id="index">
+    <header class="masthead">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">↕</span> Stack Rank</div>
+      <div class="privacy"><span class="privacy-dot" aria-hidden="true"></span> Everything stays in this browser</div>
+    </header>
+
+    <section class="view" id="setup-view" aria-labelledby="setup-title">
+      <div id="resume-banner" class="resume-banner" hidden>
+        <div><strong>Unfinished ranking found</strong><span id="resume-summary"></span></div>
+        <div class="button-row" style="margin:0">
+          <button class="button button-accent" id="resume-button" type="button">Resume</button>
+          <button class="button button-quiet" id="discard-button" type="button">Discard</button>
+        </div>
+      </div>
+      <p class="eyebrow">One decision at a time</p>
+      <h1 id="setup-title">Stop scoring.<br>Start choosing.</h1>
+      <p class="lede">Paste your options, name what matters, and compare two at a time. You’ll leave with a stack-ranked list ready to use anywhere.</p>
+
+      <div class="setup-grid">
+        <form class="panel" id="setup-form" novalidate>
+          <div class="field">
+            <label for="criterion">What does “more important” mean? <span class="hint">One criterion</span></label>
+            <input id="criterion" name="criterion" placeholder="e.g. expected customer impact" autocomplete="off" required>
+          </div>
+          <div class="field">
+            <label for="items">What are you ranking? <span class="hint">One item per line</span></label>
+            <textarea id="items" name="items" placeholder="Improve the signup flow&#10;Reduce page load time&#10;Add keyboard shortcuts" required></textarea>
+            <div class="field-meta"><span>2–30 unique items</span><span id="item-count">0 items</span></div>
+          </div>
+          <p class="error" id="setup-error" role="alert"></p>
+          <div class="button-row">
+            <button class="button button-primary" type="submit">Start comparing <span aria-hidden="true">→</span></button>
+            <button class="button button-secondary" id="example-button" type="button">Use an example</button>
+          </div>
+        </form>
+
+        <aside class="panel" aria-label="How it works">
+          <p class="eyebrow">How it works</p>
+          <ol class="steps">
+            <li><strong>Frame the choice</strong>Keep one criterion visible throughout.</li>
+            <li><strong>Pick A or B</strong>Tie and unsure remain honest options.</li>
+            <li><strong>Copy your ranking</strong>Markdown or numbered text, ready anywhere.</li>
+          </ol>
+        </aside>
+      </div>
+    </section>
+
+    <section class="view" id="compare-view" aria-labelledby="compare-title" hidden>
+      <div class="compare-head">
+        <div>
+          <p class="eyebrow">Focused comparison</p>
+          <h2 id="compare-title">Which matters more?</h2>
+          <p class="criterion">According to <strong id="criterion-display"></strong></p>
+        </div>
+        <div class="progress" aria-live="polite"><span id="progress-label">Comparison 1</span><div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div></div>
+      </div>
+
+      <div class="versus">
+        <article class="option" aria-labelledby="left-text">
+          <span class="option-letter">A</span>
+          <div class="option-text" id="left-text"></div>
+          <button class="button choice" id="left-button" type="button">A is more important <span aria-hidden="true">←</span></button>
+        </article>
+        <div class="versus-mark" aria-hidden="true">VS</div>
+        <article class="option" aria-labelledby="right-text">
+          <span class="option-letter">B</span>
+          <div class="option-text" id="right-text"></div>
+          <button class="button choice" id="right-button" type="button">B is more important <span aria-hidden="true">→</span></button>
+        </article>
+      </div>
+
+      <details class="rationale-wrap">
+        <summary>Add a rationale (optional)</summary>
+        <label class="sr-only" for="rationale">Why does one option matter more?</label>
+        <input id="rationale" placeholder="Why does one option matter more?">
+      </details>
+
+      <div class="comparison-tools">
+        <button class="button button-secondary" id="undo-button" type="button">Undo <span class="hint">Z</span></button>
+        <div class="neutral-actions">
+          <button class="button button-secondary" id="tie-button" type="button">Tie <span class="hint">T</span></button>
+          <button class="button button-secondary" id="unsure-button" type="button">Not sure <span class="hint">U</span></button>
+        </div>
+        <button class="button button-quiet" id="restart-compare-button" type="button">Start over</button>
+      </div>
+    </section>
+
+    <section class="view" id="review-view" aria-labelledby="review-title" hidden>
+      <p class="eyebrow">Your result</p>
+      <h2 id="review-title">The stack, for now.</h2>
+      <p class="lede">Ranked by <strong id="review-criterion"></strong>. Review it, then copy it wherever the work lives.</p>
+
+      <div class="review-grid">
+        <section class="panel" aria-label="Ranked items">
+          <ol class="ranked-list" id="ranked-list"></ol>
+          <p class="notice" id="uncertainty-notice" hidden>Some boundaries are uncertain because you chose “Not sure.” The ranking keeps that uncertainty visible.</p>
+          <div class="button-row">
+            <button class="button button-secondary" id="back-to-compare-button" type="button">Undo last choice</button>
+            <button class="button button-quiet" id="new-ranking-button" type="button">Start a new ranking</button>
+          </div>
+        </section>
+
+        <aside class="panel export-panel">
+          <p class="eyebrow">Take it with you</p>
+          <label for="export-format">Format</label>
+          <select id="export-format"><option value="markdown">Markdown</option><option value="numbered">Numbered text</option></select>
+          <textarea id="export-output" readonly aria-label="Ranking ready to copy"></textarea>
+          <button class="button button-accent" id="copy-button" type="button" style="width:100%; margin-top:10px">Copy ranking</button>
+          <p class="status" id="copy-status" role="status"></p>
+        </aside>
+      </div>
+    </section>
+
+    <div id="live-region" class="sr-only" aria-live="polite"></div>
+  </main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
