@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Ohara Living Diagram">
+  <rect width="512" height="512" rx="112" fill="#173c35"/>
+  <ellipse cx="256" cy="354" rx="154" ry="66" fill="#f4f0e7" opacity=".16"/>
+  <ellipse cx="256" cy="344" rx="132" ry="45" fill="none" stroke="#f4f0e7" stroke-width="12"/>
+  <path d="M256 338 250 112" stroke="#d95f45" stroke-width="24" stroke-linecap="round"/>
+  <path d="M256 338 135 221" stroke="#438b75" stroke-width="22" stroke-linecap="round"/>
+  <path d="M256 338 376 276" stroke="#d6a23d" stroke-width="20" stroke-linecap="round"/>
+  <circle cx="250" cy="112" r="20" fill="#d95f45"/>
+  <circle cx="135" cy="221" r="18" fill="#438b75"/>
+  <circle cx="376" cy="276" r="17" fill="#d6a23d"/>
+</svg>
