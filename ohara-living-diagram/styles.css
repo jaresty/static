@@ -83,7 +83,7 @@ button,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 92px;
+  min-height: 52px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -206,11 +206,11 @@ button,
 
 .style-rail button {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
   justify-content: center;
-  min-height: 80px;
-  padding: 16px;
+  min-height: 48px;
+  padding: 10px;
   cursor: pointer;
   color: var(--muted);
   background: transparent;
@@ -237,7 +237,54 @@ button,
 
 .workspace {
   position: relative;
-  padding-block: 72px 120px;
+  padding-block: 12px 72px;
+}
+
+.workspace-toolbar {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) auto auto;
+  gap: 12px;
+  align-items: stretch;
+  margin-bottom: 12px;
+  background: rgba(244, 240, 231, 0.97);
+  backdrop-filter: blur(12px);
+}
+
+.workspace-toolbar .style-rail {
+  width: 100%;
+  margin: 0;
+}
+
+.workspace-context {
+  display: grid;
+  min-width: 170px;
+  align-content: center;
+  padding-inline: 8px;
+}
+
+.workspace-context .eyebrow,
+.workspace-context .mood {
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.workspace-context h2 {
+  margin: 2px 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.workspace-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .mode-switch {
@@ -265,6 +312,31 @@ button,
   color: var(--paper);
   background: var(--ink);
   box-shadow: 0 7px 20px rgba(13, 41, 36, 0.18);
+}
+
+.orientation-toggle,
+.new-arrangement {
+  min-height: 44px;
+  padding: 9px 14px;
+  cursor: pointer;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.orientation-toggle[aria-pressed="true"] {
+  color: var(--paper);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.orientation-compact,
+.new-arrangement-compact {
+  display: none;
 }
 
 .workspace-heading {
@@ -484,6 +556,12 @@ button,
   stroke: var(--ink);
 }
 
+.hero-view .stem .insertion-point {
+  fill: #fff1c9;
+  stroke: var(--ink-deep);
+  stroke-width: 1;
+}
+
 .stem text {
   fill: var(--stem);
   font-size: 5px;
@@ -537,7 +615,43 @@ button,
 }
 
 .reference-panel {
-  grid-template-columns: minmax(220px, 0.35fr) minmax(0, 1fr);
+  grid-template-columns: minmax(250px, 0.35fr) minmax(0, 1fr);
+}
+
+.reference-teaching-note {
+  display: grid;
+  gap: 24px;
+  align-content: start;
+  padding: clamp(25px, 4vw, 48px);
+  color: var(--paper);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+}
+
+.reference-teaching-note .panel-label {
+  margin: 0;
+  color: #b9cfc6;
+}
+
+.reference-teaching-note section {
+  display: grid;
+  gap: 8px;
+}
+
+.reference-teaching-note h3 {
+  margin: 0;
+  color: #fff1c9;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+
+.reference-panel .reference-teaching-note p {
+  margin: 0;
+  color: #d5e1dc;
+  font-family: inherit;
+  font-size: 0.88rem;
+  line-height: 1.55;
 }
 
 .table-wrap { overflow-x: auto; }
@@ -619,7 +733,7 @@ button,
   }
 
   .site-header {
-    min-height: 76px;
+    min-height: 52px;
   }
 
   .offline-badge {
@@ -641,31 +755,60 @@ button,
     font-size: clamp(3rem, 15vw, 5.4rem);
   }
 
-  .style-rail {
-    margin-inline: 0;
-    width: 100%;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-  }
-
-  .style-rail button {
-    min-width: 170px;
-    scroll-snap-align: start;
-  }
-
   .workspace {
-    padding-block: 48px 78px;
+    padding-block: 8px 78px;
+  }
+
+  .workspace-toolbar {
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .workspace-toolbar .style-rail {
+    grid-column: 1 / -1;
+  }
+
+  .workspace-context {
+    display: none;
+  }
+
+  .workspace-context .eyebrow,
+  .workspace-context .mood {
+    display: none;
+  }
+
+  .workspace-context h2 {
+    font-size: 1.25rem;
+  }
+
+  .workspace-actions {
+    gap: 6px;
   }
 
   .mode-switch {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: 100%;
   }
 
-  .workspace-heading {
-    display: block;
-    margin-top: 42px;
+  .mode-switch button {
+    min-width: 0;
+    padding: 8px 10px;
+  }
+
+  .orientation-toggle,
+  .new-arrangement {
+    padding: 0 9px;
+  }
+
+  .orientation-wide,
+  .new-arrangement-wide {
+    display: none;
+  }
+
+  .orientation-compact,
+  .new-arrangement-compact {
+    display: inline;
   }
 
   .mood {
@@ -1399,14 +1542,18 @@ button,
 .adaptive-stage {
   display: grid;
   grid-template-columns: minmax(260px, 0.42fr) minmax(0, 0.58fr);
+  width: 100%;
+  height: 560px;
   min-width: 0;
-  min-height: 560px;
+  overflow: hidden;
 }
 
 .adaptive-copy,
 .adaptive-visual {
   min-width: 0;
+  min-height: 0;
   padding: clamp(28px, 5vw, 64px);
+  overflow: auto;
 }
 
 .adaptive-copy {
@@ -1783,6 +1930,11 @@ button,
     font-size: 3rem;
   }
 
+  .role-track button,
+  .step-track button {
+    min-height: 44px;
+  }
+
   .step-track {
     overflow-x: auto;
   }
@@ -1799,7 +1951,8 @@ button,
 
   .adaptive-stage {
     grid-template-columns: 1fr;
-    min-height: 0;
+    grid-template-rows: 330px 390px;
+    height: 720px;
   }
 
   .adaptive-copy,

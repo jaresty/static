@@ -27,6 +27,18 @@ const ASSEMBLY_STEPS = Object.freeze(['length', 'kenzan', 'plan', 'elevation', '
 const CHECKPOINTS = Object.freeze(['length', 'kenzan', 'plan', 'elevation', 'teacher']);
 
 const round = value => Math.round(value * 10) / 10;
+const boundedNumber = (value, minimum) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(minimum, number) : minimum;
+};
+
+function normalizeContainer(container) {
+  return {
+    diameter: boundedNumber(container.diameter, 1),
+    depth: boundedNumber(container.depth, 0),
+    units: container.units === 'in' ? 'in' : 'cm'
+  };
+}
 
 function calculateLengths(container) {
   const base = Number(container.diameter) + Number(container.depth);
@@ -54,7 +66,7 @@ function updateTargetDefaults(targets, lengths) {
 }
 
 export function createSession({ diameter = 30, depth = 10, units = 'cm' } = {}) {
-  const container = { diameter: Number(diameter), depth: Number(depth), units };
+  const container = normalizeContainer({ diameter, depth, units });
   const lengths = calculateLengths(container);
   return {
     container,
@@ -69,7 +81,7 @@ export function createSession({ diameter = 30, depth = 10, units = 'cm' } = {}) 
 }
 
 export function updateContainer(session, changes) {
-  const container = { ...session.container, ...changes };
+  const container = normalizeContainer({ ...session.container, ...changes });
   const lengths = calculateLengths(container);
   return {
     ...session,
@@ -87,7 +99,7 @@ export function setTeacherOverride(session, role, field, value) {
       ...session.targets,
       [role]: {
         ...target,
-        [field]: { ...target[field], value: Number(value), status: 'teacher-adjusted' }
+        [field]: { ...target[field], value: boundedNumber(value, 0.1), status: 'teacher-adjusted' }
       }
     }
   };

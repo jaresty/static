@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ohara-living-diagram-v14';
+const CACHE_NAME = 'ohara-living-diagram-v18';
 const CORE_ASSETS = [
   './',
   './index.html',

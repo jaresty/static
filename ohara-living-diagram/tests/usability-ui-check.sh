@@ -122,8 +122,8 @@ check_mobile_navigation() {
 
 check_first_viewport() {
   agent-browser --session "$SESSION" set viewport 1440 1000 >/dev/null
-  [[ "$(agent-browser --session "$SESSION" eval "(()=>{const e=document.querySelector('.start-guide'),r=e?.getBoundingClientRect();return !!r&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth&&/Start with Subject length/i.test(e.textContent)})()")" == "true" ]] \
-    || { echo "FAIL u12-first-viewport: initial desktop view has no visible route into the lesson" >&2; exit 1; }
+  [[ "$(agent-browser --session "$SESSION" eval "(()=>{const r=document.querySelector('[data-adaptive-canvas]')?.getBoundingClientRect();return !!r&&r.top>=0&&r.top<=180&&r.left>=0&&r.right<=innerWidth})()")" == "true" ]] \
+    || { echo "FAIL u12-first-viewport: main working area does not begin in the initial viewport" >&2; exit 1; }
 }
 
 check_kenzan_label_gap() {

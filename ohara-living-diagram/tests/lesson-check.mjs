@@ -117,6 +117,17 @@ function l20() {
   console.log('PASS l20: role and phase selectors produce synchronized immutable state');
 }
 
-const checks = { l11, l12, l13, l14, l15, l16, l18, l19, l20 };
+function l21() {
+  const initial = model.createSession({ diameter: -20, depth: -5, units: 'invalid' });
+  assert.deepEqual(initial.container, { diameter: 1, depth: 0, units: 'cm' });
+  assert.equal(initial.lengths.subject, 1);
+  const changed = model.updateContainer(initial, { diameter: Number.NaN, depth: -2 });
+  assert.deepEqual(changed.container, { diameter: 1, depth: 0, units: 'cm' });
+  const adjusted = model.setTeacherOverride(changed, 'subject', 'length', -10);
+  assert.equal(adjusted.targets.subject.length.value, 0.1);
+  console.log('PASS l21: physical measurements normalize to safe nonnegative bounds');
+}
+
+const checks = { l11, l12, l13, l14, l15, l16, l18, l19, l20, l21 };
 if (!checks[property]) throw new Error(`Unknown lesson property: ${property}`);
 checks[property]();

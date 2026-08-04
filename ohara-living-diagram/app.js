@@ -17,6 +17,7 @@ import {
 } from './lesson-model.mjs';
 
 const STORAGE_KEY = 'ohara-lesson-session-v1';
+const APP_STORAGE_KEY = 'ohara-arrangement-state-v2';
 const ROLES = ['subject', 'secondary', 'object'];
 const CHECKPOINTS = [
   ['length', 'Length discussed'],
@@ -63,7 +64,7 @@ const STYLES = [
     stems: [
       { role: 'subject', ratio: 1, azimuth: 45, elevation: 20, x: 49, y: 50 },
       { role: 'secondary', ratio: 0.5, azimuth: -12, elevation: 90, x: 44, y: 43 },
-      { role: 'object', ratio: 0.5, azimuth: -30, elevation: 40, x: 39, y: 49 }
+      { role: 'object', ratio: 0.5, azimuth: -30, elevation: 40, x: 55, y: 49 }
     ]
   }
 ];
@@ -77,17 +78,45 @@ function loadLesson() {
   }
 }
 
-const restoredLesson = loadLesson();
-const state = {
-  styleIndex: 0,
-  focusedRole: restoredLesson.currentRole,
-  mode: 'lesson',
-  lesson: restoredLesson,
-  reviewAnnotations: true,
-  resetArmed: false
-};
+function loadAppState() {
+  const lesson = loadLesson();
+  const defaults = {
+    styleIndex: 0,
+    focusedRole: lesson.currentRole,
+    mode: 'lesson',
+    lesson,
+    reviewAnnotations: true
+  };
+  try {
+    const payload = JSON.parse(localStorage.getItem(APP_STORAGE_KEY));
+    if (payload?.version !== 2 || !payload.lesson) return defaults;
+    const restoredLesson = restoreSession(payload.lesson);
+    return {
+      styleIndex: Number.isInteger(payload.styleIndex) && STYLES[payload.styleIndex] ? payload.styleIndex : 0,
+      focusedRole: ROLES.includes(payload.focusedRole) ? payload.focusedRole : restoredLesson.currentRole,
+      mode: ['lesson', 'reference'].includes(payload.mode) ? payload.mode : 'lesson',
+      lesson: restoredLesson,
+      reviewAnnotations: payload.reviewAnnotations !== false
+    };
+  } catch {
+    return defaults;
+  }
+}
 
-const saveLesson = () => localStorage.setItem(STORAGE_KEY, serializeSession(state.lesson));
+const state = loadAppState();
+
+function saveLesson() {
+  const lesson = serializeSession(state.lesson);
+  localStorage.setItem(STORAGE_KEY, lesson);
+  localStorage.setItem(APP_STORAGE_KEY, JSON.stringify({
+    version: 2,
+    styleIndex: state.styleIndex,
+    focusedRole: state.focusedRole,
+    mode: state.mode,
+    reviewAnnotations: state.reviewAnnotations,
+    lesson
+  }));
+}
 const rad = degrees => (degrees * Math.PI) / 180;
 const point = (cx, cy, angle, distance) => ({
   x: cx + Math.cos(rad(angle)) * distance,
@@ -183,13 +212,14 @@ function visibleStems(style) {
   return style.stems.slice(0, count);
 }
 
-function stemLine(stem, start, end, labelAt = end, view = 'diagram') {
+function stemLine(stem, start, end, labelAt = end, view = 'diagram', insertionMarker = false) {
   const meta = ROLE_META[stem.role];
   const focused = state.focusedRole === stem.role;
   return `<g class="stem ${focused ? 'is-focused' : ''}" data-role="${stem.role}" tabindex="0" role="button" aria-label="Focus ${meta.name} stem in ${view}" style="--stem:${meta.color}">
     <line x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}" />
     <circle cx="${start.x}" cy="${start.y}" r="2.6" />
     <circle cx="${end.x}" cy="${end.y}" r="3.8" />
+    ${insertionMarker ? `<circle class="insertion-point" cx="${start.x}" cy="${start.y}" r="1.5" />` : ''}
     <text x="${labelAt.x}" y="${labelAt.y - 7}" text-anchor="middle">${meta.short}</text>
   </g>`;
 }
@@ -200,7 +230,7 @@ function renderPlan(style) {
     const projectedLength = 35 * stem.ratio * Math.cos(rad(stem.elevation));
     const end = point(start.x, start.y, 90 + stem.azimuth, projectedLength);
     const labelOffset = stem.role === 'secondary' ? { x: -7, y: -1 } : stem.role === 'object' ? { x: 7, y: 1 } : { x: 0, y: 0 };
-    return stemLine(stem, start, end, { x: end.x + labelOffset.x, y: end.y + labelOffset.y }, "bird's-eye plan");
+    return stemLine(stem, start, end, { x: end.x + labelOffset.x, y: end.y + labelOffset.y }, "bird's-eye plan", projectedLength < 0.01);
   }).join('');
   const front = '<text class="front-label" x="50" y="88" text-anchor="middle">FRONT</text><path class="front-marker" d="M44 91 H56 M50 91 V96"/>';
   return `<svg viewBox="0 0 100 100" aria-label="Bird's-eye plan projection for ${style.name}">
@@ -348,13 +378,13 @@ function basicElevationGraphic(stem) {
 
 function adaptiveStageContent(step, stem) {
   const length = stem.details.length;
+  const calculatedLength = state.lesson.lengths[stem.role];
   const units = state.lesson.container.units;
-  if (step === 'length') return `<div class="adaptive-copy"><span class="panel-label">Prepare</span><h4>Establish ${ROLE_META[stem.role].name.toLowerCase()} length</h4><p>Start with the container, then compare the calculated measure with the real branch.</p><div class="compact-fields"><label>Diameter<input id="container-diameter" type="number" min="1" step="0.5" value="${state.lesson.container.diameter}"></label><label>Depth<input id="container-depth" type="number" min="0" step="0.5" value="${state.lesson.container.depth}"></label><label>Units<select id="container-units"><option value="cm" ${units === 'cm' ? 'selected' : ''}>cm</option><option value="in" ${units === 'in' ? 'selected' : ''}>in</option></select></label></div></div><div class="adaptive-visual length-visual"><div class="measure-stem" data-measurement="length"><i></i><span class="length-ratio">${lengthRatioLabel(stem)}</span><span id="lesson-length-value" class="length-value">${length.value} ${units}</span></div><label class="inline-override">Adjust target<input id="lesson-length-input" type="number" min="1" step="0.1" value="${length.value}"><span id="length-status" data-status="${length.status}">${length.status === 'teacher-adjusted' ? 'Adjusted' : 'Calculated'}</span></label></div>`;
+  if (step === 'length') return `<div class="adaptive-copy"><span class="panel-label">Prepare</span><h4>Establish ${ROLE_META[stem.role].name.toLowerCase()} length</h4><p>Start with the container, then compare the calculated measure with the real branch.</p><div class="compact-fields"><label>Diameter<input id="container-diameter" type="number" min="1" step="0.5" value="${state.lesson.container.diameter}"></label><label>Depth<input id="container-depth" type="number" min="0" step="0.5" value="${state.lesson.container.depth}"></label><label>Units<select id="container-units"><option value="cm" ${units === 'cm' ? 'selected' : ''}>cm</option><option value="in" ${units === 'in' ? 'selected' : ''}>in</option></select></label></div></div><div class="adaptive-visual length-visual"><div class="measure-stem" data-measurement="length"><i></i><span class="length-ratio">${lengthRatioLabel(stem)}</span><span id="lesson-length-value" class="length-value">${calculatedLength} ${units}</span></div><label class="inline-override">Adjust target<input id="lesson-length-input" type="number" min="1" step="0.1" value="${length.value}"><span id="length-status" data-status="${length.status}">${length.status === 'teacher-adjusted' ? 'Adjusted' : 'Calculated'}</span></label></div>`;
   if (step === 'kenzan') {
-    const orientationControl = `<button id="orientation-toggle" class="quiet-button">${state.lesson.orientation === 'mirrored' ? 'Unmirror view' : 'Mirror view'}</button>`;
-    if (stem.role === 'subject') return `<div class="adaptive-copy"><span class="panel-label">Place the holder</span><h4>Set the whole Kenzan</h4><p>Place the flower holder <strong>${stem.details.kenzan.label}</strong> and align it with the front marker. Keep it fixed for the remaining stems.</p>${orientationControl}</div><div class="adaptive-visual kenzan-focus">${kenzanDiagram(stem)}</div>`;
+    if (stem.role === 'subject') return `<div class="adaptive-copy"><span class="panel-label">Place the holder</span><h4>Set the whole Kenzan</h4><p>Place the flower holder <strong>${stem.details.kenzan.label}</strong> and align it with the front marker. Keep it fixed for the remaining stems.</p></div><div class="adaptive-visual kenzan-focus">${kenzanDiagram(stem)}</div>`;
     const roleName = stem.role === 'secondary' ? 'Fuku' : ROLE_META[stem.role].name;
-    return `<div class="adaptive-copy"><span class="panel-label">Place the stem</span><h4>Find ${roleName}'s entry area</h4><p>Keep the whole Kenzan fixed. Confirm the exact ${roleName} insertion point with a current Ohara Hana-gata card or your teacher before aiming the stem.</p>${orientationControl}</div><div class="adaptive-visual kenzan-focus">${kenzanDiagram(stem)}</div>`;
+    return `<div class="adaptive-copy"><span class="panel-label">Place the stem</span><h4>Find ${roleName}'s entry area</h4><p>Keep the whole Kenzan fixed. Confirm the exact ${roleName} insertion point with a current Ohara Hana-gata card or your teacher before aiming the stem.</p></div><div class="adaptive-visual kenzan-focus">${kenzanDiagram(stem)}</div>`;
   }
   if (step === 'plan') { const plan = planReading(stem.details.plan.value); return `<div class="adaptive-copy"><span class="panel-label">Aim from above</span><h4>Set the plan direction</h4><p>Use the nearest container axis so the physical turn stays easy to read.</p><div class="step-reading"><strong>${plan.amount}°</strong><span>${plan.side} of container ${plan.reference}</span></div></div><div class="adaptive-visual">${basicPlanGraphic(stem)}</div>`; }
   if (step === 'elevation') return `<div class="adaptive-copy"><span class="panel-label">Aim from the side</span><h4>Set the inclination</h4><p>Read this independently from the plan direction.</p><div class="step-reading"><strong>${stem.details.elevation.value}°</strong><span>from ${stem.details.elevation.reference}</span></div></div><div class="adaptive-visual">${basicElevationGraphic(stem)}</div>`;
@@ -371,7 +401,7 @@ function renderLessonBoard() {
   const prompt = step === 'kenzan' && stem.role !== 'subject' ? 'Locate the stem entry area' : defaultPrompt;
   host.innerHTML = `<section class="adaptive-canvas" data-adaptive-canvas data-style="${STYLES[state.styleIndex].id}" style="--role-color:${ROLE_META[stem.role].color}" aria-labelledby="adaptive-title">
     <header class="adaptive-header"><div><p class="eyebrow">${ROLE_META[stem.role].name} · ${ROLE_META[stem.role].short}</p><h3 id="adaptive-title">${label}</h3><p>${prompt}</p><p class="source-boundary">Provisional geometry · confirm with current Ohara Hana-gata cards or your teacher</p></div><span>${number} / 05</span></header>
-    <ol class="role-track" aria-label="Arrangement roles">${ROLES.map((role, index) => `<li class="${index === roleIndex ? 'is-current' : index < roleIndex ? 'is-complete' : ''}" style="--stem:${ROLE_META[role].color}"><button type="button" data-role="${role}" ${index === roleIndex ? 'aria-current="step"' : ''} aria-label="Go to ${ROLE_META[role].name} at ${label}"><i>${index + 1}</i><span>${role === 'secondary' ? ROLE_META[role].short : ROLE_META[role].name}</span></button></li>`).join('')}</ol>
+    <ol class="role-track" aria-label="Arrangement roles">${ROLES.map((role, index) => `<li class="${index === roleIndex ? 'is-current' : index < roleIndex ? 'is-complete' : ''}" style="--stem:${ROLE_META[role].color}"><button type="button" data-role="${role}" ${index === roleIndex ? 'aria-current="step"' : ''} aria-label="Start ${ROLE_META[role].name} at Length"><i>${index + 1}</i><span>${role === 'secondary' ? ROLE_META[role].short : ROLE_META[role].name}</span></button></li>`).join('')}</ol>
     <ol class="step-track" aria-label="Steps for ${ROLE_META[stem.role].name}">${Object.entries(STEP_LABELS).map(([id, value], index) => `<li class="${index === stepIndex ? 'is-current' : index < stepIndex ? 'is-complete' : ''}"><button type="button" data-step="${id}" ${index === stepIndex ? 'aria-current="step"' : ''} aria-label="Go to ${value[1]} for ${ROLE_META[stem.role].name}"><i>${index + 1}</i><span>${value[1]}</span></button></li>`).join('')}</ol>
     <div class="adaptive-stage" data-step="${step}">${adaptiveStageContent(step, stem)}</div>
     <nav class="adaptive-nav" aria-label="Step navigation"><button id="step-back" ${roleIndex === 0 && stepIndex === 0 ? 'disabled' : ''}>← Back</button><span>${label}</span><button id="step-next">${step === 'review' ? (stem.role === 'object' ? 'Finish' : `Next stem · ${ROLE_META[ROLES[ROLES.indexOf(stem.role) + 1]].name}`) : 'Next →'}</button></nav>
@@ -395,13 +425,9 @@ function bindLessonEvents() {
     state.lesson = setTeacherOverride(state.lesson, state.lesson.currentRole, 'length', event.target.value);
     saveLesson(); renderLessonBoard();
   });
-  document.querySelector('#orientation-toggle')?.addEventListener('click', () => {
-    state.lesson = setOrientation(state.lesson, state.lesson.orientation === 'normal' ? 'mirrored' : 'normal');
-    saveLesson(); renderLessonBoard();
-  });
   document.querySelector('#annotation-toggle')?.addEventListener('change', event => {
     state.reviewAnnotations = event.target.checked;
-    renderLessonBoard();
+    saveLesson(); renderLessonBoard();
   });
   document.querySelectorAll('.role-track button').forEach(button => button.addEventListener('click', () => {
     state.lesson = selectAssemblyRole(state.lesson, button.dataset.role);
@@ -419,10 +445,15 @@ function bindLessonEvents() {
   });
   document.querySelector('#step-next').addEventListener('click', () => {
     if (getAssemblyStep(state.lesson) === 'review') {
-      if (state.lesson.currentRole !== 'object') {
-        state.lesson = { ...advanceStem(state.lesson), assemblyStepIndex: 0 };
-        state.focusedRole = state.lesson.currentRole;
+      if (state.lesson.currentRole === 'object') {
+        state.lesson = advanceStem(state.lesson);
+        state.focusedRole = 'object';
+        state.mode = 'reference';
+        saveLesson(); renderAll();
+        return;
       }
+      state.lesson = { ...advanceStem(state.lesson), assemblyStepIndex: 0 };
+      state.focusedRole = state.lesson.currentRole;
     } else state.lesson = moveAssemblyStep(state.lesson, 1);
     saveLesson(); renderLessonBoard();
   });
@@ -438,7 +469,7 @@ function renderReference(style) {
 
 function bindStemFocus() {
   document.querySelectorAll('.stem').forEach(stem => {
-    const focus = () => { state.focusedRole = stem.dataset.role; renderViews(); };
+    const focus = () => { state.focusedRole = stem.dataset.role; saveLesson(); renderViews(); };
     stem.addEventListener('click', focus);
     stem.addEventListener('keydown', event => {
       if (event.key === 'Enter' || event.key === ' ') focus();
@@ -466,6 +497,13 @@ function renderAll() {
   if (insight) insight.textContent = style.insight;
   document.querySelectorAll('[data-style-index]').forEach((button, index) => button.setAttribute('aria-pressed', String(index === state.styleIndex)));
   document.querySelectorAll('[data-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)));
+  const orientationButton = document.querySelector('#orientation-toggle');
+  const mirrored = state.lesson.orientation === 'mirrored';
+  orientationButton.setAttribute('aria-pressed', String(mirrored));
+  orientationButton.setAttribute('aria-label', mirrored ? 'Use standard arrangement' : 'Mirror arrangement');
+  orientationButton.querySelector('.orientation-wide').textContent = mirrored ? 'Use standard arrangement' : 'Mirror arrangement';
+  orientationButton.querySelector('.orientation-compact').textContent = mirrored ? 'Standard' : 'Mirror';
+  document.body.dataset.orientation = state.lesson.orientation;
   document.querySelectorAll('.lesson-only').forEach(element => { element.hidden = state.mode !== 'lesson'; });
   document.querySelectorAll('.reference-only').forEach(element => { element.hidden = state.mode !== 'reference'; });
   renderViews();
@@ -483,26 +521,41 @@ function renderAll() {
 
 function renderShell() {
   document.querySelector('#app').innerHTML = `
-    <header class="site-header"><a class="brand" href="#top"><span class="brand-mark">小</span><span><strong>Living Diagram</strong><small>Ohara spatial reference</small></span></a><span class="offline-badge"><i></i> Static · offline ready</span></header>
-    <section class="intro" id="top"><div><p class="eyebrow">A practical guide beside the flowers</p><h1>One stem at a time.<br><em>Build the whole form.</em></h1></div><div class="intro-copy"><p>Move through length, kenzan placement, plan direction, and elevation at your own pace. Each step keeps one decision in focus.</p><a class="start-guide" href="#lesson-host">Start with Subject length <span aria-hidden="true">↓</span></a></div></section>
-    <nav class="style-rail" aria-label="Moribana styles">${STYLES.map((style, index) => `<button data-style-index="${index}" aria-pressed="${index === 0}"><span>0${index + 1}</span>${style.name}</button>`).join('')}</nav>
+    <header class="site-header" id="top"><a class="brand" href="#top"><span class="brand-mark">小</span><span><strong>Living Diagram</strong><small>Ohara spatial reference</small></span></a><span class="offline-badge"><i></i> Static · offline ready</span></header>
     <section class="workspace" aria-labelledby="style-name">
-      <div class="mode-switch" role="group" aria-label="Viewing mode"><button data-mode="lesson" aria-pressed="true">Assemble</button><button data-mode="reference" aria-pressed="false">Reference</button></div>
-      <div class="workspace-heading"><div><p id="style-japanese" class="eyebrow"></p><h2 id="style-name"></h2></div><p id="style-mood" class="mood"></p></div>
+      <div class="workspace-toolbar">
+        <nav class="style-rail" aria-label="Moribana styles">${STYLES.map((style, index) => `<button data-style-index="${index}" aria-pressed="${index === 0}"><span>0${index + 1}</span>${style.name}</button>`).join('')}</nav>
+        <div class="workspace-context"><p id="style-japanese" class="eyebrow"></p><h2 id="style-name"></h2><p id="style-mood" class="mood"></p></div>
+        <div class="workspace-actions"><div class="mode-switch" role="group" aria-label="Viewing mode"><button data-mode="lesson" aria-pressed="true">Assemble</button><button data-mode="reference" aria-pressed="false">Reference</button></div><button type="button" id="orientation-toggle" class="orientation-toggle" aria-pressed="false"><span class="orientation-wide">Mirror arrangement</span><span class="orientation-compact" aria-hidden="true">Mirror</span></button><button type="button" class="new-arrangement" aria-label="New arrangement"><span class="new-arrangement-wide">New arrangement</span><span class="new-arrangement-compact" aria-hidden="true">+ New</span></button></div>
+      </div>
       <div id="lesson-host" class="lesson-only"></div>
       <div class="reference-only view-grid shared-views" hidden><article class="view-card hero-view"><header><span>01</span> Kenzan / plan</header><div id="plan-view" class="diagram"></div></article><article class="view-card"><header><span>02</span> Front</header><div id="front-view" class="diagram"></div></article><article class="view-card"><header><span>03</span> Spatial</header><div id="spatial-view" class="diagram"></div></article></div>
 
-      <div class="reference-panel reference-only" hidden><div class="reference-heading"><span class="panel-label">Quick geometry</span><p>Instructional approximations pending authoritative review.</p><p id="angle-convention">Plan angles use the nearest axis: front or rear, then left or right as seen from above.</p></div><div class="table-wrap"><table><thead><tr><th>Stem</th><th>Length</th><th>Plan</th><th>Elevation</th></tr></thead><tbody id="reference-rows"></tbody></table></div></div>
-    </section>`;
+      <div class="reference-panel reference-only" hidden><aside class="reference-teaching-note"><span class="panel-label">Teaching note</span><section><h3>Geometry status</h3><p>Instructional approximations pending authoritative review.</p></section><section><h3>Reading plan angles</h3><p id="angle-convention">Use the nearest axis—front or rear—then read left or right as seen from above.</p></section></aside><div class="table-wrap"><table><thead><tr><th>Stem</th><th>Length</th><th>Plan</th><th>Elevation</th></tr></thead><tbody id="reference-rows"></tbody></table></div></div>
+    </section>
+    <section class="intro"><div><p class="eyebrow">A practical guide beside the flowers</p><h1>One stem at a time.<br><em>Build the whole form.</em></h1></div><div class="intro-copy"><p>Move through length, Kenzan placement, plan direction, and elevation at your own pace. Each step keeps one decision in focus.</p></div></section>`;
 
   document.querySelectorAll('[data-style-index]').forEach(button => button.addEventListener('click', () => {
     state.styleIndex = Number(button.dataset.styleIndex);
-    renderAll();
+    saveLesson(); renderAll();
   }));
   document.querySelectorAll('[data-mode]').forEach(button => button.addEventListener('click', () => {
     state.mode = button.dataset.mode;
-    renderAll();
+    saveLesson(); renderAll();
   }));
+  document.querySelector('#orientation-toggle').addEventListener('click', () => {
+    state.lesson = setOrientation(state.lesson, state.lesson.orientation === 'normal' ? 'mirrored' : 'normal');
+    saveLesson(); renderAll();
+  });
+  document.querySelector('.new-arrangement').addEventListener('click', () => {
+    state.styleIndex = 0;
+    state.focusedRole = 'subject';
+    state.mode = 'lesson';
+    state.lesson = resetSession();
+    state.reviewAnnotations = true;
+    saveLesson();
+    renderAll();
+  });
   renderAll();
 }
 
