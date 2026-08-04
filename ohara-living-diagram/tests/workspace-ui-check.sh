@@ -225,6 +225,18 @@ check_mobile_scrollbar_chrome() {
   [[ "$hidden" == "true" ]] || fail "w24-mobile-scrollbar-chrome: swipeable rows expose native scrollbar chrome"
 }
 
+check_mobile_role_badges() {
+  agent-browser --session "$SESSION" set viewport 390 844 >/dev/null
+  agent-browser --session "$SESSION" click '[data-mode="lesson"]' >/dev/null
+  if [[ "${OHARA_WORKSPACE_FAULT:-none}" == "badge-radius" ]]; then
+    agent-browser --session "$SESSION" eval "document.querySelectorAll('.role-track i').forEach(element=>{element.style.flex='0 0 22px';element.style.borderRadius='0'})" >/dev/null
+  fi
+  square="$(agent-browser --session "$SESSION" eval "(()=>[...document.querySelectorAll('.role-track i')].map(element=>element.getBoundingClientRect()).every(({width,height})=>Math.abs(width-height)<=.5))()")"
+  [[ "$square" == "true" ]] || fail "w25-mobile-role-badge-square: a role number badge is compressed into an oval"
+  rounded="$(agent-browser --session "$SESSION" eval "[...document.querySelectorAll('.role-track i')].every(element=>getComputedStyle(element).borderRadius==='50%')")"
+  [[ "$rounded" == "true" ]] || fail "w26-mobile-role-badge-radius: a role number badge lost its circular radius"
+}
+
 check_reference_teaching_note() {
   agent-browser --session "$SESSION" click '[data-mode="reference"]' >/dev/null
   styled="$(agent-browser --session "$SESSION" eval "(()=>{const note=document.querySelector('.reference-teaching-note');if(!note)return false;const style=getComputedStyle(note),r=note.getBoundingClientRect();return r.width>0&&r.height>0&&note.querySelectorAll('h3').length===2&&style.backgroundColor!=='rgba(0, 0, 0, 0)'&&parseFloat(style.borderTopWidth)>0})()")"
@@ -273,6 +285,7 @@ case "$TARGET" in
   fuku-insertion-color) check_fuku_insertion_color ;;
   mobile-vertical-scroll) check_mobile_vertical_scroll ;;
   mobile-scrollbar-chrome) check_mobile_scrollbar_chrome ;;
+  mobile-role-badges) check_mobile_role_badges ;;
   *) echo "Unknown target: $TARGET" >&2; exit 2 ;;
 esac
 
