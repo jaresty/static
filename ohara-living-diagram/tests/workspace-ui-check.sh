@@ -226,15 +226,28 @@ check_mobile_scrollbar_chrome() {
 }
 
 check_mobile_role_badges() {
-  agent-browser --session "$SESSION" set viewport 390 844 >/dev/null
   agent-browser --session "$SESSION" click '[data-mode="lesson"]' >/dev/null
-  if [[ "${OHARA_WORKSPACE_FAULT:-none}" == "badge-radius" ]]; then
-    agent-browser --session "$SESSION" eval "document.querySelectorAll('.role-track i').forEach(element=>{element.style.flex='0 0 22px';element.style.borderRadius='0'})" >/dev/null
-  fi
-  square="$(agent-browser --session "$SESSION" eval "(()=>[...document.querySelectorAll('.role-track i')].map(element=>element.getBoundingClientRect()).every(({width,height})=>Math.abs(width-height)<=.5))()")"
-  [[ "$square" == "true" ]] || fail "w25-mobile-role-badge-square: a role number badge is compressed into an oval"
-  rounded="$(agent-browser --session "$SESSION" eval "[...document.querySelectorAll('.role-track i')].every(element=>getComputedStyle(element).borderRadius==='50%')")"
-  [[ "$rounded" == "true" ]] || fail "w26-mobile-role-badge-radius: a role number badge lost its circular radius"
+  for width in 320 360 390 430; do
+    agent-browser --session "$SESSION" set viewport "$width" 844 >/dev/null
+    for role in subject secondary object; do
+      agent-browser --session "$SESSION" click ".role-track [data-role=\"$role\"]" >/dev/null
+      if [[ "${OHARA_WORKSPACE_FAULT:-none}" == "badge-radius" ]]; then
+        agent-browser --session "$SESSION" eval "document.querySelectorAll('.role-track i').forEach(element=>{element.style.flex='0 0 22px';element.style.borderRadius='0'})" >/dev/null
+      fi
+      square="$(agent-browser --session "$SESSION" eval "(()=>[...document.querySelectorAll('.role-track i')].map(element=>element.getBoundingClientRect()).every(({width,height})=>Math.abs(width-height)<=.5))()")"
+      [[ "$square" == "true" ]] || fail "w25-mobile-role-badge-square: a role number badge is compressed into an oval at ${width}px with $role active"
+      rounded="$(agent-browser --session "$SESSION" eval "[...document.querySelectorAll('.role-track i')].every(element=>getComputedStyle(element).borderRadius==='50%')")"
+      [[ "$rounded" == "true" ]] || fail "w26-mobile-role-badge-radius: a role number badge lost its circular radius"
+    done
+  done
+}
+
+check_service_worker_refresh() {
+  agent-browser --session "$SESSION" eval "sessionStorage.setItem('sw-refresh-before',String(performance.timeOrigin));setTimeout(()=>navigator.serviceWorker.dispatchEvent(new Event('controllerchange')),50);true" >/dev/null
+  sleep 0.3
+  agent-browser --session "$SESSION" wait --load domcontentloaded >/dev/null
+  refreshed="$(agent-browser --session "$SESSION" eval "performance.timeOrigin>Number(sessionStorage.getItem('sw-refresh-before'))")"
+  [[ "$refreshed" == "true" ]] || fail "w27-service-worker-refresh: a new worker takes control without refreshing stale page assets"
 }
 
 check_reference_teaching_note() {
@@ -286,6 +299,7 @@ case "$TARGET" in
   mobile-vertical-scroll) check_mobile_vertical_scroll ;;
   mobile-scrollbar-chrome) check_mobile_scrollbar_chrome ;;
   mobile-role-badges) check_mobile_role_badges ;;
+  service-worker-refresh) check_service_worker_refresh ;;
   *) echo "Unknown target: $TARGET" >&2; exit 2 ;;
 esac
 

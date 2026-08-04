@@ -560,4 +560,13 @@ function renderShell() {
 }
 
 document.addEventListener('DOMContentLoaded', renderShell);
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+if ('serviceWorker' in navigator) {
+  const controlledAtLoad = Boolean(navigator.serviceWorker.controller);
+  let refreshingForUpdate = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!controlledAtLoad || refreshingForUpdate) return;
+    refreshingForUpdate = true;
+    window.location.reload();
+  });
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+}
