@@ -8,7 +8,7 @@ const STEM_BLUEPRINTS = Object.freeze({
   subject: {
     kenzan: { x: 42, y: 42, label: 'rear-left of center', status: 'editorial-approximation' },
     plan: { value: -8, reference: 'container front', status: 'editorial-approximation' },
-    elevation: { value: 90, reference: 'horizontal plane', status: 'editorial-approximation' }
+    elevation: { value: 80, reference: 'horizontal plane', status: 'editorial-approximation' }
   },
   secondary: {
     kenzan: { x: 38, y: 46, label: 'left of the Subject', status: 'editorial-approximation' },
