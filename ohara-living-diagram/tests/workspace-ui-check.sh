@@ -186,6 +186,28 @@ check_vertical_insertion_markers() {
   done
 }
 
+check_fuku_insertion_placement() {
+  agent-browser --session "$SESSION" click '[data-mode="reference"]' >/dev/null
+  for style in 1 2; do
+    agent-browser --session "$SESSION" click "[data-style-index=\"$style\"]" >/dev/null
+    displaced="$(agent-browser --session "$SESSION" eval "(()=>{const svg=document.querySelector('#plan-view'),marker=svg.querySelector('.stem[data-role=secondary] .insertion-point'),rim=svg.querySelector('[data-geometry=circular-rim]');return Math.hypot(+marker.getAttribute('cx')-+rim.getAttribute('cx'),+marker.getAttribute('cy')-+rim.getAttribute('cy'))>=22})()")"
+    [[ "$displaced" == "true" ]] || fail "w21-fuku-placement: Fuku insertion remains inside the bowl's central region in style $style"
+  done
+}
+
+check_fuku_insertion_color() {
+  for style in 1 2; do
+    agent-browser --session "$SESSION" click "[data-style-index=\"$style\"]" >/dev/null
+    agent-browser --session "$SESSION" click '[data-mode="lesson"]' >/dev/null
+    agent-browser --session "$SESSION" click '.role-track [data-role="secondary"]' >/dev/null
+    agent-browser --session "$SESSION" click '.step-track [data-step="elevation"]' >/dev/null
+    origin_fill="$(agent-browser --session "$SESSION" eval "getComputedStyle(document.querySelector('.focus-origin')).fill")"
+    agent-browser --session "$SESSION" click '[data-mode="reference"]' >/dev/null
+    marker_fill="$(agent-browser --session "$SESSION" eval "getComputedStyle(document.querySelector('#plan-view .stem[data-role=secondary] .insertion-point')).fill")"
+    [[ "$marker_fill" == "$origin_fill" ]] || fail "w22-fuku-color: Fuku insertion does not use the Fuku origin color in style $style"
+  done
+}
+
 check_reference_teaching_note() {
   agent-browser --session "$SESSION" click '[data-mode="reference"]' >/dev/null
   styled="$(agent-browser --session "$SESSION" eval "(()=>{const note=document.querySelector('.reference-teaching-note');if(!note)return false;const style=getComputedStyle(note),r=note.getBoundingClientRect();return r.width>0&&r.height>0&&note.querySelectorAll('h3').length===2&&style.backgroundColor!=='rgba(0, 0, 0, 0)'&&parseFloat(style.borderTopWidth)>0})()")"
@@ -230,6 +252,8 @@ case "$TARGET" in
   reference-teaching-note) check_reference_teaching_note ;;
   no-return-link) check_no_return_link ;;
   upright-shu-inclination) check_upright_shu_inclination ;;
+  fuku-insertion-placement) check_fuku_insertion_placement ;;
+  fuku-insertion-color) check_fuku_insertion_color ;;
   *) echo "Unknown target: $TARGET" >&2; exit 2 ;;
 esac
 

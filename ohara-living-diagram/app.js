@@ -52,7 +52,7 @@ const STYLES = [
     insight: 'Follow the Subject first. Its diagonal determines the energy of every supporting relationship.',
     stems: [
       { role: 'subject', ratio: 1, azimuth: 45, elevation: 20, x: 40, y: 45 },
-      { role: 'secondary', ratio: 0.5, azimuth: -8, elevation: 90, x: 43, y: 42 },
+      { role: 'secondary', ratio: 0.5, azimuth: -8, elevation: 90, x: 32, y: 35 },
       { role: 'object', ratio: 0.5, azimuth: -30, elevation: 40, x: 47, y: 47 }
     ]
   },
@@ -62,8 +62,8 @@ const STYLES = [
     summary: 'The principal gesture travels close to the water surface, preserving an expressive field of open water.',
     insight: 'The empty water is active material. Low stems frame it rather than filling it.',
     stems: [
-      { role: 'subject', ratio: 1, azimuth: 45, elevation: 20, x: 49, y: 50 },
-      { role: 'secondary', ratio: 0.5, azimuth: -12, elevation: 90, x: 44, y: 43 },
+      { role: 'subject', ratio: 1, azimuth: 45, elevation: 20, x: 40, y: 45 },
+      { role: 'secondary', ratio: 0.5, azimuth: -12, elevation: 90, x: 32, y: 35 },
       { role: 'object', ratio: 0.5, azimuth: -30, elevation: 40, x: 55, y: 49 }
     ]
   }
