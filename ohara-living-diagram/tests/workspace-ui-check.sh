@@ -173,11 +173,16 @@ check_mirror_synchronization() {
 
 check_vertical_insertion_markers() {
   agent-browser --session "$SESSION" click '[data-mode="reference"]' >/dev/null
-  for spec in "0 subject" "1 secondary" "2 secondary"; do
+  for spec in "1 secondary" "2 secondary"; do
     read -r style role <<<"$spec"
     agent-browser --session "$SESSION" click "[data-style-index=\"$style\"]" >/dev/null
-    marked="$(agent-browser --session "$SESSION" eval "(()=>{const stem=document.querySelector('#plan-view .stem[data-role=\"$role\"]'),line=stem.querySelector('line'),markers=stem.querySelectorAll('.insertion-point'),marker=markers[0];return markers.length===1&&+marker.getAttribute('cx')===+line.getAttribute('x1')&&+marker.getAttribute('cy')===+line.getAttribute('y1')})()")"
-    [[ "$marked" == "true" ]] || fail "w17-insertion-marker: vertical $role has no explicit bird's-eye insertion marker in style $style"
+    marked="$(agent-browser --session "$SESSION" eval "(()=>{const stem=document.querySelector('#plan-view .stem[data-role=\"$role\"]'),line=stem.querySelector('line'),markers=stem.querySelectorAll('.insertion-point'),marker=markers[0];return stem.querySelectorAll('.stem-endpoint').length===0&&markers.length===1&&+marker.getAttribute('cx')===+line.getAttribute('x1')&&+marker.getAttribute('cy')===+line.getAttribute('y1')&&stem.querySelector('.vertical-cue')?.textContent==='VERTICAL'})()")"
+    [[ "$marked" == "true" ]] || fail "w17-insertion-marker: vertical $role is rendered as nested base and tip in style $style"
+  done
+  for style in 0 2; do
+    agent-browser --session "$SESSION" click "[data-style-index=\"$style\"]" >/dev/null
+    distinct="$(agent-browser --session "$SESSION" eval "(()=>{const stem=document.querySelector('#plan-view .stem[data-role=subject]');return stem.querySelectorAll('.stem-endpoint').length===1&&stem.querySelectorAll('.insertion-point').length===0&&!stem.querySelector('.vertical-cue')})()")"
+    [[ "$distinct" == "true" ]] || fail "w17-insertion-marker: nonvertical Subject lost its separate endpoint marker in style $style"
   done
 }
 
@@ -189,6 +194,19 @@ check_reference_teaching_note() {
 
 check_no_return_link() {
   [[ "$(agent-browser --session "$SESSION" get count 'a.start-guide')" == "0" ]] || fail "w19-return-link: redundant Return to Subject length link remains"
+}
+
+check_upright_shu_inclination() {
+  agent-browser --session "$SESSION" click '[data-style-index="0"]' >/dev/null
+  agent-browser --session "$SESSION" click '[data-mode="lesson"]' >/dev/null
+  agent-browser --session "$SESSION" click '.role-track [data-role="subject"]' >/dev/null
+  agent-browser --session "$SESSION" click '.step-track [data-step="elevation"]' >/dev/null
+  label="$(agent-browser --session "$SESSION" get text '.angle-label')"
+  agent-browser --session "$SESSION" click '[data-mode="reference"]' >/dev/null
+  table="$(agent-browser --session "$SESSION" get text '#reference-rows tr:first-child td:last-child')"
+  length="$(agent-browser --session "$SESSION" eval "(()=>{const e=document.querySelector('#plan-view .stem[data-role=subject] line');return Math.hypot(+e.getAttribute('x2')-+e.getAttribute('x1'),+e.getAttribute('y2')-+e.getAttribute('y1'))})()")"
+  valid="$(awk "BEGIN {print (\"$label\"==\"80°\" && \"$table\"==\"80°\" && $length>6 && $length<6.2)}")"
+  [[ "$valid" == "1" ]] || fail "w20-upright-shu: Upright Shu is not rendered at provisional 80-degree elevation"
 }
 
 case "$TARGET" in
@@ -211,6 +229,7 @@ case "$TARGET" in
   vertical-insertion-markers) check_vertical_insertion_markers ;;
   reference-teaching-note) check_reference_teaching_note ;;
   no-return-link) check_no_return_link ;;
+  upright-shu-inclination) check_upright_shu_inclination ;;
   *) echo "Unknown target: $TARGET" >&2; exit 2 ;;
 esac
 

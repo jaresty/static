@@ -38,7 +38,7 @@ check_elevation() {
   agent-browser --session "$SESSION" click '#step-next' >/dev/null
   agent-browser --session "$SESSION" click '#step-next' >/dev/null
   [[ "$(agent-browser --session "$SESSION" get count '.angle-arc')" == "1" ]] || { echo "FAIL a20-elevation: angle arc is absent" >&2; exit 1; }
-  [[ "$(agent-browser --session "$SESSION" get text '.angle-label')" == "90°" ]] || { echo "FAIL a20-elevation: degree label is absent" >&2; exit 1; }
+  [[ "$(agent-browser --session "$SESSION" get text '.angle-label')" == "80°" ]] || { echo "FAIL a20-elevation: degree label is absent" >&2; exit 1; }
 }
 
 case "$TARGET" in
@@ -53,7 +53,7 @@ case "$TARGET" in
     agent-browser --session "$SESSION" click '#step-next' >/dev/null
     [[ "$(agent-browser --session "$SESSION" get count '.angle-arc')" == "1" && "$(agent-browser --session "$SESSION" get text '.angle-label')" == "8° RIGHT" ]] || { echo "FAIL a20-plan: angle annotation is absent" >&2; exit 1; }
     agent-browser --session "$SESSION" click '#step-next' >/dev/null
-    [[ "$(agent-browser --session "$SESSION" get count '.angle-arc')" == "1" && "$(agent-browser --session "$SESSION" get text '.angle-label')" == "90°" ]] || { echo "FAIL a20-elevation: angle annotation is absent" >&2; exit 1; }
+    [[ "$(agent-browser --session "$SESSION" get count '.angle-arc')" == "1" && "$(agent-browser --session "$SESSION" get text '.angle-label')" == "80°" ]] || { echo "FAIL a20-elevation: angle annotation is absent" >&2; exit 1; }
     ;;
   *) echo "Unknown target: $TARGET" >&2; exit 2 ;;
 esac

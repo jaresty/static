@@ -128,6 +128,12 @@ function l21() {
   console.log('PASS l21: physical measurements normalize to safe nonnegative bounds');
 }
 
-const checks = { l11, l12, l13, l14, l15, l16, l18, l19, l20, l21 };
+function l22() {
+  const shu = model.getCurrentStem(model.createSession());
+  assert.equal(shu.details.elevation.value, 80);
+  console.log('PASS l22: Upright Shu is provisionally ten degrees off vertical');
+}
+
+const checks = { l11, l12, l13, l14, l15, l16, l18, l19, l20, l21, l22 };
 if (!checks[property]) throw new Error(`Unknown lesson property: ${property}`);
 checks[property]();

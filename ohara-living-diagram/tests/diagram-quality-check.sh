@@ -191,7 +191,7 @@ check_reference_plan_frame() {
 
 check_reference_plan_projection() {
   open_reference
-  local expected=('[-8,30,-15]' '[45,-8,-30]' '[45,-12,-30]') elevations=('[90,45,30]' '[20,90,40]' '[20,90,40]')
+  local expected=('[-8,30,-15]' '[45,-8,-30]' '[45,-12,-30]') elevations=('[80,45,30]' '[20,90,40]' '[20,90,40]')
   for index in 0 1 2; do
     agent-browser --session "$SESSION" click "[data-style-index=\"$index\"]" >/dev/null
     [[ "$(agent-browser --session "$SESSION" eval "(()=>{const expected=${expected[$index]},elevations=${elevations[$index]},lines=[...document.querySelector('.shared-views svg[aria-label^=\"Bird\"]')?.querySelectorAll('.stem line')||[]];return lines.length===3&&lines.every((l,i)=>{const dx=+l.getAttribute('x2')-+l.getAttribute('x1'),dy=+l.getAttribute('y2')-+l.getAttribute('y1');if(elevations[i]>=89)return Math.hypot(dx,dy)<.2;const actual=Math.atan2(-dx,dy)*180/Math.PI,delta=((actual-expected[i]+540)%360)-180;return Math.abs(delta)<.2})})()")" == "true" ]] || { echo "FAIL p18-reference-plan: plan rays do not match projected signed front-axis angles" >&2; exit 1; }
@@ -200,7 +200,7 @@ check_reference_plan_projection() {
 
 check_reference_front_side() {
   open_reference
-  local plans=('[-8,30,-15]' '[45,-8,-30]' '[45,-12,-30]') elevations=('[90,45,30]' '[20,90,40]' '[20,90,40]')
+  local plans=('[-8,30,-15]' '[45,-8,-30]' '[45,-12,-30]') elevations=('[80,45,30]' '[20,90,40]' '[20,90,40]')
   for index in 0 1 2; do
     agent-browser --session "$SESSION" click "[data-style-index=\"$index\"]" >/dev/null
     [[ "$(agent-browser --session "$SESSION" eval "(()=>{const plans=${plans[$index]},elevations=${elevations[$index]},lines=[...document.querySelector('.shared-views svg[aria-label^=\"Front\"]')?.querySelectorAll('.stem line')||[]];return lines.length===3&&lines.every((l,i)=>elevations[i]>=89||Math.sign(+l.getAttribute('x2')-+l.getAttribute('x1'))===-Math.sign(plans[i]))})()")" == "true" ]] || { echo "FAIL p19-reference-front: front projection reverses plan left and right" >&2; exit 1; }
@@ -209,7 +209,7 @@ check_reference_front_side() {
 
 check_reference_elevation_projection() {
   open_reference
-  local expected=('[90,45,30]' '[20,90,40]' '[20,90,40]')
+  local expected=('[80,45,30]' '[20,90,40]' '[20,90,40]')
   for index in 0 1 2; do
     agent-browser --session "$SESSION" click "[data-style-index=\"$index\"]" >/dev/null
     if [[ "$FAULT" == "reference-elevation" ]]; then agent-browser --session "$SESSION" eval "document.querySelector('.shared-views svg[aria-label^=\"Front\"] .stem line').setAttribute('y2','77')" >/dev/null; fi
@@ -219,7 +219,7 @@ check_reference_elevation_projection() {
 
 check_reference_spatial_side() {
   open_reference
-  local plans=('[-8,30,-15]' '[45,-8,-30]' '[45,-12,-30]') elevations=('[90,45,30]' '[20,90,40]' '[20,90,40]')
+  local plans=('[-8,30,-15]' '[45,-8,-30]' '[45,-12,-30]') elevations=('[80,45,30]' '[20,90,40]' '[20,90,40]')
   for index in 0 1 2; do
     agent-browser --session "$SESSION" click "[data-style-index=\"$index\"]" >/dev/null
     [[ "$(agent-browser --session "$SESSION" eval "(()=>{const plans=${plans[$index]},elevations=${elevations[$index]},lines=[...document.querySelector('.shared-views svg[aria-label^=\"Spatial\"]')?.querySelectorAll('.stem line')||[]];return lines.length===3&&lines.every((l,i)=>elevations[i]>=89||Math.sign(+l.getAttribute('x2')-+l.getAttribute('x1'))===-Math.sign(plans[i]))})()")" == "true" ]] || { echo "FAIL p21-reference-spatial: spatial projection reverses plan left and right" >&2; exit 1; }

@@ -40,7 +40,7 @@ const STYLES = [
     summary: 'The Subject rises vertically while the Secondary and Object open the composition with unequal counterweights.',
     insight: 'Read stability first: the vertical Subject establishes gravity, then the side stems make that stability visible.',
     stems: [
-      { role: 'subject', ratio: 1, azimuth: -8, elevation: 90, x: 42, y: 42 },
+      { role: 'subject', ratio: 1, azimuth: -8, elevation: 80, x: 42, y: 42 },
       { role: 'secondary', ratio: 0.67, azimuth: 30, elevation: 45, x: 38, y: 46 },
       { role: 'object', ratio: 0.5, azimuth: -15, elevation: 30, x: 46, y: 47 }
     ]
@@ -217,9 +217,9 @@ function stemLine(stem, start, end, labelAt = end, view = 'diagram', insertionMa
   const focused = state.focusedRole === stem.role;
   return `<g class="stem ${focused ? 'is-focused' : ''}" data-role="${stem.role}" tabindex="0" role="button" aria-label="Focus ${meta.name} stem in ${view}" style="--stem:${meta.color}">
     <line x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}" />
-    <circle cx="${start.x}" cy="${start.y}" r="2.6" />
-    <circle cx="${end.x}" cy="${end.y}" r="3.8" />
-    ${insertionMarker ? `<circle class="insertion-point" cx="${start.x}" cy="${start.y}" r="1.5" />` : ''}
+    ${insertionMarker
+      ? `<circle class="insertion-point" cx="${start.x}" cy="${start.y}" r="3.8" /><text class="vertical-cue" x="${start.x}" y="${start.y + 8}" text-anchor="middle">VERTICAL</text>`
+      : `<circle class="stem-origin" cx="${start.x}" cy="${start.y}" r="2.6" /><circle class="stem-endpoint" cx="${end.x}" cy="${end.y}" r="3.8" />`}
     <text x="${labelAt.x}" y="${labelAt.y - 7}" text-anchor="middle">${meta.short}</text>
   </g>`;
 }
@@ -362,7 +362,7 @@ function basicPlanGraphic(stem) {
 function basicElevationGraphic(stem) {
   const elevation = stem.details.elevation.value;
   const direction = stem.details.plan.value > 0 ? -1 : 1;
-  const end = { x: 50 + direction * Math.cos(rad(elevation)) * 35, y: 76 - Math.sin(rad(elevation)) * 35 };
+  const end = { x: 50 + direction * Math.cos(rad(elevation)) * 35, y: 77 - Math.sin(rad(elevation)) * 35 };
   const referenceAngle = direction < 0 ? -180 : 0;
   const stemAngle = direction < 0 ? -180 + elevation : -elevation;
   const label = point(50, 77, referenceAngle + (stemAngle - referenceAngle) / 2, 25);

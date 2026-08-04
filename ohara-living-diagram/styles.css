@@ -558,8 +558,15 @@ button,
 
 .hero-view .stem .insertion-point {
   fill: #fff1c9;
-  stroke: var(--ink-deep);
-  stroke-width: 1;
+  stroke: var(--stem);
+  stroke-width: 1.6;
+}
+
+.hero-view .stem .vertical-cue {
+  fill: #fff1c9;
+  font-size: 2.3px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
 }
 
 .stem text {

@@ -187,7 +187,7 @@ check_header_sync() {
 
 check_reference_plan_projection_length() {
   agent-browser --session "$SESSION" click '[data-mode="reference"]' >/dev/null
-  [[ "$(agent-browser --session "$SESSION" eval "(()=>{const ratios=[1,.67,.5],elevations=[90,45,30],lines=[...document.querySelectorAll('.shared-views svg[aria-label^=\"Bird\"] .stem line')];return lines.length===3&&lines.every((line,index)=>{const length=Math.hypot(+line.getAttribute('x2')-+line.getAttribute('x1'),+line.getAttribute('y2')-+line.getAttribute('y1')),expected=35*ratios[index]*Math.cos(elevations[index]*Math.PI/180);return Math.abs(length-expected)<.02})})()")" == "true" ]] \
+  [[ "$(agent-browser --session "$SESSION" eval "(()=>{const ratios=[1,.67,.5],elevations=[80,45,30],lines=[...document.querySelectorAll('.shared-views svg[aria-label^=\"Bird\"] .stem line')];return lines.length===3&&lines.every((line,index)=>{const length=Math.hypot(+line.getAttribute('x2')-+line.getAttribute('x1'),+line.getAttribute('y2')-+line.getAttribute('y1')),expected=35*ratios[index]*Math.cos(elevations[index]*Math.PI/180);return Math.abs(length-expected)<.02})})()")" == "true" ]] \
     || { echo "FAIL u19-reference-plan-length: bird's-eye rays ignore elevation projection" >&2; exit 1; }
 }
 
