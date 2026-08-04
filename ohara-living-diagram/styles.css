@@ -1946,6 +1946,16 @@ button,
     overflow-x: auto;
   }
 
+  .step-track,
+  .table-wrap {
+    scrollbar-width: none;
+  }
+
+  .step-track::-webkit-scrollbar,
+  .table-wrap::-webkit-scrollbar {
+    display: none;
+  }
+
   .step-track li {
     min-width: 58px;
     justify-content: center;
@@ -1958,13 +1968,16 @@ button,
 
   .adaptive-stage {
     grid-template-columns: 1fr;
-    grid-template-rows: 330px 390px;
-    height: 720px;
+    grid-template-rows: minmax(330px, auto) minmax(390px, auto);
+    height: auto;
+    min-height: 720px;
+    overflow: visible;
   }
 
   .adaptive-copy,
   .adaptive-visual {
     padding: 28px 20px;
+    overflow: visible;
   }
 
   .adaptive-visual {

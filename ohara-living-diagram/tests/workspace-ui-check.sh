@@ -208,6 +208,23 @@ check_fuku_insertion_color() {
   done
 }
 
+check_mobile_vertical_scroll() {
+  agent-browser --session "$SESSION" set viewport 390 844 >/dev/null
+  agent-browser --session "$SESSION" click '[data-mode="lesson"]' >/dev/null
+  for phase in length kenzan plan elevation review; do
+    agent-browser --session "$SESSION" click ".step-track [data-step=\"$phase\"]" >/dev/null
+    nested="$(agent-browser --session "$SESSION" eval "(()=>[...document.querySelectorAll('.adaptive-stage *')].filter(element=>{const style=getComputedStyle(element);return ['auto','scroll'].includes(style.overflowY)&&element.scrollHeight>element.clientHeight+1}).length)()")"
+    [[ "$nested" == "0" ]] || fail "w23-mobile-vertical-scroll: $phase has $nested nested vertical scroll region(s)"
+  done
+}
+
+check_mobile_scrollbar_chrome() {
+  agent-browser --session "$SESSION" set viewport 390 844 >/dev/null
+  agent-browser --session "$SESSION" click '[data-mode="reference"]' >/dev/null
+  hidden="$(agent-browser --session "$SESSION" eval "[...document.querySelectorAll('.step-track, .table-wrap')].every(element=>getComputedStyle(element).scrollbarWidth==='none')")"
+  [[ "$hidden" == "true" ]] || fail "w24-mobile-scrollbar-chrome: swipeable rows expose native scrollbar chrome"
+}
+
 check_reference_teaching_note() {
   agent-browser --session "$SESSION" click '[data-mode="reference"]' >/dev/null
   styled="$(agent-browser --session "$SESSION" eval "(()=>{const note=document.querySelector('.reference-teaching-note');if(!note)return false;const style=getComputedStyle(note),r=note.getBoundingClientRect();return r.width>0&&r.height>0&&note.querySelectorAll('h3').length===2&&style.backgroundColor!=='rgba(0, 0, 0, 0)'&&parseFloat(style.borderTopWidth)>0})()")"
@@ -254,6 +271,8 @@ case "$TARGET" in
   upright-shu-inclination) check_upright_shu_inclination ;;
   fuku-insertion-placement) check_fuku_insertion_placement ;;
   fuku-insertion-color) check_fuku_insertion_color ;;
+  mobile-vertical-scroll) check_mobile_vertical_scroll ;;
+  mobile-scrollbar-chrome) check_mobile_scrollbar_chrome ;;
   *) echo "Unknown target: $TARGET" >&2; exit 2 ;;
 esac
 
