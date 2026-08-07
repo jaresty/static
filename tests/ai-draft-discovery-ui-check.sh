@@ -18,7 +18,11 @@ for app in 2x2-facilitator pairwise-ranker; do
   panel="$(agent-browser --session "$session" eval '(()=>{const panel=document.querySelector("[data-ai-import-panel]");return Boolean(panel&&!panel.hidden&&panel.getBoundingClientRect().height>0&&/does not contact an AI/i.test(panel.innerText))})()')"
   [[ "$panel" == true ]] || { echo "FAIL ai-draft-discovery: $app Draft with AI does not open the import panel"; exit 1; }
   agent-browser --session "$session" find role button click --name 'Close AI setup' >/dev/null
-  agent-browser --session "$session" find role button click --name 'Work solo' >/dev/null
+  if [[ "$app" == 2x2-facilitator ]]; then
+    agent-browser --session "$session" find role button click --name 'Create a 2×2 yourself' >/dev/null
+  else
+    agent-browser --session "$session" find role button click --name 'Work solo' >/dev/null
+  fi
   if [[ "$app" == 2x2-facilitator ]]; then
     disclosure="$(agent-browser --session "$session" eval '(()=>{const summary=document.querySelector("details.ai-assistance > summary");return Boolean(summary&&summary.innerText.trim()==="Need help drafting?"&&summary.getBoundingClientRect().width>0)})()')"
     [[ "$disclosure" == true ]] || { echo "FAIL ai-draft-discovery: $app setup does not expose alternate AI assistance"; exit 1; }

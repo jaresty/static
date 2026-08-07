@@ -20,7 +20,12 @@ for spec in "quadrant:2x2-facilitator" "stack-rank:pairwise-ranker"; do
   path="${spec#*:}"
   session="collaboration-entry-$name-$$"
   agent-browser --session "$session" open "http://127.0.0.1:$PORT/$path/?check=$$" >/dev/null
-  result="$(agent-browser --session "$session" eval 'JSON.stringify(["Work solo","Invite responses","Combine responses"].filter(label => !Array.from(document.querySelectorAll("button, a")).some(node => (node.querySelector("strong")?.textContent || node.textContent).trim() === label)))')"
+  if [[ "$name" == quadrant ]]; then
+    labels='["Create a 2×2 yourself","Create a 2×2 for a group","Combine completed responses"]'
+  else
+    labels='["Work solo","Invite responses","Combine responses"]'
+  fi
+  result="$(agent-browser --session "$session" eval "JSON.stringify($labels.filter(label => !Array.from(document.querySelectorAll('button, a')).some(node => (node.querySelector('strong')?.textContent || node.textContent).trim() === label)))")"
   if [[ "$result" != '[]' && "$result" != '"[]"' ]]; then
     failures+=("$name missing $result")
   fi
@@ -31,4 +36,4 @@ if ((${#failures[@]})); then
   exit 1
 fi
 
-printf 'PASS entry choices: both apps render Work solo, Invite responses, and Combine responses\n'
+printf 'PASS entry choices: both apps render explicit creation and combination routes\n'
