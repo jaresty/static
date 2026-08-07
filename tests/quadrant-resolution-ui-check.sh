@@ -29,6 +29,8 @@ run_target() {
   agent-browser --session "$session" click '#combine-mode' >/dev/null
   if [[ "$target" == single ]]; then
     agent-browser --session "$session" fill '#response-links' "$single_response" >/dev/null
+  elif [[ "$target" == adjustment-visibility ]]; then
+    agent-browser --session "$session" fill '#response-links' "$coincident_first" >/dev/null
   elif [[ "$target" == click-preserves || "$target" == drag-requires-selection ]]; then
     agent-browser --session "$session" fill '#response-links' "$coincident_first" >/dev/null
   else
@@ -70,6 +72,12 @@ $second" >/dev/null
       result="$(agent-browser --session "$session" eval '(()=>{const expected={"item-1":["0.15","0.15"],"item-2":["0.5","0.8"],"item-3":["0.85","0.2"]};const cards=Array.from(document.querySelectorAll("[data-resolution-card]"));return document.querySelector("#response-count").textContent.trim()==="1 response"&&cards.every(card=>card.dataset.resolvedX===expected[card.dataset.itemId][0]&&card.dataset.resolvedY===expected[card.dataset.itemId][1])&&document.querySelectorAll("[data-adjustment-line]").length===0})()')"
       [[ "$result" == true ]] || { echo 'FAIL quadrant single average: one response is not rendered exactly without adjustment lines'; exit 1; }
       echo 'PASS quadrant single average: one response remains exact and adjustment-free'
+      ;;
+    adjustment-visibility)
+      local result
+      result="$(agent-browser --session "$session" eval '(()=>{const ids=["item-1","item-2","item-3"];ids.forEach(id=>{document.querySelector(`[data-navigator-item][data-item-id="${id}"]`).click();document.querySelector(`[data-resolution-card][data-item-id="${id}"]`).dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}))});document.querySelector(`[data-navigator-item][data-item-id="item-3"]`).click();const visible=node=>Number(getComputedStyle(node).opacity)>.5&&getComputedStyle(node).display!=="none";const evidence=()=>Array.from(document.querySelectorAll("[data-adjustment-line],[data-average-marker]"));const before=Object.fromEntries(ids.map(id=>{const card=document.querySelector(`[data-resolution-card][data-item-id="${id}"]`);return[id,[card.dataset.averageX,card.dataset.averageY,card.dataset.resolvedX,card.dataset.resolvedY,card.dataset.adjusted]]}));const overview=evidence().length===6&&evidence().every(node=>!visible(node));document.querySelector(`[data-navigator-item][data-item-id="item-2"]`).click();const own=evidence().filter(node=>(node.dataset.itemId||node.dataset.adjustmentLine)==="item-2");const other=evidence().filter(node=>(node.dataset.itemId||node.dataset.adjustmentLine)!=="item-2");const card=document.querySelector(`[data-resolution-card][data-item-id="item-2"]`);const line=document.querySelector(`[data-adjustment-line="item-2"]`);const endpoints=line.getAttribute("x1")===String(8+Number(card.dataset.averageX)*84)&&line.getAttribute("y1")===String(72-Number(card.dataset.averageY)*64)&&line.getAttribute("x2")===String(8+Number(card.dataset.resolvedX)*84)&&line.getAttribute("y2")===String(72-Number(card.dataset.resolvedY)*64);const focused=own.length===2&&own.every(visible)&&other.every(node=>!visible(node))&&endpoints;document.querySelector(`[data-navigator-item][data-item-id="item-2"]`).click();const after=Object.fromEntries(ids.map(id=>{const next=document.querySelector(`[data-resolution-card][data-item-id="${id}"]`);return[id,[next.dataset.averageX,next.dataset.averageY,next.dataset.resolvedX,next.dataset.resolvedY,next.dataset.adjusted]]}));return overview&&focused&&evidence().every(node=>!visible(node))&&JSON.stringify(before)===JSON.stringify(after)})()')"
+      [[ "$result" == true ]] || { echo 'FAIL quadrant adjustment visibility: one-response overview exposes origin lines or selection loses exact adjustment state'; exit 1; }
+      echo 'PASS quadrant adjustment visibility: adjustment evidence appears only for the selected item'
       ;;
     adjustment-line)
       local result
