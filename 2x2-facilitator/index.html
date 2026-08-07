@@ -83,8 +83,9 @@
     .placement-mark.evidence-visible { opacity: 1; }
     .placement-mark { stroke: #fff; stroke-width: 1.5; }
     .resolution-halo { fill-opacity: .1; stroke-width: 1; stroke-opacity: .35; pointer-events: none; transition: opacity .16s; }
-    .adjustment-line { stroke: var(--violet); stroke-width: .7; pointer-events: none; transition: opacity .16s; }
-    .average-marker { fill: #fff; stroke: var(--violet); stroke-width: 1; pointer-events: none; transition: opacity .16s; }
+    .adjustment-line { opacity: 0; stroke: var(--violet); stroke-width: .7; pointer-events: none; transition: opacity .16s; }
+    .average-marker { opacity: 0; fill: #fff; stroke: var(--violet); stroke-width: 1; pointer-events: none; transition: opacity .16s; }
+    .adjustment-line.focused, .average-marker.focused { opacity: 1; }
     .convergence-board.has-focus .resolution-halo:not(.focused), .convergence-board.has-focus .adjustment-line:not(.focused), .convergence-board.has-focus .average-marker:not(.focused) { opacity: 0; }
     .resolution-card { cursor: grab; transition: opacity .16s; }
     .resolution-card .resolution-hit-target { fill-opacity: 0; stroke-opacity: 0; pointer-events: all; }
