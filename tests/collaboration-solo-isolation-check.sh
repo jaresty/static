@@ -36,4 +36,4 @@ if ((${#failures[@]})); then
   exit 1
 fi
 
-printf 'PASS solo isolation: Work solo creates no collaboration artifact\n'
+printf 'PASS solo isolation: local solo mode creates no collaboration artifact\n'

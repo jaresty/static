@@ -523,13 +523,12 @@ const facilitatorApp = {
     this.elements['placement-y-summary'].textContent = `${this.session.yLabel}: ${this.session.yLow} — ${this.session.yHigh}`;
     this.setAxisLabels('placement');
     this.renderPlacedItems(this.elements['placement-board']);
-    this.makeBoardItem({ ...candidate, ...this.draftPosition, focused: false }, this.elements['placement-board'], { candidate: true });
+    const candidateButton = this.makeBoardItem({ ...candidate, ...this.draftPosition, focused: false }, this.elements['placement-board'], { candidate: true });
     this.elements['candidate-card'].textContent = candidate.text;
     this.elements['placement-coordinates'].textContent = this.describePosition(this.draftPosition);
     this.elements['placement-undo'].disabled = this.session.history.length === 0;
-    this.bindDrag(this.elements['candidate-card'], this.elements['placement-board'], candidate.id, true);
     this.show('placement');
-    this.elements['candidate-card'].focus();
+    candidateButton.focus();
   },
 
   commitPlacement() {

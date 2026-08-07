@@ -10,7 +10,12 @@ browser_test_install_cleanup
 for _ in {1..50}; do curl -fsS "http://127.0.0.1:$PORT/" >/dev/null 2>&1 && break; sleep .1; done
 export AGENT_BROWSER_HEADED=false
 for app in 2x2-facilitator pairwise-ranker; do
-  for choice in "Work solo" "Invite responses" "Combine responses"; do
+  if [[ "$app" == 2x2-facilitator ]]; then
+    choices=("Create a 2×2 yourself" "Create a 2×2 for a group" "Combine completed responses")
+  else
+    choices=("Work solo" "Invite responses" "Combine responses")
+  fi
+  for choice in "${choices[@]}"; do
     session="back-${app}-${choice// /-}-$$"
     agent-browser --session "$session" open "http://127.0.0.1:$PORT/$app/?back-check=$RANDOM" >/dev/null
     agent-browser --session "$session" find role button click --name "$choice" >/dev/null
@@ -21,7 +26,7 @@ for app in 2x2-facilitator pairwise-ranker; do
       exit 1
     fi
     agent-browser --session "$session" wait 150 >/dev/null
-    entry_visible="$(agent-browser --session "$session" eval 'Array.from(document.querySelectorAll("button")).some(b=>b.innerText.startsWith("Work solo")&&!b.hidden&&b.getBoundingClientRect().width>0)')"
+    entry_visible="$(agent-browser --session "$session" eval 'Array.from(document.querySelectorAll("button.mode-card")).some(b=>!b.hidden&&b.getBoundingClientRect().width>0)')"
     [[ "$entry_visible" == true ]] || { echo "FAIL back-to-choices: $app $choice did not return to entry choices"; exit 1; }
     agent-browser --session "$session" find role button click --name "$choice" >/dev/null
     agent-browser --session "$session" wait 150 >/dev/null

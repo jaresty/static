@@ -160,10 +160,11 @@
     .placement-orientation strong { color: var(--ink); }
     .placement-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .65fr); gap: 18px; align-items: start; }
     .placement-controls { position: sticky; top: 18px; }
-    .candidate-card { width: 100%; min-height: 120px; margin: 16px 0; padding: 20px; border: 2px dashed var(--violet); border-radius: 18px; background: var(--violet-soft); color: var(--ink); font-size: clamp(1.25rem, 3vw, 2rem); font-weight: 850; letter-spacing: -.035em; line-height: 1.1; overflow-wrap: anywhere; touch-action: none; }
+    .candidate-name { margin: 8px 0 0; color: var(--ink); font-size: clamp(1.35rem, 3vw, 2rem); letter-spacing: -.035em; line-height: 1.1; overflow-wrap: anywhere; }
+    .placement-drag-instruction { margin: 12px 0 16px; color: var(--muted); line-height: 1.45; }
     .coordinate-readout { padding: 12px 14px; border-radius: 12px; background: #f8f5ed; color: var(--muted); font-size: .84rem; line-height: 1.45; }
     .board-item { touch-action: none; cursor: grab; }
-    .board-item:active, .candidate-card:active { cursor: grabbing; }
+    .board-item:active { cursor: grabbing; }
     .board-item.candidate-preview { border-style: dashed; border-color: var(--violet); background: var(--violet-soft); z-index: 3; }
     .board-item.dragging { opacity: .82; box-shadow: 0 14px 34px rgba(111,90,232,.3); }
     .review-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .65fr); gap: 18px; align-items: start; }
@@ -261,9 +262,9 @@
       </div>
       <aside class="ai-callout"><div><strong>Want help framing the exercise?</strong><p>Use any AI assistant to propose a draft. You review everything before it becomes a setup.</p></div><div class="button-row" style="margin:0"><button class="button button-secondary" type="button" data-copy-ai-prompt>Copy AI prompt</button><button class="button button-primary" type="button" data-open-ai>Draft with AI</button></div></aside>
       <div class="mode-grid">
-        <button class="mode-card mode-card-primary" id="solo-mode" type="button"><strong>Work solo</strong><span>Build one map yourself and leave with a visual set of priorities.</span></button>
-        <button class="mode-card" id="setup-mode" type="button"><strong>Invite responses</strong><span>Send everyone the same prompt, axes, and options so they can map their view privately.</span></button>
-        <button class="mode-card" id="combine-mode" type="button"><strong>Combine responses</strong><span>Bring completed maps together to compare agreement and disagreement.</span></button>
+        <button class="mode-card mode-card-primary" id="solo-mode" type="button"><strong>Create a 2×2 yourself</strong><span>Set up the question, axes, and options, then drag each option onto your grid.</span></button>
+        <button class="mode-card" id="setup-mode" type="button"><strong>Create a 2×2 for a group</strong><span>Set it up, then invite people to map their view privately and asynchronously.</span></button>
+        <button class="mode-card" id="combine-mode" type="button"><strong>Combine completed responses</strong><span>Bring completed maps together to compare agreement and disagreement.</span></button>
       </div>
     </section>
 
@@ -362,10 +363,11 @@
           <p class="hint">Drag the highlighted option to where the group agrees it belongs. Existing options can be repositioned at any time.</p>
         </section>
         <aside class="panel placement-controls">
-          <p class="eyebrow">Now discussing</p>
-          <button class="candidate-card" id="candidate-card" type="button"></button>
+          <p class="eyebrow">Now placing</p>
+          <h3 class="candidate-name" id="candidate-card"></h3>
+          <p class="placement-drag-instruction" id="placement-drag-instruction">The highlighted card starts in the center. Drag it to where it belongs, or use the arrow keys.</p>
           <p class="coordinate-readout" id="placement-coordinates">Center · use arrow keys for precise movement</p>
-          <button class="button button-accent" id="place-option" type="button" style="width:100%; margin-top:16px">Place option here</button>
+          <button class="button button-accent" id="place-option" type="button" style="width:100%; margin-top:16px">Confirm this position</button>
           <div class="button-row"><button class="button button-secondary" id="placement-undo" type="button">Undo</button><button class="button button-quiet" id="placement-reset" type="button">Start over</button></div>
         </aside>
       </div>
