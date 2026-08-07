@@ -32,7 +32,7 @@
     .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 24px 0 64px; }
     .masthead { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 52px; }
     .brand { display: flex; align-items: center; gap: 10px; font-weight: 850; letter-spacing: -.035em; }
-    .home-link { display: inline-flex; border-radius: 11px; text-decoration: none; }
+    .home-link { display: inline-flex; align-items: center; gap: 10px; border-radius: 11px; color: inherit; text-decoration: none; }
     .home-link:focus-visible { outline: 3px solid var(--violet); outline-offset: 3px; }
     .mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; background: var(--ink); color: var(--lime); font-size: 20px; }
     .privacy { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .84rem; }
@@ -212,7 +212,7 @@
       .shell { width: min(100% - 20px, 540px); padding-top: 16px; }
       .masthead { margin-bottom: 36px; }
       .setup-preview .board-wrap { width: auto; min-height: 300px; aspect-ratio: auto; margin: 18px 0 42px 42px; }
-      .privacy { font-size: 0; }
+      .privacy { display: none; }
       .axis-grid, .export-grid { grid-template-columns: 1fr; }
       .view-head { align-items: start; flex-direction: column; }
       .board-panel { padding: 14px; }
@@ -243,8 +243,8 @@
 <body>
   <main class="shell" id="index">
     <header class="masthead">
-      <div class="brand"><a class="home-link" id="home-link" href="../" aria-label="Back to tool choices"><span class="mark" aria-hidden="true">⌗</span></a> Quadrant</div>
-      <div class="button-row" style="margin:0"><button class="button button-quiet" id="back-to-choices" type="button" hidden>← Back to choices</button><button class="button button-quiet" id="take-tour" type="button">Take a tour</button><div class="privacy" id="privacy-note">Everything stays in this browser</div></div>
+      <div class="brand"><a class="home-link" id="home-link" href="./" aria-label="Quadrant home"><span class="mark" aria-hidden="true">⌗</span><span>Quadrant</span></a></div>
+      <div class="button-row" style="margin:0"><a class="button button-quiet" data-all-tools href="../">All tools</a><button class="button button-quiet" id="back-to-choices" type="button" hidden>← Back to choices</button><button class="button button-quiet" id="take-tour" type="button">Take a tour</button><div class="privacy" id="privacy-note">Everything stays in this browser</div></div>
     </header>
     <aside class="tour-offer" data-tour-offer><div><strong>New to Quadrant?</strong><p>Practice the complete workflow with disposable sample data.</p></div><div class="button-row" style="margin:0"><button class="button button-primary" type="button" data-start-tour>Show me</button><button class="button button-quiet" type="button" data-dismiss-tour>Not now</button></div></aside>
 
