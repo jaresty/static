@@ -7,6 +7,13 @@ async function loadRanking() {
   return import(modulePath);
 }
 
+async function completedRanking(outcome = 'left', criterion = 'expected impact') {
+  const { createSession, applyChoice } = await loadRanking();
+  let session = createSession(criterion, 'Alpha\nBeta\nGamma');
+  while (session.phase === 'comparing') session = applyChoice(session, outcome);
+  return session;
+}
+
 test('governingTests harness executes', () => {
   assert.equal(1, 1);
 });
@@ -77,6 +84,78 @@ test('exportRanking emits Markdown and numbered portable output', async () => {
   session.comparisons.push({ leftId: 'a', rightId: 'b', rationale: 'Alpha helps more people.' });
   assert.match(exportRanking(session, 'markdown'), /Rationale[\s\S]*Alpha helps more people\./);
   assert.match(exportRanking(session, 'numbered'), /Rationale[\s\S]*Alpha helps more people\./);
+});
+
+test('c1 Stack Rank setup URLs round-trip only the independent setup projection', async () => {
+  const { encodeSetupUrl, decodeShareUrl } = await import('./collaboration.mjs');
+  const session = await completedRanking();
+  const artifact = decodeShareUrl(encodeSetupUrl(session, 'https://static.test/pairwise-ranker/'));
+  assert.equal(artifact.app, 'stack-rank');
+  assert.equal(artifact.kind, 'setup');
+  assert.equal(artifact.payload.criterion, session.criterion);
+  assert.deepEqual(artifact.payload.items, session.items.map(({ id, text }) => ({ id, text })));
+  for (const workingField of ['groups', 'pending', 'candidateId', 'comparisons', 'uncertainties', 'rationaleDraft', 'phase', 'history', 'reviewedOrder', 'updatedAt']) {
+    assert.equal(artifact.payload[workingField], undefined, `${workingField} must remain local working state`);
+  }
+});
+
+test('c3 Stack Rank response URLs preserve the participant final order', async () => {
+  const { encodeResponseUrl, decodeShareUrl } = await import('./collaboration.mjs');
+  const session = await completedRanking();
+  const artifact = decodeShareUrl(encodeResponseUrl(session, { contributor: 'Alex', baseUrl: 'https://static.test/pairwise-ranker/' }));
+  assert.equal(artifact.kind, 'response');
+  assert.equal(artifact.contributor, 'Alex');
+  assert.deepEqual(artifact.payload.groups, session.groups);
+  assert.ok(artifact.exerciseId);
+  assert.ok(artifact.contributionId);
+});
+
+test('c5-c9 Stack Rank Slack sharing conceals by default and warns with previews', async () => {
+  const { encodeResponseUrl, decodeShareUrl, buildSlackMessage } = await import('./collaboration.mjs');
+  const session = await completedRanking();
+  const url = encodeResponseUrl(session, { contributor: 'Alex', baseUrl: 'https://static.test/pairwise-ranker/' });
+  const artifact = decodeShareUrl(url);
+  const concealed = buildSlackMessage(artifact, url, { preview: false });
+  assert.doesNotMatch(concealed, /Ranking preview:|1\. Alpha/i);
+  assert.match(concealed, /privately to the facilitator/i);
+  assert.equal(concealed.match(/https:\/\/\S+/g)?.length, 1);
+  const preview = buildSlackMessage(artifact, url, { preview: true });
+  assert.match(preview, /Ranking preview:/i);
+  assert.match(preview, /may influence teammates/i);
+});
+
+test('c10-c11 Stack Rank collection is idempotent and rejects another setup', async () => {
+  const { encodeResponseUrl, decodeShareUrl, createCollection, addResponse } = await import('./collaboration.mjs');
+  const session = await completedRanking();
+  const response = decodeShareUrl(encodeResponseUrl(session, { contributor: 'Alex', baseUrl: 'https://static.test/pairwise-ranker/' }));
+  let collection = createCollection(session);
+  ({ collection } = addResponse(collection, response));
+  const duplicate = addResponse(collection, response);
+  assert.equal(duplicate.status, 'duplicate');
+  assert.equal(duplicate.collection.responses.length, 1);
+
+  const other = await completedRanking('right', 'ease of delivery');
+  const mismatch = addResponse(collection, decodeShareUrl(encodeResponseUrl(other, { contributor: 'Blair', baseUrl: 'https://static.test/pairwise-ranker/' })));
+  assert.equal(mismatch.status, 'mismatch');
+  assert.equal(mismatch.collection.responses.length, 1);
+});
+
+test('c12 Stack Rank convergence preserves rankings and exposes pairwise disagreement', async () => {
+  const { encodeResponseUrl, decodeShareUrl, createCollection, addResponse, convergeResponses } = await import('./collaboration.mjs');
+  const first = await completedRanking('left');
+  const second = await completedRanking('right');
+  let collection = createCollection(first);
+  for (const [session, contributor] of [[first, 'Alex'], [second, 'Blair']]) {
+    const response = decodeShareUrl(encodeResponseUrl(session, { contributor, baseUrl: 'https://static.test/pairwise-ranker/' }));
+    ({ collection } = addResponse(collection, response));
+  }
+  const result = convergeResponses(collection);
+  assert.equal(result.responseCount, 2);
+  assert.equal(result.rankings.length, 2);
+  assert.equal(result.order.length, 3);
+  const disputed = result.pairs.find(({ disagreement }) => disagreement > 0);
+  assert.ok(disputed);
+  assert.equal(disputed.leftWins + disputed.ties + disputed.rightWins, 2);
 });
 
 test('genericExamples excludes organization-specific backlog language', async () => {

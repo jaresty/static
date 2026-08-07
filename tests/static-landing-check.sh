@@ -5,11 +5,8 @@ TARGET="${STATIC_LANDING_TARGET:-structure}"
 PORT="${STATIC_LANDING_PORT:-$((8300 + RANDOM % 300))}"
 SESSION="static-landing-check-$$"
 SERVER_PID=""
-cleanup() {
-  agent-browser --session "$SESSION" close >/dev/null 2>&1 || true
-  [[ -z "$SERVER_PID" ]] || kill "$SERVER_PID" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
+source "$ROOT/tests/browser-test-cleanup.sh"
+browser_test_install_cleanup
 fail() { echo "FAIL landing-$1" >&2; exit 1; }
 
 check_structure() {
