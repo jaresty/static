@@ -14,16 +14,25 @@ quadrant_url="$(node --input-type=module -e "import {createWorkshop} from './2x2
 stack_url="$(node --input-type=module -e "import {createSession} from './pairwise-ranker/ranking.mjs';import{encodeSetupUrl}from'./pairwise-ranker/collaboration.mjs';const s=createSession('Expected impact','Alpha\nBeta');console.log(encodeSetupUrl(s,'http://127.0.0.1:$PORT/pairwise-ranker/'));"
 )"
 
-for spec in "quadrant|$quadrant_url" "stack-rank|$stack_url"; do
-  IFS='|' read -r name url <<<"$spec"
+failures=()
+for spec in "quadrant|$quadrant_url|/2x2-facilitator/|Quadrant" "stack-rank|$stack_url|/pairwise-ranker/|Stack Rank"; do
+  IFS='|' read -r name url app_path product_name <<<"$spec"
   session="home-navigation-$name-$$"
   agent-browser --session "$session" open "$url" >/dev/null
-  home_link="$(agent-browser --session "$session" eval '(()=>{const link=document.querySelector("#home-link");return document.body.dataset.mode==="shared-setup"&&link?.tagName==="A"&&link.getClientRects().length>0&&new URL(link.href).pathname==="/"&&/back to tool choices/i.test(link.getAttribute("aria-label")||"")})()')"
-  [[ "$home_link" == true ]] || { echo "FAIL home navigation: $name participant page has no accessible root link on its home mark"; exit 1; }
+  agent-browser --session "$session" set viewport 390 844 >/dev/null
+  contract="$(agent-browser --session "$session" eval "(()=>{const product=document.querySelector('#home-link');const tools=document.querySelector('[data-all-tools]');const privacy=document.querySelector('#privacy-note');return document.body.dataset.mode==='shared-setup'&&product?.tagName==='A'&&product.getClientRects().length>0&&new URL(product.href).pathname==='$app_path'&&product.innerText.includes('$product_name')&&new URL(tools?.href||location.href).pathname==='/'&&/all tools/i.test(tools?.innerText||'')&&getComputedStyle(privacy).display==='none'&&document.documentElement.scrollWidth===document.documentElement.clientWidth})()")"
+  if [[ "$contract" != true ]]; then
+    failures+=("$name link contract")
+    continue
+  fi
   agent-browser --session "$session" click '#home-link' >/dev/null
+  agent-browser --session "$session" wait --url "http://127.0.0.1:$PORT$app_path" >/dev/null
+  [[ "$(agent-browser --session "$session" get url)" == "http://127.0.0.1:$PORT$app_path" ]] || failures+=("$name product destination")
+  agent-browser --session "$session" open "$url" >/dev/null
+  agent-browser --session "$session" click '[data-all-tools]' >/dev/null
   agent-browser --session "$session" wait --url "http://127.0.0.1:$PORT/" >/dev/null
-  destination="$(agent-browser --session "$session" get url)"
-  [[ "$destination" == "http://127.0.0.1:$PORT/" ]] || { echo "FAIL home navigation: $name home mark does not reach the root catalogue"; exit 1; }
+  [[ "$(agent-browser --session "$session" get url)" == "http://127.0.0.1:$PORT/" ]] || failures+=("$name catalogue destination")
 done
 
-echo 'PASS home navigation: both participant pages expose a home mark that reaches the root catalogue'
+((${#failures[@]} == 0)) || { printf 'FAIL home navigation: %s\n' "${failures[*]}"; exit 1; }
+echo 'PASS home navigation: product marks open their apps and All tools opens the catalogue'
