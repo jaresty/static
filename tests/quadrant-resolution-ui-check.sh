@@ -29,7 +29,7 @@ run_target() {
   agent-browser --session "$session" click '#combine-mode' >/dev/null
   if [[ "$target" == single ]]; then
     agent-browser --session "$session" fill '#response-links' "$single_response" >/dev/null
-  elif [[ "$target" == leader-explanation || "$target" == click-preserves || "$target" == drag-requires-selection ]]; then
+  elif [[ "$target" == click-preserves || "$target" == drag-requires-selection ]]; then
     agent-browser --session "$session" fill '#response-links' "$coincident_first" >/dev/null
   else
     agent-browser --session "$session" fill '#response-links' "$first
@@ -50,26 +50,44 @@ $second" >/dev/null
       [[ "$result" == true ]] || { echo 'FAIL quadrant item identity: grid numbers are not mapped consistently to navigator and inspector'; exit 1; }
       echo 'PASS quadrant item identity: grid, navigator, and inspector share stable item numbers'
       ;;
+    true-position)
+      local result
+      result="$(agent-browser --session "$session" eval '(()=>{const close=(a,b)=>Math.abs(a-b)<.001;return Array.from(document.querySelectorAll("[data-resolution-card]")).every(card=>{const transform=card.getAttribute("transform")?.match(/translate\(([-.\d]+) ([-.\d]+)\)/);const expectedX=8+Number(card.dataset.resolvedX)*84;const expectedY=72-Number(card.dataset.resolvedY)*64;return transform&&close(Number(transform[1]),expectedX)&&close(Number(transform[2]),expectedY)&&card.dataset.displayX===card.dataset.resolvedX&&card.dataset.displayY===card.dataset.resolvedY})})()')"
+      [[ "$result" == true ]] || { echo 'FAIL quadrant true position: numbered markers do not render at their current results'; exit 1; }
+      echo 'PASS quadrant true position: numbered markers render at their current results'
+      ;;
+    drag-fidelity)
+      local result
+      result="$(agent-browser --session "$session" eval '(()=>{const itemId="item-2",target={x:.62,y:.66};document.querySelector(`[data-navigator-item][data-item-id="${itemId}"]`).click();const card=document.querySelector(`[data-resolution-card][data-item-id="${itemId}"]`);const board=document.querySelector("#convergence-board");const bounds=board.getBoundingClientRect();const start=card.getBoundingClientRect();const clientX=bounds.left+bounds.width*(8+target.x*84)/100;const clientY=bounds.top+bounds.height*(72-target.y*64)/80;card.dispatchEvent(new PointerEvent("pointerdown",{pointerId:1,clientX:start.left+start.width/2,clientY:start.top+start.height/2,bubbles:true}));board.dispatchEvent(new PointerEvent("pointermove",{pointerId:1,clientX,clientY,bubbles:true}));board.dispatchEvent(new PointerEvent("pointerup",{pointerId:1,clientX,clientY,bubbles:true}));const moved=document.querySelector(`[data-resolution-card][data-item-id="${itemId}"]`);const transform=moved.getAttribute("transform")?.match(/translate\(([-.\d]+) ([-.\d]+)\)/);return moved.dataset.resolvedX==="0.62"&&moved.dataset.resolvedY==="0.66"&&transform&&Math.abs(Number(transform[1])-(8+target.x*84))<.001&&Math.abs(Number(transform[2])-(72-target.y*64))<.001})()')"
+      [[ "$result" == true ]] || { echo 'FAIL quadrant drag fidelity: release point, stored result, and visible marker diverge'; exit 1; }
+      echo 'PASS quadrant drag fidelity: release point, stored result, and visible marker agree'
+      ;;
     single)
       if [[ "${SINGLE_RESPONSE_VIOLATION:-}" == 1 ]]; then
-        agent-browser --session "$session" eval 'document.querySelector("#convergence-board").append(document.createElementNS("http://www.w3.org/2000/svg","line"));document.querySelector("#convergence-board line:last-child").classList.add("collision-leader")' >/dev/null
+        agent-browser --session "$session" eval 'document.querySelector("#convergence-board").append(document.createElementNS("http://www.w3.org/2000/svg","line"));document.querySelector("#convergence-board line:last-child").classList.add("adjustment-line")' >/dev/null
       fi
       local result
-      result="$(agent-browser --session "$session" eval '(()=>{const expected={"item-1":["0.15","0.15"],"item-2":["0.5","0.8"],"item-3":["0.85","0.2"]};const cards=Array.from(document.querySelectorAll("[data-resolution-card]"));return document.querySelector("#response-count").textContent.trim()==="1 response"&&cards.every(card=>card.dataset.resolvedX===expected[card.dataset.itemId][0]&&card.dataset.resolvedY===expected[card.dataset.itemId][1])&&document.querySelectorAll(".spread-line,.collision-leader").length===0})()')"
-      [[ "$result" == true ]] || { echo 'FAIL quadrant single midpoint: one response is not rendered exactly without lines'; exit 1; }
-      echo 'PASS quadrant single midpoint: one response remains exact and line-free when placements do not overlap'
+      result="$(agent-browser --session "$session" eval '(()=>{const expected={"item-1":["0.15","0.15"],"item-2":["0.5","0.8"],"item-3":["0.85","0.2"]};const cards=Array.from(document.querySelectorAll("[data-resolution-card]"));return document.querySelector("#response-count").textContent.trim()==="1 response"&&cards.every(card=>card.dataset.resolvedX===expected[card.dataset.itemId][0]&&card.dataset.resolvedY===expected[card.dataset.itemId][1])&&document.querySelectorAll("[data-adjustment-line]").length===0})()')"
+      [[ "$result" == true ]] || { echo 'FAIL quadrant single average: one response is not rendered exactly without adjustment lines'; exit 1; }
+      echo 'PASS quadrant single average: one response remains exact and adjustment-free'
       ;;
-    leader-explanation)
+    adjustment-line)
       local result
-      result="$(agent-browser --session "$session" eval 'document.querySelectorAll(".collision-leader").length>0&&/numbers may move.*solid connectors.*true resolved position.*response midpoint until adjusted/i.test(document.querySelector("#convergence-summary").textContent)')"
-      [[ "$result" == true ]] || { echo 'FAIL quadrant collision explanation: leader lines are not explained to facilitators'; exit 1; }
-      echo 'PASS quadrant collision explanation: offset cards and true resolved positions are explained'
+      result="$(agent-browser --session "$session" eval '(()=>{const itemId="item-2";const initial=document.querySelectorAll("[data-adjustment-line]").length===0;document.querySelector(`[data-navigator-item][data-item-id="${itemId}"]`).click();document.querySelector(`[data-resolution-card][data-item-id="${itemId}"]`).dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}));const card=document.querySelector(`[data-resolution-card][data-item-id="${itemId}"]`);const line=document.querySelector(`[data-adjustment-line="${itemId}"]`);const marker=document.querySelector(`[data-average-marker="${itemId}"]`);const exact=line&&marker&&line.getAttribute("x1")===String(8+Number(card.dataset.averageX)*84)&&line.getAttribute("y1")===String(72-Number(card.dataset.averageY)*64)&&line.getAttribute("x2")===String(8+Number(card.dataset.resolvedX)*84)&&line.getAttribute("y2")===String(72-Number(card.dataset.resolvedY)*64)&&marker.getAttribute("cx")===line.getAttribute("x1")&&marker.getAttribute("cy")===line.getAttribute("y1");document.querySelector("#reset-resolution-item").click();return initial&&exact&&document.querySelectorAll("[data-adjustment-line],[data-average-marker]").length===0})()')"
+      [[ "$result" == true ]] || { echo 'FAIL quadrant adjustment line: average-to-facilitator-result semantics are not exact and reversible'; exit 1; }
+      echo 'PASS quadrant adjustment line: average-to-facilitator-result semantics are exact and reversible'
       ;;
     legend)
       local result
-      result="$(agent-browser --session "$session" eval '(()=>{const legend=document.querySelector("#resolution-legend");const entries=Array.from(legend?.querySelectorAll("[data-legend-entry]")||[]);const lines=Array.from(legend?.querySelectorAll(".legend-line")||[]);return legend?.getClientRects().length>0&&entries.length===3&&/number connector/i.test(legend.textContent)&&/moved number to exact result/i.test(legend.textContent)&&/participant responses/i.test(legend.textContent)&&/submitted position to midpoint/i.test(legend.textContent)&&/disagreement halo/i.test(legend.textContent)&&lines.length===2&&getComputedStyle(lines[0]).borderTopStyle==="solid"&&getComputedStyle(lines[1]).borderTopStyle==="dashed"})()')"
-      [[ "$result" == true ]] || { echo 'FAIL quadrant resolution legend: ghost lines and halos have no visible key'; exit 1; }
-      echo 'PASS quadrant resolution legend: offset, spread, and disagreement encodings are explained'
+      result="$(agent-browser --session "$session" eval '(()=>{const legend=document.querySelector("#resolution-legend");const text=legend?.textContent.replace(/\s+/g," ").trim()||"";return legend?.getClientRects().length>0&&legend.querySelectorAll("[data-legend-entry]").length===4&&text.includes("Number · current group result; starts at the average response")&&text.includes("Dots · individual participant responses")&&text.includes("Ring · larger ring means more disagreement")&&text.includes("Adjustment line · original average to facilitator result")&&!/connector|midpoint|exact result/i.test(text)})()')"
+      [[ "$result" == true ]] || { echo 'FAIL quadrant result key: facilitator language does not match the true-position model'; exit 1; }
+      echo 'PASS quadrant result key: facilitator language matches the true-position model'
+      ;;
+    plain-language)
+      local result
+      result="$(agent-browser --session "$session" eval '(()=>{document.querySelector("[data-navigator-item][data-item-id=\"item-2\"]").click();const reset=document.querySelector("#reset-resolution-item");document.querySelector("[data-resolution-card][data-item-id=\"item-2\"]").dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}));document.querySelector("#include-resolution-adjustments").click();document.querySelector("#export-resolution").click();const text=[document.querySelector("#resolution-interaction-guide").textContent,document.querySelector("#resolution-legend").textContent,reset?.textContent,document.querySelector("#convergence-summary").textContent,document.querySelector("#resolution-export-output").value].join(" ");return reset?.textContent==="Reset item to average"&&/average response/i.test(text)&&/facilitator result/i.test(text)&&/participant average retained/i.test(text)&&!/midpoint|collision|number connector|exact result/i.test(text)})()')"
+      [[ "$result" == true ]] || { echo 'FAIL quadrant plain language: facilitator copy still exposes midpoint or collision internals'; exit 1; }
+      echo 'PASS quadrant plain language: facilitator copy consistently uses average and result semantics'
       ;;
     central-workspace)
       local result
@@ -79,7 +97,7 @@ $second" >/dev/null
       ;;
     guidance)
       local result
-      result="$(agent-browser --session "$session" eval '(()=>{const guide=document.querySelector("#resolution-interaction-guide");return guide?.getClientRects().length>0&&/select a numbered item/i.test(guide.textContent)&&/select it again/i.test(guide.textContent)&&/drag.*adjust/i.test(guide.textContent)})()')"
+      result="$(agent-browser --session "$session" eval '(()=>{const guide=document.querySelector("#resolution-interaction-guide");return guide?.getClientRects().length>0&&/select a number/i.test(guide.textContent)&&/select it again/i.test(guide.textContent)&&/drag it.*facilitator result/i.test(guide.textContent)})()')"
       [[ "$result" == true ]] || { echo 'FAIL quadrant interaction guidance: facilitator actions are not explained'; exit 1; }
       echo 'PASS quadrant interaction guidance: select, clear, and adjust actions are explained'
       ;;
@@ -102,9 +120,21 @@ $second" >/dev/null
       [[ "$result" == true ]] || { echo 'FAIL quadrant grid tooltip: native SVG title still obscures the facilitator grid'; exit 1; }
       echo 'PASS quadrant grid tooltip: accessible context remains without a native hover banner'
       ;;
+    selected-layering)
+      local result
+      result="$(agent-browser --session "$session" eval '(()=>{const itemId="item-2";document.querySelector(`[data-navigator-item][data-item-id="${itemId}"]`).click();document.querySelector(`[data-resolution-card][data-item-id="${itemId}"]`).dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}));const board=document.querySelector("#convergence-board");const children=Array.from(board.children);const selectedCard=document.querySelector(`[data-resolution-card][data-item-id="${itemId}"]`);const unrelated=Array.from(document.querySelectorAll(`[data-resolution-card]:not([data-item-id="${itemId}"])`));const evidence=[...document.querySelectorAll(`[data-placement-mark][data-item-id="${itemId}"], [data-adjustment-line="${itemId}"], [data-average-marker="${itemId}"]`)];const maxUnrelated=Math.max(...unrelated.map(node=>children.indexOf(node)));const minEvidence=Math.min(...evidence.map(node=>children.indexOf(node)));const maxEvidence=Math.max(...evidence.map(node=>children.indexOf(node)));const stroke=parseFloat(getComputedStyle(document.querySelector(`[data-adjustment-line="${itemId}"]`)).strokeWidth);return evidence.length===4&&minEvidence>maxUnrelated&&children.indexOf(selectedCard)>maxEvidence&&stroke<=.8})()')"
+      [[ "$result" == true ]] || { echo 'FAIL quadrant selected layering: nearby numbers obscure evidence or the adjustment line dominates'; exit 1; }
+      echo 'PASS quadrant selected layering: evidence remains legible beneath the selected result'
+      ;;
+    selected-evidence)
+      local result
+      result="$(agent-browser --session "$session" eval '(()=>{const visible=node=>Number(getComputedStyle(node).opacity)>.5;const evidence=()=>Array.from(document.querySelectorAll("[data-placement-mark]"));const overview=evidence().every(node=>!visible(node));document.querySelector("[data-navigator-item][data-item-id=\"item-2\"]").click();const selected=evidence().filter(node=>node.dataset.itemId==="item-2");const unrelated=evidence().filter(node=>node.dataset.itemId!=="item-2");const focused=selected.length===2&&selected.every(visible)&&unrelated.every(node=>!visible(node));document.querySelector("[data-navigator-item][data-item-id=\"item-2\"]").click();return !document.querySelector("#show-resolution-evidence")&&document.querySelectorAll("[data-spread-graphic],.spread-line").length===0&&overview&&focused&&evidence().every(node=>!visible(node))})()')"
+      [[ "$result" == true ]] || { echo 'FAIL quadrant selected evidence: participant evidence is not limited to the focused item'; exit 1; }
+      echo 'PASS quadrant selected evidence: participant evidence is limited to the focused item'
+      ;;
     focus-declutter)
       local result
-      result="$(agent-browser --session "$session" eval '(()=>{const decorations=()=>Array.from(document.querySelectorAll("[data-disagreement-halo],[data-collision-leader],[data-collision-anchor]"));const visible=node=>Number(getComputedStyle(node).opacity)>.5;const overview=decorations().length>0&&decorations().every(visible);document.querySelector("[data-navigator-item][data-item-id=\"item-2\"]").click();const unrelated=decorations().filter(node=>(node.dataset.itemId||node.dataset.disagreementHalo||node.dataset.collisionLeader)!=="item-2");const focused=unrelated.length>0&&unrelated.every(node=>Number(getComputedStyle(node).opacity)===0);document.querySelector("[data-navigator-item][data-item-id=\"item-2\"]").click();const restored=!document.querySelector("#resolution-inspector")?.dataset.itemId&&decorations().every(visible);return overview&&focused&&restored})()')"
+      result="$(agent-browser --session "$session" eval '(()=>{const decorations=()=>Array.from(document.querySelectorAll("[data-disagreement-halo],[data-adjustment-line],[data-average-marker]"));const visible=node=>Number(getComputedStyle(node).opacity)>.5;const overview=decorations().length>0&&decorations().every(visible);document.querySelector("[data-navigator-item][data-item-id=\"item-2\"]").click();const unrelated=decorations().filter(node=>(node.dataset.itemId||node.dataset.disagreementHalo||node.dataset.adjustmentLine)!=="item-2");const focused=unrelated.length>0&&unrelated.every(node=>Number(getComputedStyle(node).opacity)===0);document.querySelector("[data-navigator-item][data-item-id=\"item-2\"]").click();const restored=!document.querySelector("#resolution-inspector")?.dataset.itemId&&decorations().every(visible);return overview&&focused&&restored})()')"
       [[ "$result" == true ]] || { echo 'FAIL quadrant focus declutter: unrelated decoration remains or overview does not restore'; exit 1; }
       echo 'PASS quadrant focus declutter: selection isolates one item and deselection restores overview'
       ;;
@@ -130,7 +160,7 @@ $second" >/dev/null
     hit-targets)
       agent-browser --session "$session" scrollintoview '#convergence-board' >/dev/null
       local result
-      result="$(agent-browser --session "$session" eval '(()=>{const hit=()=>Array.from(document.querySelectorAll("[data-resolution-card]")).every(card=>{const box=card.getBoundingClientRect();return document.elementFromPoint(box.left+box.width/2,box.top+box.height/2)?.closest("[data-resolution-card]")?.dataset.itemId===card.dataset.itemId});const initial=hit();document.querySelector("[data-navigator-item][data-item-id=\"item-2\"]").click();const focused=hit();document.querySelector("#show-resolution-evidence").click();const allEvidence=hit();return initial&&focused&&allEvidence})()')"
+      result="$(agent-browser --session "$session" eval '(()=>{const hit=()=>Array.from(document.querySelectorAll("[data-resolution-card]")).every(card=>{const box=card.getBoundingClientRect();return document.elementFromPoint(box.left+box.width/2,box.top+box.height/2)?.closest("[data-resolution-card]")?.dataset.itemId===card.dataset.itemId});const initial=hit();document.querySelector("[data-navigator-item][data-item-id=\"item-2\"]").click();const focused=hit();return initial&&focused})()')"
       if [[ "$result" != true ]]; then
         diagnostic="$(agent-browser --session "$session" eval 'Array.from(document.querySelectorAll("[data-resolution-card]")).map(card=>{const box=card.getBoundingClientRect();const top=document.elementFromPoint(box.left+box.width/2,box.top+box.height/2);return{card:card.dataset.itemId,hit:top?.closest("[data-resolution-card]")?.dataset.itemId||null,tag:top?.tagName,cls:top?.getAttribute("class"),pointer:top&&getComputedStyle(top).pointerEvents}})')"
         echo "FAIL quadrant card hit targets: noninteractive evidence covers numbered cards $diagnostic"
@@ -154,27 +184,16 @@ $second" >/dev/null
       [[ "$before" == "$after" && "$focused" == item-1 ]] || { echo "FAIL quadrant click selection: plain click mutated item 1 ($before -> $after, focus=$focused)"; exit 1; }
       echo 'PASS quadrant click selection: plain clicks focus cards without adjusting coordinates'
       ;;
-    collision-anchors)
-      agent-browser --session "$session" click '#response-import-panel > summary' >/dev/null
-      agent-browser --session "$session" click '#clear-responses' >/dev/null
-      agent-browser --session "$session" fill '#response-links' "$coincident_first
-$coincident_second" >/dev/null
-      agent-browser --session "$session" click '#collect-responses' >/dev/null
-      local result
-      result="$(agent-browser --session "$session" eval '(()=>{const leaders=Array.from(document.querySelectorAll(".collision-leader"));const anchors=Array.from(document.querySelectorAll("[data-collision-anchor]"));return leaders.length>0&&anchors.length===leaders.length&&leaders.every(line=>{const anchor=anchors.find(node=>node.dataset.itemId===line.dataset.collisionLeader);return anchor&&anchor.getClientRects().length>0&&anchor.getAttribute("cx")===line.getAttribute("x1")&&anchor.getAttribute("cy")===line.getAttribute("y1")})})()')"
-      [[ "$result" == true ]] || { echo 'FAIL quadrant collision anchors: offset labels do not identify their true coordinates'; exit 1; }
-      echo 'PASS quadrant collision anchors: every offset label points to a visible true coordinate'
-      ;;
     quiet)
       local result
       result="$(agent-browser --session "$session" eval '(()=>{const hidden=node=>node.hidden||getComputedStyle(node).display==="none"||getComputedStyle(node).opacity==="0";return document.querySelectorAll("[data-resolution-card]").length===3&&document.querySelectorAll("[data-disagreement-halo]").length===3&&Array.from(document.querySelectorAll("[data-placement-mark],[data-spread-graphic]" )).every(hidden)&&hidden(document.querySelector("#response-list"))})()')"
       [[ "$result" == true ]] || { echo 'FAIL quadrant quiet resolution: default layers are noisy or incomplete'; exit 1; }
-      echo 'PASS quadrant quiet resolution: midpoint cards and halos are visible while evidence details are quiet'
+      echo 'PASS quadrant quiet resolution: group-result numbers and disagreement rings are visible while response dots are quiet'
       ;;
     focus)
       agent-browser --session "$session" eval 'document.querySelectorAll("[data-resolution-card]")[1].dispatchEvent(new MouseEvent("click",{bubbles:true}))' >/dev/null
       local result
-      result="$(agent-browser --session "$session" eval '(()=>{const visible=node=>!node.hidden&&getComputedStyle(node).display!=="none"&&Number(getComputedStyle(node).opacity)>0.5;const cards=Array.from(document.querySelectorAll("[data-resolution-card]"));const selected=cards.find(node=>node.dataset.itemId==="item-2");const other=cards.find(node=>node.dataset.itemId==="item-1");const marks=Array.from(document.querySelectorAll("[data-placement-mark]"));const ownMarks=marks.filter(node=>node.dataset.itemId==="item-2");const otherMarks=marks.filter(node=>node.dataset.itemId!=="item-2");const spread=Array.from(document.querySelectorAll("[data-spread-graphic]")).find(node=>node.dataset.spreadGraphic==="item-2");return selected?.classList.contains("focused")&&visible(spread)&&ownMarks.length===2&&ownMarks.every(visible)&&otherMarks.every(node=>!visible(node))&&Number(getComputedStyle(other).opacity)<Number(getComputedStyle(selected).opacity)&&document.querySelector("#resolution-inspector")?.dataset.itemId==="item-2"})()')"
+      result="$(agent-browser --session "$session" eval '(()=>{const visible=node=>!node.hidden&&getComputedStyle(node).display!=="none"&&Number(getComputedStyle(node).opacity)>0.5;const cards=Array.from(document.querySelectorAll("[data-resolution-card]"));const selected=cards.find(node=>node.dataset.itemId==="item-2");const other=cards.find(node=>node.dataset.itemId==="item-1");const marks=Array.from(document.querySelectorAll("[data-placement-mark]"));const ownMarks=marks.filter(node=>node.dataset.itemId==="item-2");const otherMarks=marks.filter(node=>node.dataset.itemId!=="item-2");return selected?.classList.contains("focused")&&document.querySelectorAll("[data-spread-graphic],.spread-line").length===0&&ownMarks.length===2&&ownMarks.every(visible)&&otherMarks.every(node=>!visible(node))&&Number(getComputedStyle(other).opacity)<Number(getComputedStyle(selected).opacity)&&document.querySelector("#resolution-inspector")?.dataset.itemId==="item-2"})()')"
       [[ "$result" == true ]] || { echo 'FAIL quadrant resolution focus: selected evidence and inspector are not progressively disclosed'; exit 1; }
       echo 'PASS quadrant resolution focus: one item reveals its evidence and dims unrelated cards'
       ;;
@@ -197,38 +216,40 @@ $coincident_second" >/dev/null
       agent-browser --session "$session" fill '#response-links' "$coincident_first
 $coincident_second" >/dev/null
       agent-browser --session "$session" click '#collect-responses' >/dev/null
-      local displaced keyboard undo dragged reset
-      displaced="$(agent-browser --session "$session" eval '(()=>{const card=document.querySelectorAll("[data-resolution-card]")[1];return card.dataset.resolvedX!==card.dataset.displayX})()')"
-      agent-browser --session "$session" eval 'document.querySelectorAll("[data-resolution-card]")[1]?.dispatchEvent(new MouseEvent("click",{bubbles:true}))' >/dev/null
-      agent-browser --session "$session" eval 'document.querySelectorAll("[data-resolution-card]")[1]?.dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}))' >/dev/null
-      keyboard="$(agent-browser --session "$session" eval 'document.querySelectorAll("[data-resolution-card]")[1]?.dataset.resolvedX')"
+      local truthful keyboard undo dragged reset
+      truthful="$(agent-browser --session "$session" eval '(()=>{const card=document.querySelector("[data-resolution-card][data-item-id=\"item-2\"]");return card.dataset.resolvedX===card.dataset.displayX&&card.dataset.resolvedY===card.dataset.displayY})()')"
+      agent-browser --session "$session" eval 'document.querySelector("[data-resolution-card][data-item-id=\"item-2\"]")?.dispatchEvent(new MouseEvent("click",{bubbles:true}))' >/dev/null
+      agent-browser --session "$session" eval 'document.querySelector("[data-resolution-card][data-item-id=\"item-2\"]")?.dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}))' >/dev/null
+      keyboard="$(agent-browser --session "$session" eval 'document.querySelector("[data-resolution-card][data-item-id=\"item-2\"]")?.dataset.resolvedX')"
       agent-browser --session "$session" eval 'document.querySelector("#undo-resolution")?.click()' >/dev/null
-      undo="$(agent-browser --session "$session" eval 'document.querySelectorAll("[data-resolution-card]")[1]?.dataset.resolvedX')"
-      agent-browser --session "$session" eval '(()=>{const card=document.querySelectorAll("[data-resolution-card]")[1];const board=document.querySelector("#convergence-board");const box=board.getBoundingClientRect();card?.dispatchEvent(new PointerEvent("pointerdown",{pointerId:1,clientX:box.left+box.width*.5,clientY:box.top+box.height*.5,bubbles:true}));board?.dispatchEvent(new PointerEvent("pointermove",{pointerId:1,clientX:box.left+box.width*.8,clientY:box.top+box.height*.25,bubbles:true}));board?.dispatchEvent(new PointerEvent("pointerup",{pointerId:1,clientX:box.left+box.width*.8,clientY:box.top+box.height*.25,bubbles:true}))})()' >/dev/null
-      dragged="$(agent-browser --session "$session" eval 'document.querySelectorAll("[data-resolution-card]")[1]?.dataset.resolvedX')"
+      undo="$(agent-browser --session "$session" eval 'document.querySelector("[data-resolution-card][data-item-id=\"item-2\"]")?.dataset.resolvedX')"
+      agent-browser --session "$session" eval '(()=>{const card=document.querySelector("[data-resolution-card][data-item-id=\"item-2\"]");const board=document.querySelector("#convergence-board");const box=board.getBoundingClientRect();card?.dispatchEvent(new PointerEvent("pointerdown",{pointerId:1,clientX:box.left+box.width*.5,clientY:box.top+box.height*.5,bubbles:true}));board?.dispatchEvent(new PointerEvent("pointermove",{pointerId:1,clientX:box.left+box.width*.8,clientY:box.top+box.height*.25,bubbles:true}));board?.dispatchEvent(new PointerEvent("pointerup",{pointerId:1,clientX:box.left+box.width*.8,clientY:box.top+box.height*.25,bubbles:true}))})()' >/dev/null
+      dragged="$(agent-browser --session "$session" eval 'document.querySelector("[data-resolution-card][data-item-id=\"item-2\"]")?.dataset.resolvedX')"
       agent-browser --session "$session" eval 'document.querySelector("#reset-resolution-item")?.click()' >/dev/null
-      reset="$(agent-browser --session "$session" eval 'document.querySelectorAll("[data-resolution-card]")[1]?.dataset.resolvedX')"
+      reset="$(agent-browser --session "$session" eval 'document.querySelector("[data-resolution-card][data-item-id=\"item-2\"]")?.dataset.resolvedX')"
       keyboard="${keyboard//\"/}"; undo="${undo//\"/}"; dragged="${dragged//\"/}"; reset="${reset//\"/}"
-      [[ "$displaced" == true && "$keyboard" == '0.52' && "$undo" == '0.5' && "$dragged" != '0.5' && "$reset" == '0.5' ]] || { echo "FAIL quadrant resolution interactions: displaced=$displaced keyboard=$keyboard undo=$undo drag=$dragged reset=$reset"; exit 1; }
+      [[ "$truthful" == true && "$keyboard" == '0.52' && "$undo" == '0.5' && "$dragged" != '0.5' && "$reset" == '0.5' ]] || { echo "FAIL quadrant resolution interactions: truthful=$truthful keyboard=$keyboard undo=$undo drag=$dragged reset=$reset"; exit 1; }
       echo 'PASS quadrant resolution interactions: keyboard, drag, undo, and item reset share one model'
       ;;
     persistence)
-      agent-browser --session "$session" eval 'document.querySelectorAll("[data-resolution-card]")[1]?.dispatchEvent(new MouseEvent("click",{bubbles:true}));document.querySelectorAll("[data-resolution-card]")[1]?.dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}))' >/dev/null
+      agent-browser --session "$session" eval 'document.querySelector("[data-resolution-card][data-item-id=\"item-2\"]")?.dispatchEvent(new MouseEvent("click",{bubbles:true}));document.querySelector("[data-resolution-card][data-item-id=\"item-2\"]")?.dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}))' >/dev/null
+      local expected result
+      expected="$(agent-browser --session "$session" eval 'document.querySelector("[data-resolution-card][data-item-id=\"item-2\"]")?.dataset.resolvedX')"
+      expected="${expected//\"/}"
       agent-browser --session "$session" reload >/dev/null
       agent-browser --session "$session" wait 500 >/dev/null
-      local result
-      result="$(agent-browser --session "$session" eval 'document.body.dataset.mode==="facilitator-view"&&document.querySelectorAll("[data-resolution-card]").length===3&&document.querySelectorAll("[data-resolution-card]")[1]?.dataset.resolvedX==="0.57"&&document.querySelector("#response-count")?.textContent==="2 responses"')"
+      result="$(agent-browser --session "$session" eval "document.body.dataset.mode==='facilitator-view'&&document.querySelectorAll('[data-resolution-card]').length===3&&document.querySelector('[data-resolution-card][data-item-id=\\\"item-2\\\"]')?.dataset.resolvedX==='$expected'&&document.querySelector('#response-count')?.textContent==='2 responses'")"
       [[ "$result" == true ]] || { echo "FAIL quadrant resolution persistence: $result"; exit 1; }
       echo 'PASS quadrant resolution persistence: reload restores collection evidence and facilitator adjustments'
       ;;
     layers)
-      agent-browser --session "$session" eval 'document.querySelector("#show-resolution-evidence")?.click();document.querySelector("#show-response-names")?.click()' >/dev/null
+      agent-browser --session "$session" eval 'document.querySelector("#show-response-names")?.click()' >/dev/null
       local shown hidden
-      shown="$(agent-browser --session "$session" eval '(()=>{const visible=node=>!node.hidden&&Number(getComputedStyle(node).opacity)>.5;return Array.from(document.querySelectorAll("[data-placement-mark],[data-spread-graphic]")).every(visible)&&!document.querySelector("#response-list").hidden&&document.querySelector("#response-list").textContent.includes("Alex")})()')"
-      agent-browser --session "$session" eval 'document.querySelector("#show-resolution-evidence")?.click();document.querySelector("#show-response-names")?.click()' >/dev/null
-      hidden="$(agent-browser --session "$session" eval 'document.querySelector("#response-list").hidden&&Array.from(document.querySelectorAll("[data-placement-mark],[data-spread-graphic]")).every(node=>Number(getComputedStyle(node).opacity)===0)')"
-      [[ "$shown" == true && "$hidden" == true ]] || { echo "FAIL quadrant resolution layers: shown=$shown hidden=$hidden"; exit 1; }
-      echo 'PASS quadrant resolution layers: evidence and names are explicit reversible disclosures'
+      shown="$(agent-browser --session "$session" eval '!document.querySelector("#response-list").hidden&&document.querySelector("#response-list").textContent.includes("Alex")')"
+      agent-browser --session "$session" eval 'document.querySelector("#show-response-names")?.click()' >/dev/null
+      hidden="$(agent-browser --session "$session" eval 'document.querySelector("#response-list").hidden')"
+      [[ "$shown" == true && "$hidden" == true ]] || { echo "FAIL quadrant response names: shown=$shown hidden=$hidden"; exit 1; }
+      echo 'PASS quadrant response names: contributor names remain an explicit reversible disclosure'
       ;;
     export)
       agent-browser --session "$session" eval 'document.querySelectorAll("[data-resolution-card]")[1]?.dispatchEvent(new MouseEvent("click",{bubbles:true}));document.querySelectorAll("[data-resolution-card]")[1]?.dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}));document.querySelector("#export-resolution")?.click()' >/dev/null
@@ -236,8 +257,20 @@ $coincident_second" >/dev/null
       concealed="$(agent-browser --session "$session" eval 'document.querySelector("#resolution-export-output")?.value??""')"
       agent-browser --session "$session" eval 'document.querySelector("#include-resolution-adjustments")?.click();document.querySelector("#export-resolution")?.click()' >/dev/null
       disclosed="$(agent-browser --session "$session" eval 'document.querySelector("#resolution-export-output")?.value??""')"
-      [[ "$concealed" == *'QUADRANT RESOLUTION'* && "$concealed" != *'Facilitator adjustment:'* && "$disclosed" == *'Facilitator adjustment:'* && "$disclosed" == *'participant midpoint retained'* ]] || { printf 'FAIL quadrant resolution export:\nconcealed=%s\ndisclosed=%s\n' "$concealed" "$disclosed"; exit 1; }
+      [[ "$concealed" == *'QUADRANT RESOLUTION'* && "$concealed" != *'Facilitator adjustment:'* && "$disclosed" == *'Facilitator adjustment:'* && "$disclosed" == *'participant average retained'* ]] || { printf 'FAIL quadrant resolution export:\nconcealed=%s\ndisclosed=%s\n' "$concealed" "$disclosed"; exit 1; }
       echo 'PASS quadrant resolution export: human-readable text discloses adjustments only when requested'
+      ;;
+    overlap-selection)
+      agent-browser --session "$session" click '#response-import-panel > summary' >/dev/null
+      agent-browser --session "$session" click '#clear-responses' >/dev/null
+      agent-browser --session "$session" fill '#response-links' "$coincident_first
+$coincident_second" >/dev/null
+      agent-browser --session "$session" click '#collect-responses' >/dev/null
+      agent-browser --session "$session" scrollintoview '#convergence-board' >/dev/null
+      local result
+      result="$(agent-browser --session "$session" eval '(()=>{const ids=Array.from(document.querySelectorAll("[data-navigator-item]")).map(node=>node.dataset.itemId);if(ids.length!==3)return false;return ids.every(id=>{document.querySelector(`[data-navigator-item][data-item-id="${id}"]`).click();const selected=document.querySelector(`[data-resolution-card][data-item-id="${id}"]`);const box=selected.getBoundingClientRect();const top=document.elementsFromPoint(box.left+box.width/2,box.top+box.height/2).map(node=>node.closest?.("[data-resolution-card]")).find(Boolean);return document.querySelector("#resolution-inspector")?.dataset.itemId===id&&top?.dataset.itemId===id})})()')"
+      [[ "$result" == true ]] || { echo 'FAIL quadrant overlap selection: navigator selection does not expose each coincident marker'; exit 1; }
+      echo 'PASS quadrant overlap selection: navigator selection exposes every coincident marker'
       ;;
     collision)
       agent-browser --session "$session" click '#response-import-panel > summary' >/dev/null
@@ -246,9 +279,9 @@ $coincident_second" >/dev/null
 $coincident_second" >/dev/null
       agent-browser --session "$session" click '#collect-responses' >/dev/null
       local result
-      result="$(agent-browser --session "$session" eval '(()=>{const cards=Array.from(document.querySelectorAll("[data-resolution-card]"));const leaders=Array.from(document.querySelectorAll("[data-collision-leader]"));const halos=Array.from(document.querySelectorAll("[data-disagreement-halo]"));const transforms=new Set(cards.map(node=>node.getAttribute("transform")));return cards.length===3&&transforms.size===3&&cards.every(node=>node.dataset.resolvedX==="0.5"&&node.dataset.resolvedY==="0.5")&&leaders.length===3&&leaders.every(line=>line.dataset.trueX==="0.5"&&line.dataset.trueY==="0.5"&&(line.dataset.displayX!==line.dataset.trueX||line.dataset.displayY!==line.dataset.trueY))&&new Set(halos.map(node=>`${node.getAttribute("cx")}:${node.getAttribute("cy")}`)).size===1})()')"
-      [[ "$result" == true ]] || { echo 'FAIL quadrant collision leaders: coincident true positions are not truthfully separated'; exit 1; }
-      echo 'PASS quadrant collision leaders: distinct cards retain coincident true positions with leader cues'
+      result="$(agent-browser --session "$session" eval '(()=>{const cards=Array.from(document.querySelectorAll("[data-resolution-card]"));const halos=Array.from(document.querySelectorAll("[data-disagreement-halo]"));const transforms=new Set(cards.map(node=>node.getAttribute("transform")));return cards.length===3&&transforms.size===1&&cards.every(node=>node.dataset.resolvedX==="0.5"&&node.dataset.resolvedY==="0.5"&&node.dataset.displayX==="0.5"&&node.dataset.displayY==="0.5")&&document.querySelectorAll("[data-collision-leader],[data-collision-anchor]").length===0&&new Set(halos.map(node=>`${node.getAttribute("cx")}:${node.getAttribute("cy")}`)).size===1})()')"
+      [[ "$result" == true ]] || { echo 'FAIL quadrant coincident results: overlapping markers do not preserve their exact shared result'; exit 1; }
+      echo 'PASS quadrant coincident results: overlapping markers preserve their exact shared result'
       ;;
     invisible-hit-targets)
       agent-browser --session "$session" set viewport 390 844 >/dev/null
@@ -266,6 +299,14 @@ $coincident_second" >/dev/null
       [[ "$result" == true ]] || { echo 'FAIL quadrant mobile hit size: dense numbered cards are too small or overlap hit ownership'; exit 1; }
       echo 'PASS quadrant mobile hit size: numbered cards retain distinct 40px targets'
       ;;
+    symbol-geometry)
+      agent-browser --session "$session" set viewport 390 844 >/dev/null
+      agent-browser --session "$session" scrollintoview '#resolution-main' >/dev/null
+      local result
+      result="$(agent-browser --session "$session" eval '(()=>{const icons=Array.from(document.querySelectorAll("#resolution-legend [data-legend-entry] > i"));const slots=icons.map(node=>node.getBoundingClientRect().width);const legendNumber=icons[0].getBoundingClientRect();const marker=document.querySelector("[data-resolution-card] circle:not(.resolution-hit-target)").getBoundingClientRect();return icons.length===4&&slots.every(width=>Math.abs(width-28)<=1)&&Math.abs(legendNumber.width-legendNumber.height)<=1&&Math.abs(marker.width-marker.height)<=1})()')"
+      [[ "$result" == true ]] || { echo 'FAIL quadrant symbol geometry: legend columns misalign or mobile numbers render oval'; exit 1; }
+      echo 'PASS quadrant symbol geometry: legend columns align and mobile numbers remain round'
+      ;;
     mobile-width)
       agent-browser --session "$session" set viewport 390 844 >/dev/null
       local result
@@ -276,7 +317,7 @@ $coincident_second" >/dev/null
     mobile-controls)
       agent-browser --session "$session" set viewport 390 844 >/dev/null
       local result
-      result="$(agent-browser --session "$session" eval '(()=>{const selectors=["#take-tour","#previous-disagreement","#next-disagreement","#undo-resolution","#reset-all-resolutions","#show-resolution-evidence","#show-response-names","#convergence-board","#export-resolution","#copy-resolution-export"];const nodes=selectors.map(selector=>document.querySelector(selector));return nodes.every(node=>{if(!node)return false;const rect=node.getBoundingClientRect();return rect.width>0&&rect.left>=-0.5&&rect.right<=innerWidth+0.5})})()')"
+      result="$(agent-browser --session "$session" eval '(()=>{const selectors=["#take-tour","#previous-disagreement","#next-disagreement","#undo-resolution","#reset-all-resolutions","#show-response-names","#convergence-board","#export-resolution","#copy-resolution-export"];const nodes=selectors.map(selector=>document.querySelector(selector));return nodes.every(node=>{if(!node)return false;const rect=node.getBoundingClientRect();return rect.width>0&&rect.left>=-0.5&&rect.right<=innerWidth+0.5})})()')"
       [[ "$result" == true ]] || { echo 'FAIL quadrant resolution mobile controls: a facilitator control clips at 390px'; exit 1; }
       echo 'PASS quadrant resolution mobile controls: facilitator controls fit the 390px viewport'
       ;;

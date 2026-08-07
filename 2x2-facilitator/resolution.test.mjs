@@ -16,7 +16,7 @@ const collection = {
   ],
 };
 
-test('r1 resolution cards initialize at arithmetic response midpoints', async () => {
+test('r1 resolution cards initialize at arithmetic response averages', async () => {
   const { createResolution } = await import('./resolution.mjs');
   const state = createResolution(collection);
   assert.deepEqual(state.items.map(({ baseline, resolved }) => ({ baseline, resolved })), [
@@ -33,7 +33,7 @@ test('r2 facilitator adjustments never mutate imported responses', async () => {
   assert.deepEqual(collection, original);
 });
 
-test('r3 an adjustment retains its midpoint and records a reversible predecessor', async () => {
+test('r3 an adjustment retains its average and records a reversible predecessor', async () => {
   const { createResolution, adjustResolution } = await import('./resolution.mjs');
   const changed = adjustResolution(createResolution(collection), 'item-1', { x: 0.9, y: 0.1 });
   const item = changed.items.find(({ id }) => id === 'item-1');
@@ -88,7 +88,7 @@ test('r9-r10 final resolution export is readable plain text with optional proven
   assert.doesNotMatch(concealed, /Facilitator adjustment:/);
   const disclosed = formatResolutionExport(state, { includeAdjustments: true });
   assert.match(disclosed, /Facilitator adjustment: 30% of the board toward High value and Low confidence/);
-  assert.match(disclosed, /Facilitator adjustment: None — participant midpoint retained/);
+  assert.match(disclosed, /Facilitator adjustment: None — participant average retained/);
 });
 
 export { collection };

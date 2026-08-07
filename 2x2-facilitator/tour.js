@@ -158,7 +158,7 @@ function startPractice() {
     { name: 'participantComplete', prepare: prepareParticipantComplete, element: '#copy-response-link', title: 'Return a completed response', description: 'Only final placements enter the response link.' },
     { name: 'collection', prepare: prepareCollection, element: '#response-count', title: 'Collect completed responses', description: 'The practice facilitator now has two immutable participant responses.' },
     { name: 'disagreement', prepare: prepareDisagreement, element: '#resolution-inspector', title: 'Inspect disagreement', description: 'Focus reveals the raw placements for one item without collapsing them.' },
-    { name: 'resolution', prepare: prepareResolution, element: '[data-resolution-card][data-adjusted="true"]', title: 'Resolve from the midpoint', description: 'Facilitator adjustments sit above the preserved participant evidence.' },
+    { name: 'resolution', prepare: prepareResolution, element: '[data-resolution-card][data-adjusted="true"]', title: 'Adjust from the average', description: 'The number starts at the participant average and moves only when the facilitator adjusts it.' },
     { name: 'export', prepare: prepareExport, element: '#resolution-export-output', title: 'Prepare a readable outcome', description: 'Adjustment provenance appears only when explicitly included.' },
     { name: 'finish', prepare: () => banner.scrollIntoView({ block: 'center' }), element: '[data-finish-walkthrough]', title: 'Ready for a real Quadrant', description: 'Exit practice to return to your untouched original workspace.' },
   ];
