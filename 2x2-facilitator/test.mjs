@@ -84,6 +84,102 @@ test('export formats pass with the prompt, axes, and every current option', asyn
   assert.match(exportWorkshop(session, 'svg'), /^<svg/);
 });
 
+test('c1 Quadrant setup URLs round-trip only the independent setup projection', async () => {
+  const { encodeSetupUrl, decodeShareUrl } = await import('./collaboration.mjs');
+  const session = await completedSession();
+  const artifact = decodeShareUrl(encodeSetupUrl(session, 'https://static.test/2x2-facilitator/'));
+  assert.equal(artifact.app, 'quadrant');
+  assert.equal(artifact.kind, 'setup');
+  assert.equal(artifact.payload.prompt, session.prompt);
+  assert.deepEqual(artifact.payload.items, session.items.map(({ id, text }) => ({ id, text })));
+  for (const workingField of ['positions', 'pending', 'candidateId', 'focusIds', 'phase', 'history']) {
+    assert.equal(artifact.payload[workingField], undefined, `${workingField} must remain local working state`);
+  }
+});
+
+test('c3 Quadrant response URLs preserve participant placements', async () => {
+  const { encodeResponseUrl, decodeShareUrl } = await import('./collaboration.mjs');
+  const session = await completedSession();
+  const artifact = decodeShareUrl(encodeResponseUrl(session, { contributor: 'Alex', baseUrl: 'https://static.test/2x2-facilitator/' }));
+  assert.equal(artifact.kind, 'response');
+  assert.equal(artifact.contributor, 'Alex');
+  assert.deepEqual(artifact.payload.positions, session.positions);
+  assert.ok(artifact.exerciseId);
+  assert.ok(artifact.contributionId);
+});
+
+test('c5 Quadrant Slack sharing conceals results by default', async () => {
+  const { encodeResponseUrl, decodeShareUrl, buildSlackMessage } = await import('./collaboration.mjs');
+  const session = await completedSession();
+  const url = encodeResponseUrl(session, { contributor: 'Alex', baseUrl: 'https://static.test/2x2-facilitator/' });
+  const message = buildSlackMessage(decodeShareUrl(url), url, { preview: false });
+  assert.doesNotMatch(message, /Placement preview:|X 0\.|Y 0\./i);
+});
+
+test('c6 Quadrant Slack sharing includes exactly one response URL', async () => {
+  const { encodeResponseUrl, decodeShareUrl, buildSlackMessage } = await import('./collaboration.mjs');
+  const session = await completedSession();
+  const url = encodeResponseUrl(session, { contributor: 'Alex', baseUrl: 'https://static.test/2x2-facilitator/' });
+  const message = buildSlackMessage(decodeShareUrl(url), url, { preview: false });
+  assert.equal(message.match(/https:\/\/\S+/g)?.length, 1);
+});
+
+test('c7 Quadrant concealed Slack sharing recommends private facilitator handoff', async () => {
+  const { encodeResponseUrl, decodeShareUrl, buildSlackMessage } = await import('./collaboration.mjs');
+  const session = await completedSession();
+  const url = encodeResponseUrl(session, { contributor: 'Alex', baseUrl: 'https://static.test/2x2-facilitator/' });
+  assert.match(buildSlackMessage(decodeShareUrl(url), url, { preview: false }), /privately to the facilitator/i);
+});
+
+test('c8-c9 Quadrant preview sharing includes a result summary and influence warning', async () => {
+  const { encodeResponseUrl, decodeShareUrl, buildSlackMessage } = await import('./collaboration.mjs');
+  const session = await completedSession();
+  const url = encodeResponseUrl(session, { contributor: 'Alex', baseUrl: 'https://static.test/2x2-facilitator/' });
+  const message = buildSlackMessage(decodeShareUrl(url), url, { preview: true });
+  assert.match(message, /Placement preview:/i);
+  assert.match(message, /may influence teammates/i);
+});
+
+test('c10 Quadrant collection ignores duplicate contribution IDs', async () => {
+  const { encodeResponseUrl, decodeShareUrl, createCollection, addResponse } = await import('./collaboration.mjs');
+  const session = await completedSession();
+  const response = decodeShareUrl(encodeResponseUrl(session, { contributor: 'Alex', baseUrl: 'https://static.test/2x2-facilitator/' }));
+  let collection = createCollection(session);
+  ({ collection } = addResponse(collection, response));
+  const duplicate = addResponse(collection, response);
+  assert.equal(duplicate.status, 'duplicate');
+  assert.equal(duplicate.collection.responses.length, 1);
+});
+
+test('c11 Quadrant collection rejects responses from another exercise', async () => {
+  const { encodeResponseUrl, decodeShareUrl, createCollection, addResponse } = await import('./collaboration.mjs');
+  const { createWorkshop, placeAt } = await loadCore();
+  const session = await completedSession();
+  let other = createWorkshop({ ...frame, prompt: 'A different decision' });
+  other = placeAt(other, { x: 0.2, y: 0.4 });
+  other = placeAt(other, { x: 0.7, y: 0.9 });
+  const response = decodeShareUrl(encodeResponseUrl(other, { contributor: 'Blair', baseUrl: 'https://static.test/2x2-facilitator/' }));
+  const result = addResponse(createCollection(session), response);
+  assert.equal(result.status, 'mismatch');
+  assert.equal(result.collection.responses.length, 0);
+});
+
+test('c12 Quadrant convergence preserves placements and exposes disagreement', async () => {
+  const { encodeResponseUrl, decodeShareUrl, createCollection, addResponse, convergeResponses } = await import('./collaboration.mjs');
+  const first = await completedSession();
+  const second = structuredClone(first);
+  second.positions['item-1'] = { x: 0.9, y: 0.1 };
+  let collection = createCollection(first);
+  for (const [session, contributor] of [[first, 'Alex'], [second, 'Blair']]) {
+    const response = decodeShareUrl(encodeResponseUrl(session, { contributor, baseUrl: 'https://static.test/2x2-facilitator/' }));
+    ({ collection } = addResponse(collection, response));
+  }
+  const result = convergeResponses(collection);
+  assert.equal(result.responseCount, 2);
+  assert.equal(result.items.find(({ id }) => id === 'item-1').placements.length, 2);
+  assert.ok(result.items.find(({ id }) => id === 'item-1').disagreement > 0);
+});
+
 test('static artifact passes without runtime dependencies and exposes keyboard-addressable controls', async () => {
   const { readFile } = await import('node:fs/promises');
   const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');

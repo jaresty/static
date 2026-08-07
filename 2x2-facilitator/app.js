@@ -6,30 +6,86 @@ import {
   placeAt,
   undo as undoWorkshop,
 } from './core.mjs';
+import {
+  addResponse,
+  buildSlackMessage,
+  createCollection,
+  decodeShareUrl,
+  encodeResponseUrl,
+  encodeSetupUrl,
+  convergeResponses,
+} from './collaboration.mjs';
+import {
+  adjustResolution,
+  createResolution,
+  formatResolutionExport,
+  loadResolution,
+  resetAllResolutions,
+  resetResolutionItem,
+  saveResolution,
+  undoResolution,
+} from './resolution.mjs';
+import { layoutResolutionCards } from './collision-layout.mjs';
 
+const appStorage = new URLSearchParams(location.search).get('walkthrough') === '1' ? sessionStorage : localStorage;
 const clamp = (value) => Math.max(0, Math.min(1, Number(value.toFixed(2))));
 
 const facilitatorApp = {
   storageKey: 'quadrant:workshop:v1',
+  resolutionLatestKey: 'quadrant:resolution:latest',
   session: null,
   selectedId: null,
   draftPosition: { x: 0.5, y: 0.5 },
+  responseStorageKey: null,
+  sharedArtifact: null,
+  setupShareArtifact: null,
+  collection: null,
+  resolution: null,
+  focusedResolutionId: null,
+  draggedResolutionId: null,
+  showResolutionEvidence: false,
+  showResponseNames: false,
   elements: {},
 
   init() {
     const ids = [
-      'setup-view', 'placement-view', 'review-view', 'setup-form', 'prompt', 'x-label', 'x-low', 'x-high',
+      'mode-view', 'solo-mode', 'setup-mode', 'combine-mode', 'back-to-choices', 'privacy-note', 'invitation-view', 'invitation-summary', 'start-response',
+      'collection-view', 'response-links', 'collect-responses', 'clear-responses', 'collection-status', 'response-count', 'response-list', 'disagreement-list', 'previous-disagreement', 'next-disagreement', 'undo-resolution', 'reset-all-resolutions', 'show-resolution-evidence', 'show-response-names', 'convergence-board', 'resolution-inspector', 'convergence-summary', 'include-resolution-adjustments', 'export-resolution', 'copy-resolution-export', 'resolution-export-output', 'resolution-export-status',
+      'setup-view', 'workspace-mode-label', 'setup-submit', 'setup-share-panel', 'setup-share-output', 'copy-setup-slack', 'copy-setup-link', 'setup-share-status',
+      'placement-view', 'review-view', 'setup-form', 'prompt', 'x-label', 'x-low', 'x-high',
       'y-label', 'y-low', 'y-high', 'items', 'item-count', 'setup-error', 'example-button', 'resume-banner',
       'resume-summary', 'resume-button', 'discard-button', 'placement-round', 'placement-progress', 'placement-board',
       'placement-x-low', 'placement-x-high', 'placement-y-low', 'placement-y-high', 'candidate-card',
       'placement-coordinates', 'place-option', 'placement-undo', 'placement-reset', 'review-round', 'review-prompt',
       'new-workshop', 'board', 'board-x-low', 'board-x-high', 'board-y-low', 'board-y-high',
       'setup-preview-prompt', 'setup-x-edit', 'setup-y-edit', 'setup-x-low', 'setup-x-high', 'setup-y-low', 'setup-y-high', 'setup-options',
-      'review-undo',
+      'review-undo', 'response-share-panel', 'contributor-name', 'include-response-preview', 'copy-response-slack', 'copy-response-link', 'response-share-status',
       'export-format', 'export-output', 'copy-button', 'download-button', 'copy-status', 'live-region',
     ];
     this.elements = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
 
+    this.elements['solo-mode'].addEventListener('click', () => this.enterSolo());
+    this.elements['setup-mode'].addEventListener('click', () => this.enterFacilitatorSetup());
+    this.elements['combine-mode'].addEventListener('click', () => this.enterCollection());
+    this.elements['back-to-choices'].addEventListener('click', () => this.enterEntry());
+    this.elements['start-response'].addEventListener('click', () => this.startResponse());
+    this.elements['collect-responses'].addEventListener('click', () => this.collectResponses());
+    this.elements['clear-responses'].addEventListener('click', () => this.clearCollection());
+    this.elements['copy-setup-slack'].addEventListener('click', () => this.copySetup(true));
+    this.elements['copy-setup-link'].addEventListener('click', () => this.copySetup(false));
+    this.elements['copy-response-slack'].addEventListener('click', () => this.copyResponse(true));
+    this.elements['copy-response-link'].addEventListener('click', () => this.copyResponse(false));
+    this.elements['previous-disagreement'].addEventListener('click', () => this.moveResolutionFocus(-1));
+    this.elements['next-disagreement'].addEventListener('click', () => this.moveResolutionFocus(1));
+    this.elements['undo-resolution'].addEventListener('click', () => this.commitResolution(undoResolution(this.resolution)));
+    this.elements['reset-all-resolutions'].addEventListener('click', () => this.commitResolution(resetAllResolutions(this.resolution)));
+    this.elements['show-resolution-evidence'].addEventListener('change', (event) => { this.showResolutionEvidence = event.currentTarget.checked; this.renderCollection(); });
+    this.elements['show-response-names'].addEventListener('change', (event) => { this.showResponseNames = event.currentTarget.checked; this.renderCollection(); });
+    this.elements['export-resolution'].addEventListener('click', () => this.renderResolutionExport());
+    this.elements['copy-resolution-export'].addEventListener('click', () => this.copyResolutionExport());
+    this.elements['convergence-board'].addEventListener('pointermove', (event) => this.previewResolutionDrag(event));
+    this.elements['convergence-board'].addEventListener('pointerup', (event) => this.finishResolutionDrag(event));
+    this.elements['convergence-board'].addEventListener('pointercancel', () => { this.draggedResolutionId = null; });
     this.elements['setup-form'].addEventListener('submit', (event) => this.start(event));
     for (const id of ['prompt', 'x-label', 'x-low', 'x-high', 'y-label', 'y-low', 'y-high', 'items']) {
       this.elements[id].addEventListener('input', () => {
@@ -61,14 +117,109 @@ const facilitatorApp = {
     this.elements['download-button'].addEventListener('click', () => this.download());
     document.addEventListener('keydown', (event) => this.handleKey(event));
 
-    this.load();
+    if (!this.loadShared() && !this.loadSavedResolution()) this.load();
     this.updateCount();
     this.updatePreview();
   },
 
+  loadSavedResolution() {
+    const exerciseId = appStorage.getItem(this.resolutionLatestKey);
+    if (!exerciseId) return false;
+    const resolution = loadResolution(appStorage, exerciseId);
+    if (!resolution) return false;
+    this.resolution = resolution;
+    this.collection = structuredClone(resolution.collection);
+    this.enterCollection();
+    return true;
+  },
+
+  enterEntry() {
+    document.body.dataset.mode = 'entry';
+    this.elements['back-to-choices'].hidden = true;
+    this.elements['privacy-note'].textContent = 'Everything stays in this browser';
+    this.show('mode');
+  },
+
+  enterSolo() {
+    document.body.dataset.mode = 'solo';
+    this.elements['back-to-choices'].hidden = false;
+    this.responseStorageKey = null;
+    this.elements['workspace-mode-label'].textContent = 'SOLO WORKSPACE';
+    this.elements['privacy-note'].textContent = 'Everything stays in this browser';
+    this.elements['setup-submit'].textContent = 'Start placing';
+    this.elements['setup-share-panel'].hidden = true;
+    this.show('setup');
+  },
+
+  enterFacilitatorSetup() {
+    document.body.dataset.mode = 'facilitator-setup';
+    this.elements['back-to-choices'].hidden = false;
+    this.responseStorageKey = null;
+    this.elements['workspace-mode-label'].textContent = 'FACILITATOR SETUP';
+    this.elements['privacy-note'].textContent = 'Shared links contain setup data';
+    this.elements['setup-submit'].textContent = 'Create setup link';
+    this.elements['setup-share-panel'].hidden = true;
+    this.show('setup');
+  },
+
+  enterCollection() {
+    document.body.dataset.mode = 'facilitator-view';
+    this.elements['back-to-choices'].hidden = false;
+    this.elements['privacy-note'].textContent = 'Imported responses stay in this browser';
+    this.renderCollection();
+    this.show('collection');
+  },
+
+  showInvitation(artifact) {
+    this.sharedArtifact = artifact;
+    this.elements['back-to-choices'].hidden = true;
+    document.body.dataset.mode = 'shared-setup';
+    this.elements['privacy-note'].textContent = 'Shared links contain setup data';
+    const title = document.createElement('strong');
+    title.textContent = artifact.payload.prompt;
+    const detail = document.createElement('span');
+    detail.textContent = `${artifact.payload.items.length} options · ${artifact.payload.xLabel} × ${artifact.payload.yLabel}`;
+    this.elements['invitation-summary'].replaceChildren(title, detail);
+    this.show('invitation');
+    return true;
+  },
+
+  loadShared() {
+    if (!location.hash.startsWith('#quadrant=')) return false;
+    try {
+      const artifact = decodeShareUrl(location.href);
+      if (artifact.kind !== 'setup') return false;
+      return this.showInvitation(artifact);
+    } catch (error) {
+      this.elements['setup-error'].textContent = error.message;
+      return false;
+    }
+  },
+
+  startResponse() {
+    const setup = this.sharedArtifact.payload;
+    this.responseStorageKey = `quadrant:response:v1:${this.sharedArtifact.exerciseId}`;
+    let saved = null;
+    try {
+      saved = JSON.parse(appStorage.getItem(this.responseStorageKey));
+    } catch {
+      appStorage.removeItem(this.responseStorageKey);
+    }
+    const sameSetup = saved?.prompt === setup.prompt
+      && JSON.stringify(saved.items?.map(({ id, text }) => ({ id, text }))) === JSON.stringify(setup.items);
+    this.session = sameSetup
+      ? saved
+      : createWorkshop({ ...setup, items: setup.items.map(({ text }) => text).join('\n') });
+    document.body.dataset.mode = 'response';
+    this.elements['privacy-note'].textContent = 'Your response stays local until you copy it';
+    document.body.dataset.setupId = this.sharedArtifact.exerciseId;
+    if (!sameSetup) this.save();
+    this.render();
+  },
+
   show(name) {
-    const scrollY = window.scrollY;
-    for (const view of ['setup', 'placement', 'review']) this.elements[`${view}-view`].hidden = view !== name;
+    const scrollY = ['placement', 'review'].includes(name) ? window.scrollY : 0;
+    for (const view of ['mode', 'invitation', 'collection', 'setup', 'placement', 'review']) this.elements[`${view}-view`].hidden = view !== name;
     requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' }));
   },
 
@@ -76,7 +227,7 @@ const facilitatorApp = {
     event.preventDefault();
     this.elements['setup-error'].textContent = '';
     try {
-      this.session = createWorkshop({
+      const nextSession = createWorkshop({
         prompt: this.elements.prompt.value,
         xLabel: this.elements['x-label'].value,
         xLow: this.elements['x-low'].value,
@@ -86,6 +237,16 @@ const facilitatorApp = {
         yHigh: this.elements['y-high'].value,
         items: this.elements.items.value,
       });
+      if (document.body.dataset.mode === 'facilitator-setup') {
+        const url = encodeSetupUrl(nextSession, new URL(location.pathname, location.origin).toString());
+        this.setupShareArtifact = decodeShareUrl(url);
+        this.collection = createCollection(nextSession);
+        this.elements['setup-share-output'].value = url;
+        this.elements['setup-share-panel'].hidden = false;
+        this.elements['setup-share-status'].textContent = 'Setup ready. No placements or working state are included.';
+        return;
+      }
+      this.session = nextSession;
       this.selectedId = null;
       this.draftPosition = { x: 0.5, y: 0.5 };
       this.save();
@@ -235,8 +396,9 @@ const facilitatorApp = {
 
   renderPlacement() {
     const candidate = this.item(this.session.candidateId);
+    if (document.body.dataset.mode === 'response') this.elements['placement-round'].textContent = 'YOUR RESPONSE';
     const placedCount = Object.keys(this.session.positions).length;
-    this.elements['placement-round'].textContent = `Round ${this.session.round} · place on the grid`;
+    if (document.body.dataset.mode !== 'response') this.elements['placement-round'].textContent = `Round ${this.session.round} · place on the grid`;
     this.elements['placement-progress'].textContent = `${placedCount} of ${this.session.items.length} placed`;
     this.setAxisLabels('placement');
     this.renderPlacedItems(this.elements['placement-board']);
@@ -259,12 +421,14 @@ const facilitatorApp = {
   },
 
   renderReview() {
-    this.elements['review-round'].textContent = `Round ${this.session.round} · review together`;
+    this.elements['review-round'].textContent = document.body.dataset.mode === 'response' ? 'YOUR RESPONSE' : `Round ${this.session.round} · review together`;
+    this.elements['new-workshop'].textContent = document.body.dataset.mode === 'response' ? 'Restart my response' : 'Start a new workshop';
     this.elements['review-prompt'].textContent = this.session.prompt;
     this.setAxisLabels('board');
     this.renderPlacedItems(this.elements.board);
     this.elements['review-undo'].disabled = this.session.history.length === 0;
     this.renderExport();
+    this.elements['response-share-panel'].hidden = document.body.dataset.mode !== 'response';
     this.show('review');
   },
 
@@ -295,6 +459,332 @@ const facilitatorApp = {
   renderExport() {
     this.elements['export-output'].value = exportWorkshop(this.session, this.elements['export-format'].value);
     this.elements['copy-status'].textContent = '';
+  },
+
+  async copyText(text, output, status) {
+    try {
+      await navigator.clipboard.writeText(text);
+      status.textContent = 'Copied.';
+    } catch {
+      output.value = text;
+      output.focus();
+      output.select();
+      status.textContent = 'Press Command+C or Control+C to copy.';
+    }
+  },
+
+  async copySetup(forSlack) {
+    const url = this.elements['setup-share-output'].value;
+    const text = forSlack ? buildSlackMessage(this.setupShareArtifact, url) : url;
+    await this.copyText(text, this.elements['setup-share-output'], this.elements['setup-share-status']);
+  },
+
+  async copyResponse(forSlack) {
+    const url = encodeResponseUrl(this.session, {
+      contributor: this.elements['contributor-name'].value,
+      baseUrl: new URL(location.pathname, location.origin).toString(),
+    });
+    const artifact = decodeShareUrl(url);
+    const text = forSlack ? buildSlackMessage(artifact, url, { preview: this.elements['include-response-preview'].checked }) : url;
+    await this.copyText(text, this.elements['export-output'], this.elements['response-share-status']);
+  },
+
+  collectResponses() {
+    const urls = this.elements['response-links'].value.match(/https?:\/\/\S+/gu) ?? [];
+    let added = 0;
+    let duplicates = 0;
+    let mismatches = 0;
+    for (const raw of urls) {
+      try {
+        const response = decodeShareUrl(raw.replace(/[)>.,]+$/u, ''));
+        if (response.kind !== 'response') continue;
+        if (!this.collection) this.collection = createCollection(response.setup);
+        const result = addResponse(this.collection, response);
+        this.collection = result.collection;
+        if (result.status === 'added') added += 1;
+        if (result.status === 'duplicate') duplicates += 1;
+        if (result.status === 'mismatch') mismatches += 1;
+      } catch {
+        mismatches += 1;
+      }
+    }
+    this.elements['collection-status'].textContent = `${added} added · ${duplicates} duplicate · ${mismatches} mismatch`;
+    if (added > 0) this.resolution = createResolution(this.collection);
+    this.renderCollection();
+  },
+
+  clearCollection() {
+    this.collection = null;
+    this.resolution = null;
+    this.focusedResolutionId = null;
+    appStorage.removeItem(this.resolutionLatestKey);
+    this.elements['response-links'].value = '';
+    this.elements['collection-status'].textContent = 'Collected responses cleared.';
+    this.renderCollection();
+  },
+
+  renderConvergenceBoard(convergence) {
+    const namespace = 'http://www.w3.org/2000/svg';
+    const board = this.elements['convergence-board'];
+    const title = document.createElementNS(namespace, 'title');
+    title.textContent = `${convergence.responseCount} Quadrant responses with every submitted placement`;
+    board.replaceChildren(title);
+    const palette = ['#6f5ae8', '#f18b6d', '#4e9b55', '#bc7a16', '#247f91', '#a64f79'];
+    convergence.items.forEach((item, itemIndex) => {
+      const color = palette[itemIndex % palette.length];
+      if (item.disagreement > 0 && item.placements.length > 1) {
+        const center = item.placements.reduce((result, point) => ({ x: result.x + point.x, y: result.y + point.y }), { x: 0, y: 0 });
+        center.x /= item.placements.length;
+        center.y /= item.placements.length;
+        const spread = document.createElementNS(namespace, 'g');
+        spread.classList.add('spread-graphic');
+        if (this.showResolutionEvidence || this.focusedResolutionId === item.id) spread.classList.add('evidence-visible');
+        spread.dataset.spreadGraphic = item.id;
+        item.placements.forEach((placement) => {
+          const line = document.createElementNS(namespace, 'line');
+          line.classList.add('spread-line');
+          line.setAttribute('x1', String(8 + center.x * 84));
+          line.setAttribute('y1', String(72 - center.y * 64));
+          line.setAttribute('x2', String(8 + placement.x * 84));
+          line.setAttribute('y2', String(72 - placement.y * 64));
+          line.setAttribute('stroke', color);
+          line.dataset.spreadPoint = '';
+          line.dataset.x = String(placement.x);
+          line.dataset.y = String(placement.y);
+          spread.append(line);
+        });
+        board.append(spread);
+      }
+      item.placements.forEach((placement) => {
+        const mark = document.createElementNS(namespace, 'circle');
+        mark.classList.add('placement-mark');
+        if (this.showResolutionEvidence || this.focusedResolutionId === item.id) mark.classList.add('evidence-visible');
+        mark.setAttribute('cx', String(8 + placement.x * 84));
+        mark.setAttribute('cy', String(72 - placement.y * 64));
+        mark.setAttribute('r', '3');
+        mark.setAttribute('fill', color);
+        mark.dataset.placementMark = '';
+        mark.dataset.contributionId = placement.contributionId;
+        mark.dataset.itemId = item.id;
+        mark.dataset.x = String(placement.x);
+        mark.dataset.y = String(placement.y);
+        board.append(mark);
+      });
+    });
+    const collisionLayout = new Map(layoutResolutionCards(this.resolution.items, { cardDiameter: 0.145 }).map((item) => [item.id, item]));
+    this.resolution.items.forEach((item, itemIndex) => {
+      const color = palette[itemIndex % palette.length];
+      const convergenceItem = convergence.items.find(({ id }) => id === item.id);
+      const display = collisionLayout.get(item.id).displayResolved;
+      const halo = document.createElementNS(namespace, 'circle');
+      halo.classList.add('resolution-halo');
+      halo.dataset.disagreementHalo = item.id;
+      halo.setAttribute('cx', String(8 + item.resolved.x * 84));
+      halo.setAttribute('cy', String(72 - item.resolved.y * 64));
+      halo.setAttribute('r', String(4 + Math.min(9, convergenceItem.disagreement * 10)));
+      halo.setAttribute('fill', color);
+      halo.setAttribute('stroke', color);
+      board.append(halo);
+
+      if (display.x !== item.resolved.x || display.y !== item.resolved.y) {
+        const leader = document.createElementNS(namespace, 'line');
+        leader.classList.add('collision-leader');
+        leader.dataset.collisionLeader = item.id;
+        leader.dataset.trueX = String(item.resolved.x);
+        leader.dataset.trueY = String(item.resolved.y);
+        leader.dataset.displayX = String(display.x);
+        leader.dataset.displayY = String(display.y);
+        leader.setAttribute('x1', String(8 + item.resolved.x * 84));
+        leader.setAttribute('y1', String(72 - item.resolved.y * 64));
+        leader.setAttribute('x2', String(8 + display.x * 84));
+        leader.setAttribute('y2', String(72 - display.y * 64));
+        board.append(leader);
+      }
+
+      const card = document.createElementNS(namespace, 'g');
+      card.classList.add('resolution-card');
+      if (this.focusedResolutionId === item.id) card.classList.add('focused');
+      card.dataset.resolutionCard = item.id;
+      card.dataset.itemId = item.id;
+      card.dataset.resolvedX = String(item.resolved.x);
+      card.dataset.resolvedY = String(item.resolved.y);
+      card.dataset.adjusted = String(item.resolved.x !== item.baseline.x || item.resolved.y !== item.baseline.y);
+      card.dataset.displayX = String(display.x);
+      card.dataset.displayY = String(display.y);
+      card.setAttribute('transform', `translate(${8 + display.x * 84} ${72 - display.y * 64})`);
+      card.setAttribute('role', 'button');
+      card.setAttribute('tabindex', '0');
+      const collisionNote = display.x !== item.resolved.x || display.y !== item.resolved.y ? '; display offset to avoid overlap' : '';
+      card.setAttribute('aria-label', `${item.text}; resolved at ${Math.round(item.resolved.x * 100)} percent ${this.collection.setup.xLabel}, ${Math.round(item.resolved.y * 100)} percent ${this.collection.setup.yLabel}${collisionNote}`);
+      card.addEventListener('click', () => this.focusResolution(item.id));
+      card.addEventListener('keydown', (event) => this.moveResolutionByKeyboard(event, item.id));
+      card.addEventListener('pointerdown', (event) => this.startResolutionDrag(event, item.id));
+      const circle = document.createElementNS(namespace, 'circle');
+      circle.setAttribute('r', '4.6');
+      const label = document.createElementNS(namespace, 'text');
+      label.textContent = String(itemIndex + 1);
+      card.append(circle, label);
+      board.append(card);
+    });
+    board.classList.toggle('has-focus', Boolean(this.focusedResolutionId));
+    this.renderResolutionInspector(convergence);
+  },
+
+  focusResolution(itemId) {
+    this.focusedResolutionId = itemId;
+    this.renderCollection();
+  },
+
+  commitResolution(next) {
+    if (!next) return;
+    this.resolution = next;
+    saveResolution(appStorage, next);
+    appStorage.setItem(this.resolutionLatestKey, next.collection.exerciseId);
+    this.renderCollection();
+  },
+
+  moveResolutionByKeyboard(event, itemId) {
+    const delta = event.shiftKey ? 0.05 : 0.02;
+    const movement = { ArrowLeft: [-delta, 0], ArrowRight: [delta, 0], ArrowUp: [0, delta], ArrowDown: [0, -delta] }[event.key];
+    if (!movement) return;
+    event.preventDefault();
+    const item = this.resolution.items.find(({ id }) => id === itemId);
+    this.focusedResolutionId = itemId;
+    this.commitResolution(adjustResolution(this.resolution, itemId, {
+      x: clamp(item.resolved.x + movement[0], 0, 1),
+      y: clamp(item.resolved.y + movement[1], 0, 1),
+    }));
+  },
+
+  resolutionPoint(event) {
+    const bounds = this.elements['convergence-board'].getBoundingClientRect();
+    return {
+      x: clamp(((event.clientX - bounds.left) / bounds.width * 100 - 8) / 84, 0, 1),
+      y: clamp((72 - (event.clientY - bounds.top) / bounds.height * 80) / 64, 0, 1),
+    };
+  },
+
+  startResolutionDrag(event, itemId) {
+    event.preventDefault();
+    this.draggedResolutionId = itemId;
+    this.focusedResolutionId = itemId;
+  },
+
+  previewResolutionDrag(event) {
+    if (!this.draggedResolutionId) return;
+    const point = this.resolutionPoint(event);
+    const card = this.elements['convergence-board'].querySelector(`[data-item-id="${this.draggedResolutionId}"].resolution-card`);
+    card?.setAttribute('transform', `translate(${8 + point.x * 84} ${72 - point.y * 64})`);
+  },
+
+  finishResolutionDrag(event) {
+    if (!this.draggedResolutionId) return;
+    const itemId = this.draggedResolutionId;
+    this.draggedResolutionId = null;
+    this.commitResolution(adjustResolution(this.resolution, itemId, this.resolutionPoint(event)));
+  },
+
+  navigatorItems(convergence) {
+    return convergence.items.map((item, inputIndex) => ({ ...item, inputIndex }))
+      .sort((first, second) => second.disagreement - first.disagreement || first.inputIndex - second.inputIndex);
+  },
+
+  moveResolutionFocus(delta) {
+    if (!this.collection) return;
+    const convergence = convergeResponses(this.collection);
+    const items = this.navigatorItems(convergence);
+    const current = Math.max(0, items.findIndex(({ id }) => id === this.focusedResolutionId));
+    const next = (current + delta + items.length) % items.length;
+    this.focusResolution(items[next].id);
+  },
+
+  renderResolutionNavigator(convergence) {
+    const items = this.navigatorItems(convergence);
+    this.elements['disagreement-list'].replaceChildren(...items.map((item) => {
+      const row = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'navigator-item';
+      button.dataset.navigatorItem = '';
+      button.dataset.itemId = item.id;
+      button.setAttribute('aria-current', String(item.id === this.focusedResolutionId));
+      button.setAttribute('aria-label', `${item.text}: ${item.placements.length} placements, ${Math.round(item.disagreement / Math.SQRT2 * 100)} percent spread`);
+      const label = document.createElement('strong');
+      label.textContent = item.text;
+      const spread = document.createElement('span');
+      spread.className = 'navigator-spread';
+      spread.textContent = `${Math.round(item.disagreement / Math.SQRT2 * 100)}% spread`;
+      button.append(label, spread);
+      button.addEventListener('click', () => this.focusResolution(item.id));
+      row.append(button);
+      return row;
+    }));
+  },
+
+  renderResolutionExport() {
+    if (!this.resolution) return;
+    this.elements['resolution-export-output'].value = formatResolutionExport(this.resolution, {
+      includeAdjustments: this.elements['include-resolution-adjustments'].checked,
+    });
+    this.elements['resolution-export-status'].textContent = 'Plain-text export prepared locally.';
+  },
+
+  async copyResolutionExport() {
+    if (!this.elements['resolution-export-output'].value) this.renderResolutionExport();
+    try {
+      await navigator.clipboard.writeText(this.elements['resolution-export-output'].value);
+      this.elements['resolution-export-status'].textContent = 'Resolution text copied.';
+    } catch {
+      this.elements['resolution-export-output'].select();
+      this.elements['resolution-export-status'].textContent = 'Select and copy the prepared text.';
+    }
+  },
+
+  renderResolutionInspector(convergence) {
+    const inspector = this.elements['resolution-inspector'];
+    const item = convergence.items.find(({ id }) => id === this.focusedResolutionId);
+    if (!item) {
+      inspector.hidden = true;
+      delete inspector.dataset.itemId;
+      return;
+    }
+    inspector.hidden = false;
+    inspector.dataset.itemId = item.id;
+    const heading = document.createElement('h3');
+    heading.textContent = item.text;
+    const detail = document.createElement('p');
+    detail.className = 'hint';
+    detail.textContent = `${item.placements.length} placements · ${Math.round(item.disagreement / Math.SQRT2 * 100)}% spread`;
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.id = 'reset-resolution-item';
+    reset.className = 'button button-quiet';
+    reset.textContent = 'Reset item to midpoint';
+    reset.addEventListener('click', () => this.commitResolution(resetResolutionItem(this.resolution, item.id)));
+    inspector.replaceChildren(heading, detail, reset);
+  },
+
+  renderCollection() {
+    const responses = this.collection?.responses ?? [];
+    this.elements['response-count'].textContent = `${responses.length} ${responses.length === 1 ? 'response' : 'responses'}`;
+    this.elements['response-list'].replaceChildren(...responses.map(({ contributor }) => {
+      const item = document.createElement('li');
+      item.textContent = contributor;
+      return item;
+    }));
+    this.elements['response-list'].hidden = !this.showResponseNames;
+    if (!responses.length) {
+      this.elements['convergence-board'].replaceChildren();
+      this.elements['convergence-summary'].textContent = 'Add response links to reveal placement spread.';
+      return;
+    }
+    const convergence = convergeResponses(this.collection);
+    if (!this.resolution) this.resolution = createResolution(this.collection);
+    this.elements['undo-resolution'].disabled = !this.resolution.history.length;
+    this.renderResolutionNavigator(convergence);
+    this.renderConvergenceBoard(convergence);
+    const disputed = convergence.items.filter(({ disagreement }) => disagreement > 0).length;
+    this.elements['convergence-summary'].textContent = `${disputed} of ${convergence.items.length} options have differing placements. Every placement is retained.`;
   },
 
   async copy() {
@@ -337,8 +827,12 @@ const facilitatorApp = {
     }
   },
 
+  activeStorageKey() {
+    return this.responseStorageKey ?? this.storageKey;
+  },
+
   save() {
-    localStorage.setItem(this.storageKey, JSON.stringify(this.session));
+    appStorage.setItem(this.activeStorageKey(), JSON.stringify(this.session));
   },
 
   migrate(saved) {
@@ -355,23 +849,31 @@ const facilitatorApp = {
 
   load() {
     try {
-      const saved = this.migrate(JSON.parse(localStorage.getItem(this.storageKey)));
+      const saved = this.migrate(JSON.parse(appStorage.getItem(this.storageKey)));
       if (!saved?.prompt || !saved?.items?.length) return;
       this.session = saved;
       this.elements['resume-banner'].hidden = false;
       this.elements['resume-summary'].textContent = `${saved.items.length} options · round ${saved.round}`;
     } catch {
-      localStorage.removeItem(this.storageKey);
+      appStorage.removeItem(this.storageKey);
     }
   },
 
   reset() {
-    localStorage.removeItem(this.storageKey);
-    this.session = null;
+    appStorage.removeItem(this.activeStorageKey());
     this.selectedId = null;
     this.draftPosition = { x: 0.5, y: 0.5 };
     this.elements['resume-banner'].hidden = true;
     this.elements['setup-error'].textContent = '';
+    if (document.body.dataset.mode === 'response' && this.sharedArtifact) {
+      const setup = this.sharedArtifact.payload;
+      this.session = createWorkshop({ ...setup, items: setup.items.map(({ text }) => text).join('\n') });
+      this.save();
+      this.announce('Response restarted.');
+      this.render();
+      return;
+    }
+    this.session = null;
     this.show('setup');
     this.elements.prompt.focus();
   },
@@ -383,3 +885,5 @@ const facilitatorApp = {
 };
 
 facilitatorApp.init();
+
+export { facilitatorApp };

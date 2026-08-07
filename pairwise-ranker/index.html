@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>Stack Rank — decide one pair at a time</title>
+  <link rel="stylesheet" href="../vendor/driver.css">
   <style>
     :root {
       --ink: #17211b;
@@ -46,6 +47,36 @@
 
     .setup-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr); gap: 18px; align-items: start; }
     .panel { background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid rgba(23,33,27,.12); border-radius: 24px; padding: clamp(22px, 4vw, 38px); box-shadow: var(--shadow); backdrop-filter: blur(12px); }
+    .mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 30px; }
+    .tour-offer { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:18px; padding:14px 18px; border:1px solid #c9d99f; border-radius:16px; background:#f1f8df; }
+    .tour-offer p { margin:3px 0 0; color:var(--muted); font-size:.84rem; }
+    .mode-card { display: flex; min-height: 190px; flex-direction: column; align-items: flex-start; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); color: var(--ink); text-align: left; box-shadow: 0 12px 34px rgba(29,40,33,.08); }
+    .mode-card:hover { border-color: #7ca63e; transform: translateY(-2px); }
+    .mode-card strong { margin-top: auto; font-size: 1.28rem; letter-spacing: -.025em; }
+    .mode-card span { margin-top: 8px; color: var(--muted); line-height: 1.45; }
+    .mode-card-primary { background: var(--dark); color: #fff; }
+    .mode-card-primary span { color: #cbd4ce; }
+    .mode-banner { display: inline-flex; align-items: center; min-height: 30px; padding: 0 11px; border-radius: 999px; background: #e7f5c8; color: #48671e; font-size: .72rem; font-weight: 900; letter-spacing: .12em; }
+    .invitation-panel { max-width: 740px; border-top: 8px solid #f18b6d; }
+    .invitation-summary { margin: 24px 0; padding: 20px; border-radius: 16px; background: #f8f5ed; }
+    .invitation-summary strong { display: block; margin-bottom: 8px; }
+    .collection-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .7fr); gap: 18px; align-items: start; }
+    .share-output { min-height: 110px; margin-top: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem; }
+    .response-list { margin: 14px 0 0; padding-left: 20px; color: var(--muted); }
+    .summary-section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+    .summary-section h3 { margin-bottom: 10px; font-size: 1rem; }
+    .ranking-evidence { display: grid; gap: 10px; }
+    .ranking-card { padding: 12px; border-radius: 13px; background: #f8f5ed; }
+    .ranking-card strong { display: block; margin-bottom: 7px; }
+    .ranking-card ol { margin: 0; padding-left: 22px; color: var(--muted); font-size: .84rem; }
+    .disagreement-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+    .pair-label { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; font-size: .78rem; font-weight: 800; }
+    .vote-bar { display: flex; height: 16px; overflow: hidden; border-radius: 999px; background: #ece8dd; }
+    .vote-left { background: var(--dark); }
+    .vote-tie { background: #e2b64f; }
+    .vote-right { background: #f18b6d; }
+    body[data-mode="facilitator-setup"] .mode-banner { background: #ebe7ff; color: #6250c9; }
+    body[data-mode="facilitator-view"] .mode-banner { background: #ffe4dc; color: #9c4630; }
     .field + .field { margin-top: 24px; }
     label, .label { display: block; margin-bottom: 8px; font-size: .85rem; font-weight: 750; }
     .hint { color: var(--muted); font-weight: 500; }
@@ -113,7 +144,8 @@
       .shell { width: min(100% - 22px, 680px); padding-top: 18px; }
       .masthead { margin-bottom: 40px; }
       .privacy { font-size: 0; }
-      .setup-grid, .review-grid { grid-template-columns: 1fr; }
+      .mode-grid, .collection-grid, .setup-grid, .review-grid { grid-template-columns: 1fr; }
+      .mode-card { min-height: 150px; }
       .versus { grid-template-columns: 1fr; }
       .versus-mark { padding: 0; }
       .option { min-height: 230px; }
@@ -133,10 +165,46 @@
   <main class="shell" id="index">
     <header class="masthead">
       <div class="brand"><span class="brand-mark" aria-hidden="true">↕</span> Stack Rank</div>
-      <div class="privacy"><span class="privacy-dot" aria-hidden="true"></span> Everything stays in this browser</div>
+      <div class="button-row" style="margin:0"><button class="button button-quiet" id="back-to-choices" type="button" hidden>← Back to choices</button><button class="button button-quiet" id="take-tour" type="button">Take a tour</button><div class="privacy" id="privacy-note"><span class="privacy-dot" aria-hidden="true"></span> <span id="privacy-copy">Everything stays in this browser</span></div></div>
     </header>
+    <aside class="tour-offer" data-tour-offer><div><strong>New to Stack Rank?</strong><p>Practice the complete workflow with disposable sample data.</p></div><div class="button-row" style="margin:0"><button class="button button-primary" type="button" data-start-tour>Show me</button><button class="button button-quiet" type="button" data-dismiss-tour>Not now</button></div></aside>
 
-    <section class="view" id="setup-view" aria-labelledby="setup-title">
+    <section class="view" id="mode-view" aria-labelledby="mode-title">
+      <p class="eyebrow">A clearer order for competing priorities</p>
+      <div data-newcomer-intro>
+        <h1 id="mode-title">Decide what should come first.</h1>
+        <p class="lede">Stack ranking creates a clear priority order by comparing two items at a time against one criterion, such as customer impact.</p>
+        <p class="hint">Use it when everything feels important and a long list or scoring debate is not producing a decision.</p>
+      </div>
+      <div class="mode-grid">
+        <button class="mode-card mode-card-primary" id="solo-mode" type="button"><strong>Work solo</strong><span>Compare the options on your own and leave with a ranked list.</span></button>
+        <button class="mode-card" id="setup-mode" type="button"><strong>Invite responses</strong><span>Send everyone the same criterion and options so they can rank privately.</span></button>
+        <button class="mode-card" id="combine-mode" type="button"><strong>Combine responses</strong><span>Bring completed rankings together to compare agreement and disagreement.</span></button>
+      </div>
+    </section>
+
+    <section class="view" id="invitation-view" aria-labelledby="invitation-title" hidden>
+      <div class="mode-banner" id="invitation-mode-label">SHARED SETUP</div>
+      <div class="panel invitation-panel" style="margin-top:18px">
+        <p class="eyebrow">You’ve been invited to respond</p>
+        <h2 id="invitation-title">Build your ranking privately.</h2>
+        <div class="invitation-summary" id="invitation-summary"></div>
+        <p class="hint">Opening this invitation has not created or changed any local work.</p>
+        <button class="button button-accent" id="start-response" type="button">Start my response</button>
+      </div>
+    </section>
+
+    <section class="view" id="collection-view" aria-labelledby="collection-title" hidden>
+      <div class="mode-banner" id="collection-mode-label">FACILITATOR VIEW</div>
+      <div style="margin-top:18px"><h2 id="collection-title">Combine team responses.</h2><p class="lede">Paste completed response links. They stay in this browser and are checked against one setup.</p></div>
+      <div class="collection-grid">
+        <section class="panel"><label for="response-links">Response links or Slack messages</label><textarea id="response-links" placeholder="Paste one or more completed response links"></textarea><div class="button-row"><button class="button button-primary" id="collect-responses" type="button">Add responses</button><button class="button button-quiet" id="clear-responses" type="button">Clear</button></div><p class="status" id="collection-status" role="status"></p></section>
+        <aside class="panel"><p class="eyebrow">Collected locally</p><h2 id="response-count">0 responses</h2><ol class="response-list" id="response-list"></ol><section class="summary-section"><h3>Aggregate order</h3><ol class="ranked-list" id="consensus-list"></ol></section><section class="summary-section"><h3>Every submitted ranking</h3><div class="ranking-evidence" id="ranking-evidence"></div></section><section class="summary-section"><h3>Pairwise votes</h3><ol class="disagreement-list" id="disagreement-list"></ol></section><p class="notice" id="consensus-notice" hidden></p></aside>
+      </div>
+    </section>
+
+    <section class="view" id="setup-view" aria-labelledby="setup-title" hidden>
+      <div class="mode-banner" id="workspace-mode-label">SOLO WORKSPACE</div>
       <div id="resume-banner" class="resume-banner" hidden>
         <div><strong>Unfinished ranking found</strong><span id="resume-summary"></span></div>
         <div class="button-row" style="margin:0">
@@ -144,7 +212,7 @@
           <button class="button button-quiet" id="discard-button" type="button">Discard</button>
         </div>
       </div>
-      <p class="eyebrow">One decision at a time</p>
+      <p class="eyebrow" style="margin-top:18px">One decision at a time</p>
       <h1 id="setup-title">Stop scoring.<br>Start choosing.</h1>
       <p class="lede">Paste your options, name what matters, and compare two at a time. You’ll leave with a stack-ranked list ready to use anywhere.</p>
 
@@ -161,9 +229,10 @@
           </div>
           <p class="error" id="setup-error" role="alert"></p>
           <div class="button-row">
-            <button class="button button-primary" type="submit">Start comparing <span aria-hidden="true">→</span></button>
+            <button class="button button-primary" id="setup-submit" type="submit">Start comparing <span aria-hidden="true">→</span></button>
             <button class="button button-secondary" id="example-button" type="button">Use an example</button>
           </div>
+          <div id="setup-share-panel" hidden><label for="setup-share-output" style="margin-top:22px">Setup link</label><textarea class="share-output" id="setup-share-output" readonly></textarea><div class="button-row"><button class="button button-accent" id="copy-setup-slack" type="button">Copy for Slack</button><button class="button button-secondary" id="copy-setup-link" type="button">Copy link</button></div><p class="status" id="setup-share-status" role="status"></p></div>
         </form>
 
         <aside class="panel" aria-label="How it works">
@@ -241,10 +310,17 @@
           <p class="status" id="copy-status" role="status"></p>
         </aside>
       </div>
+      <section class="panel" id="response-share-panel" hidden style="margin-top:18px">
+        <div class="mode-banner">YOUR RESPONSE</div><h2 style="margin-top:16px">Return your completed ranking.</h2>
+        <label for="contributor-name" style="margin-top:18px">Your name</label><input id="contributor-name" value="Anonymous">
+        <label style="display:flex; gap:9px; align-items:flex-start; margin-top:14px"><input id="include-response-preview" type="checkbox" style="width:auto; min-height:auto; margin-top:3px">Include a ranking preview <span class="hint">May influence teammates</span></label>
+        <div class="button-row"><button class="button button-accent" id="copy-response-slack" type="button">Copy response for Slack</button><button class="button button-secondary" id="copy-response-link" type="button">Copy response link</button></div><p class="status" id="response-share-status" role="status"></p>
+      </section>
     </section>
 
     <div id="live-region" class="sr-only" aria-live="polite"></div>
   </main>
   <script type="module" src="./app.js"></script>
+  <script type="module" src="./tour.js"></script>
 </body>
 </html>

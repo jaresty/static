@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>Quadrant — facilitate a 2×2 decision</title>
+  <link rel="stylesheet" href="../vendor/driver.css">
   <style>
     :root {
       --ink: #17201b;
@@ -41,6 +42,50 @@
     h3 { font-size: 1.3rem; }
     .lede { max-width: 700px; margin: 22px 0 34px; color: var(--muted); font-size: clamp(1rem, 2vw, 1.18rem); line-height: 1.6; }
     .panel { border: 1px solid rgba(23,32,27,.12); border-radius: 24px; background: color-mix(in srgb, var(--surface) 94%, transparent); box-shadow: var(--shadow); padding: clamp(22px, 4vw, 38px); }
+    .mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 30px; }
+    .mode-card { display: flex; min-height: 190px; flex-direction: column; align-items: flex-start; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); color: var(--ink); text-align: left; box-shadow: 0 12px 34px rgba(23,32,27,.08); }
+    .mode-card:hover { border-color: var(--violet); transform: translateY(-2px); }
+    .mode-card strong { margin-top: auto; font-size: 1.28rem; letter-spacing: -.025em; }
+    .mode-card span { margin-top: 8px; color: var(--muted); line-height: 1.45; }
+    .mode-card-primary { background: var(--ink); color: #fff; }
+    .mode-card-primary span { color: #cbd4ce; }
+    .mode-banner { display: inline-flex; align-items: center; min-height: 30px; padding: 0 11px; border-radius: 999px; background: var(--violet-soft); color: var(--violet); font-size: .72rem; font-weight: 900; letter-spacing: .12em; }
+    .invitation-panel { max-width: 760px; border-top: 8px solid var(--coral); }
+    .invitation-summary { margin: 24px 0; padding: 20px; border-radius: 16px; background: #f8f5ed; }
+    .invitation-summary strong { display: block; margin-bottom: 8px; }
+    .collection-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .7fr); gap: 18px; align-items: start; }
+    .share-output { min-height: 110px; margin-top: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem; }
+    .response-list { margin: 14px 0 0; padding-left: 20px; color: var(--muted); }
+    .convergence-plot { margin-top: 20px; }
+    .convergence-board { display: block; width: 100%; aspect-ratio: 1.25; border: 1px solid var(--line); border-radius: 16px; background: linear-gradient(to right, transparent 49.7%, rgba(23,32,27,.12) 50%, transparent 50.3%), linear-gradient(to bottom, transparent 49.7%, rgba(23,32,27,.12) 50%, transparent 50.3%), #faf8f2; }
+    .spread-graphic, .placement-mark { opacity: 0; transition: opacity .16s; }
+    .spread-graphic.evidence-visible, .placement-mark.evidence-visible { opacity: 1; }
+    .spread-line { stroke-width: 1.4; stroke-dasharray: 2.5 2.5; }
+    .placement-mark { stroke: #fff; stroke-width: 1.5; }
+    .resolution-halo { fill-opacity: .1; stroke-width: 1; stroke-opacity: .35; }
+    .collision-leader { stroke: var(--muted); stroke-width: .8; stroke-dasharray: 1.5 1.5; opacity: .7; pointer-events: none; }
+    .resolution-card { cursor: grab; transition: opacity .16s; }
+    .convergence-board.has-focus .resolution-card { opacity: .24; }
+    .convergence-board.has-focus .resolution-card.focused { opacity: 1; }
+    .resolution-inspector { margin-top: 14px; padding: 14px; border-radius: 14px; background: #f8f5ed; }
+    .resolution-inspector h3 { font-size: 1.05rem; }
+    .navigator-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 20px; }
+    .navigator-list { display: grid; gap: 7px; margin: 10px 0 0; padding: 0; list-style: none; }
+    .navigator-item { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 11px; background: #fff; color: var(--ink); text-align: left; }
+    .navigator-item[aria-current="true"] { border-color: var(--violet); background: var(--violet-soft); }
+    .navigator-spread { color: var(--muted); font-size: .75rem; white-space: nowrap; }
+    .resolution-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+    .layer-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 6px 8px; font-size: .78rem; font-weight: 800; }
+    .layer-toggle input { width: 18px; height: 18px; }
+    .resolution-export { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+    .resolution-export textarea { width: 100%; min-height: 190px; margin-top: 10px; resize: vertical; }
+    .resolution-card:focus { outline: none; }
+    .resolution-card:focus > circle { stroke: var(--lime); stroke-width: 2.5; }
+    .resolution-card > circle { fill: var(--ink); stroke: #fff; stroke-width: 1.5; }
+    .resolution-card > text { fill: var(--lime); font-size: 4px; font-weight: 900; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+    body[data-mode="facilitator-setup"] .mode-banner { background: var(--violet-soft); color: var(--violet); }
+    body[data-mode="response"] .mode-banner { background: #e7f5c8; color: #48671e; }
+    body[data-mode="facilitator-view"] .mode-banner { background: #ffe4dc; color: #9c4630; }
     .setup-grid { display: grid; grid-template-columns: minmax(360px, .85fr) minmax(0, 1.15fr); gap: 18px; align-items: start; }
     .setup-preview { position: sticky; top: 18px; grid-column: 2; grid-row: 1; }
     .setup-preview .board-wrap { min-height: 380px; aspect-ratio: 1.2; }
@@ -117,7 +162,9 @@
     .export-panel textarea { min-height: 210px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem; }
     .status { min-height: 1.4em; color: var(--muted); font-size: .8rem; }
     @media (max-width: 820px) {
-      .setup-grid, .placement-layout, .review-grid { grid-template-columns: 1fr; }
+      .mode-grid, .collection-grid, .setup-grid, .placement-layout, .review-grid { grid-template-columns: 1fr; }
+      .setup-grid, .setup-grid > * { min-width: 0; width: 100%; }
+      .mode-card { min-height: 150px; }
       .setup-preview { position: static; grid-column: auto; grid-row: auto; order: -1; }
       .controls, .placement-controls { position: static; }
       .board-wrap { min-height: 430px; }
@@ -125,6 +172,7 @@
     @media (max-width: 560px) {
       .shell { width: min(100% - 20px, 540px); padding-top: 16px; }
       .masthead { margin-bottom: 36px; }
+      .setup-preview .board-wrap { width: auto; min-height: 300px; aspect-ratio: auto; margin: 18px 0 42px 42px; }
       .privacy { font-size: 0; }
       .axis-grid, .export-grid { grid-template-columns: 1fr; }
       .view-head { align-items: start; flex-direction: column; }
@@ -132,6 +180,9 @@
       .board-wrap { min-height: 0; aspect-ratio: .78; margin-left: 42px; }
       .board-item { width: 94px; font-size: .66rem; }
     }
+    .tour-offer { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 0 0 18px; padding: 14px 18px; border: 1px solid #c9d99f; border-radius: 16px; background: #f1f8df; }
+    .tour-offer strong { display: block; }
+    .tour-offer p { margin: 3px 0 0; color: var(--muted); font-size: .84rem; }
     @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
   </style>
 </head>
@@ -139,16 +190,52 @@
   <main class="shell" id="index">
     <header class="masthead">
       <div class="brand"><span class="mark" aria-hidden="true">⌗</span> Quadrant</div>
-      <div class="privacy">Everything stays in this browser</div>
+      <div class="button-row" style="margin:0"><button class="button button-quiet" id="back-to-choices" type="button" hidden>← Back to choices</button><button class="button button-quiet" id="take-tour" type="button">Take a tour</button><div class="privacy" id="privacy-note">Everything stays in this browser</div></div>
     </header>
+    <aside class="tour-offer" data-tour-offer><div><strong>New to Quadrant?</strong><p>Practice the complete workflow with disposable sample data.</p></div><div class="button-row" style="margin:0"><button class="button button-primary" type="button" data-start-tour>Show me</button><button class="button button-quiet" type="button" data-dismiss-tour>Not now</button></div></aside>
 
     <div class="resume" id="resume-banner" hidden>
       <div><strong>Workshop in progress</strong><br><small id="resume-summary"></small></div>
       <div class="button-row" style="margin:0"><button class="button button-primary" id="resume-button" type="button">Resume</button><button class="button button-quiet" id="discard-button" type="button">Discard</button></div>
     </div>
 
-    <section class="view" id="setup-view" aria-labelledby="setup-title">
-      <p class="eyebrow">A facilitated 2×2</p>
+    <section class="view" id="mode-view" aria-labelledby="mode-title">
+      <p class="eyebrow">A simple map for hard choices</p>
+      <div data-newcomer-intro>
+        <h1 id="mode-title">See trade-offs before you decide.</h1>
+        <p class="lede">A 2×2 map places each option on two axes, such as effort and impact, so you can see trade-offs, clusters, and disagreement at a glance.</p>
+        <p class="hint">Use it when a group needs to compare ideas without hiding the conversation inside one score.</p>
+      </div>
+      <div class="mode-grid">
+        <button class="mode-card mode-card-primary" id="solo-mode" type="button"><strong>Work solo</strong><span>Build one map yourself and leave with a visual set of priorities.</span></button>
+        <button class="mode-card" id="setup-mode" type="button"><strong>Invite responses</strong><span>Send everyone the same prompt, axes, and options so they can map their view privately.</span></button>
+        <button class="mode-card" id="combine-mode" type="button"><strong>Combine responses</strong><span>Bring completed maps together to compare agreement and disagreement.</span></button>
+      </div>
+    </section>
+
+    <section class="view" id="invitation-view" aria-labelledby="invitation-title" hidden>
+      <div class="mode-banner" id="invitation-mode-label">SHARED SETUP</div>
+      <div class="panel invitation-panel" style="margin-top:18px">
+        <p class="eyebrow">You’ve been invited to respond</p>
+        <h2 id="invitation-title">Map your perspective privately.</h2>
+        <div class="invitation-summary" id="invitation-summary"></div>
+        <p class="hint">Opening this invitation has not created or changed any local work.</p>
+        <button class="button button-accent" id="start-response" type="button">Start my response</button>
+      </div>
+    </section>
+
+    <section class="view" id="collection-view" aria-labelledby="collection-title" hidden>
+      <div class="mode-banner" id="collection-mode-label">FACILITATOR VIEW</div>
+      <div class="view-head" style="margin-top:18px"><div><h2 id="collection-title">Combine team responses.</h2><p class="lede">Paste completed response links. They stay in this browser and are checked against one setup.</p></div></div>
+      <div class="collection-grid">
+        <section class="panel"><label for="response-links">Response links or Slack messages</label><textarea id="response-links" placeholder="Paste one or more completed response links"></textarea><div class="button-row"><button class="button button-primary" id="collect-responses" type="button">Add responses</button><button class="button button-quiet" id="clear-responses" type="button">Clear</button></div><p class="status" id="collection-status" role="status"></p></section>
+        <aside class="panel"><p class="eyebrow">Collected locally</p><h3 id="response-count">0 responses</h3><ol class="response-list" id="response-list"></ol><div class="navigator-head"><p class="eyebrow" style="margin:0">Disagreement navigator</p><div><button class="button button-quiet" id="previous-disagreement" type="button" aria-label="Previous disagreement">←</button><button class="button button-quiet" id="next-disagreement" type="button" aria-label="Next disagreement">→</button></div></div><ol class="navigator-list" id="disagreement-list" aria-label="Items ordered by disagreement"></ol><div class="resolution-toolbar"><button class="button button-quiet" id="undo-resolution" type="button">Undo</button><button class="button button-quiet" id="reset-all-resolutions" type="button">Reset all</button><label class="layer-toggle"><input id="show-resolution-evidence" type="checkbox"> All placements</label><label class="layer-toggle"><input id="show-response-names" type="checkbox"> Names</label></div><div class="convergence-plot"><p class="eyebrow">Every placement</p><svg class="convergence-board" id="convergence-board" viewBox="0 0 100 80" role="img" aria-label="All participant placements on the shared Quadrant axes"></svg><div class="resolution-inspector" id="resolution-inspector" hidden></div></div><div id="convergence-summary" class="hint" style="margin-top:14px"></div><section class="resolution-export" aria-labelledby="resolution-export-title"><p class="eyebrow" id="resolution-export-title">Final resolution</p><label class="layer-toggle"><input id="include-resolution-adjustments" type="checkbox"> Include facilitator adjustments</label><div class="button-row"><button class="button button-primary" id="export-resolution" type="button">Prepare text export</button><button class="button button-quiet" id="copy-resolution-export" type="button">Copy text</button></div><textarea id="resolution-export-output" readonly aria-label="Human-readable resolution export"></textarea><p class="hint" id="resolution-export-status" role="status"></p></section></aside>
+      </div>
+    </section>
+
+    <section class="view" id="setup-view" aria-labelledby="setup-title" hidden>
+      <div class="mode-banner" id="workspace-mode-label">SOLO WORKSPACE</div>
+      <p class="eyebrow" style="margin-top:18px">A focused 2×2</p>
       <h1 id="setup-title">Turn debate into a map.</h1>
       <p class="lede">Frame one decision, place each option relatively along two criteria, and leave with a map the group can discuss.</p>
       <div class="setup-grid">
@@ -179,7 +266,8 @@
             <div class="meta"><span>2–20 unique options</span><span id="item-count">0 options</span></div>
           </div>
           <p class="error" id="setup-error" role="alert"></p>
-          <div class="button-row"><button class="button button-primary" type="submit">Start placing</button><button class="button button-secondary" id="example-button" type="button">Use an example</button></div>
+          <div class="button-row"><button class="button button-primary" id="setup-submit" type="submit">Start placing</button><button class="button button-secondary" id="example-button" type="button">Use an example</button></div>
+          <div id="setup-share-panel" hidden><label for="setup-share-output" style="margin-top:22px">Setup link</label><textarea class="share-output" id="setup-share-output" readonly></textarea><div class="button-row"><button class="button button-accent" id="copy-setup-slack" type="button">Copy for Slack</button><button class="button button-secondary" id="copy-setup-link" type="button">Copy link</button></div><p class="status" id="setup-share-status" role="status"></p></div>
         </form>
         <aside class="panel setup-preview">
           <p class="eyebrow">This is the exercise</p>
@@ -236,6 +324,13 @@
           <div class="button-row"><button class="button button-secondary" id="review-undo" type="button">Undo last change</button></div>
         </aside>
       </div>
+      <section class="panel export-panel" id="response-share-panel" hidden>
+        <div class="mode-banner">YOUR RESPONSE</div>
+        <h3 style="margin-top:16px">Return your completed map</h3>
+        <label for="contributor-name" style="margin-top:18px">Your name</label><input id="contributor-name" value="Anonymous">
+        <label style="display:flex; gap:9px; align-items:flex-start; margin-top:14px"><input id="include-response-preview" type="checkbox" style="width:auto; min-height:auto; margin-top:3px">Include a placement preview <span class="hint">May influence teammates</span></label>
+        <div class="button-row"><button class="button button-accent" id="copy-response-slack" type="button">Copy response for Slack</button><button class="button button-secondary" id="copy-response-link" type="button">Copy response link</button></div><p class="status" id="response-share-status" role="status"></p>
+      </section>
       <section class="panel export-panel">
         <p class="eyebrow">Take the result with you</p>
         <div class="export-grid"><div><label for="export-format">Format</label><select id="export-format"><option value="markdown">Markdown</option><option value="json">JSON backup</option><option value="svg">SVG board</option></select><div class="button-row"><button class="button button-accent" id="copy-button" type="button">Copy</button><button class="button button-secondary" id="download-button" type="button">Download</button></div><p class="status" id="copy-status" role="status"></p></div><textarea id="export-output" readonly aria-label="Portable workshop result"></textarea></div>
@@ -244,5 +339,6 @@
     <div class="sr-only" id="live-region" aria-live="polite"></div>
   </main>
   <script type="module" src="./app.js"></script>
+  <script type="module" src="./tour.js"></script>
 </body>
 </html>
