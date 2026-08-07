@@ -31,7 +31,7 @@ const rankingApp = {
     const ids = [
       'mode-view', 'solo-mode', 'setup-mode', 'combine-mode', 'back-to-choices', 'privacy-note', 'privacy-copy', 'invitation-view', 'invitation-summary', 'start-response',
       'collection-view', 'response-links', 'collect-responses', 'clear-responses', 'collection-status', 'response-count', 'response-list', 'consensus-list', 'ranking-evidence', 'disagreement-list', 'consensus-notice',
-      'setup-view', 'workspace-mode-label', 'setup-submit', 'setup-share-panel', 'setup-share-output', 'copy-setup-slack', 'copy-setup-link', 'setup-share-status',
+      'setup-view', 'workspace-mode-label', 'setup-submit', 'setup-share-panel', 'setup-share-output', 'copy-setup-slack', 'copy-setup-link', 'answer-own-invitation', 'setup-share-status',
       'compare-view', 'review-view', 'setup-form', 'criterion', 'items',
       'item-count', 'setup-error', 'example-button', 'resume-banner', 'resume-summary',
       'resume-button', 'discard-button', 'criterion-display', 'progress-label', 'progress-fill',
@@ -269,6 +269,7 @@ const rankingApp = {
         this.setupShareArtifact = decodeShareUrl(url);
         this.collection = createCollection(nextSession);
         this.elements['setup-share-output'].value = url;
+        this.elements['answer-own-invitation'].href = url;
         this.elements['setup-share-panel'].hidden = false;
         this.elements['setup-share-status'].textContent = 'Setup ready. No comparisons, drafts, or progress are included.';
         return;

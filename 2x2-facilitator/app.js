@@ -44,6 +44,9 @@ const facilitatorApp = {
   resolution: null,
   focusedResolutionId: null,
   draggedResolutionId: null,
+  resolutionPointerStart: null,
+  resolutionPointerMoved: false,
+  resolutionPointerCanAdjust: false,
   showResolutionEvidence: false,
   showResponseNames: false,
   elements: {},
@@ -51,8 +54,8 @@ const facilitatorApp = {
   init() {
     const ids = [
       'mode-view', 'solo-mode', 'setup-mode', 'combine-mode', 'back-to-choices', 'privacy-note', 'invitation-view', 'invitation-summary', 'start-response',
-      'collection-view', 'response-links', 'collect-responses', 'clear-responses', 'collection-status', 'response-count', 'response-list', 'disagreement-list', 'previous-disagreement', 'next-disagreement', 'undo-resolution', 'reset-all-resolutions', 'show-resolution-evidence', 'show-response-names', 'convergence-board', 'resolution-inspector', 'convergence-summary', 'include-resolution-adjustments', 'export-resolution', 'copy-resolution-export', 'resolution-export-output', 'resolution-export-status',
-      'setup-view', 'workspace-mode-label', 'setup-submit', 'setup-share-panel', 'setup-share-output', 'copy-setup-slack', 'copy-setup-link', 'setup-share-status',
+      'collection-view', 'collection-grid', 'response-import-panel', 'response-links', 'collect-responses', 'clear-responses', 'collection-status', 'response-count', 'response-list', 'disagreement-list', 'previous-disagreement', 'next-disagreement', 'undo-resolution', 'reset-all-resolutions', 'show-resolution-evidence', 'show-response-names', 'convergence-board', 'resolution-inspector', 'convergence-summary', 'include-resolution-adjustments', 'export-resolution', 'copy-resolution-export', 'resolution-export-output', 'resolution-export-status',
+      'setup-view', 'workspace-mode-label', 'setup-submit', 'setup-share-panel', 'setup-share-output', 'copy-setup-slack', 'copy-setup-link', 'answer-own-invitation', 'setup-share-status',
       'placement-view', 'review-view', 'setup-form', 'prompt', 'x-label', 'x-low', 'x-high',
       'y-label', 'y-low', 'y-high', 'items', 'item-count', 'setup-error', 'example-button', 'resume-banner',
       'resume-summary', 'resume-button', 'discard-button', 'placement-round', 'placement-progress', 'placement-prompt', 'placement-board',
@@ -88,7 +91,15 @@ const facilitatorApp = {
     this.elements['copy-resolution-export'].addEventListener('click', () => this.copyResolutionExport());
     this.elements['convergence-board'].addEventListener('pointermove', (event) => this.previewResolutionDrag(event));
     this.elements['convergence-board'].addEventListener('pointerup', (event) => this.finishResolutionDrag(event));
-    this.elements['convergence-board'].addEventListener('pointercancel', () => { this.draggedResolutionId = null; });
+    this.elements['convergence-board'].addEventListener('click', (event) => {
+      if (event.target === event.currentTarget && this.focusedResolutionId) this.focusResolution(null);
+    });
+    this.elements['convergence-board'].addEventListener('pointercancel', () => {
+      this.draggedResolutionId = null;
+      this.resolutionPointerStart = null;
+      this.resolutionPointerMoved = false;
+      this.resolutionPointerCanAdjust = false;
+    });
     this.elements['setup-form'].addEventListener('submit', (event) => this.start(event));
     for (const id of ['prompt', 'x-label', 'x-low', 'x-high', 'y-label', 'y-low', 'y-high', 'items']) {
       this.elements[id].addEventListener('input', () => {
@@ -342,6 +353,7 @@ const facilitatorApp = {
         this.setupShareArtifact = decodeShareUrl(url);
         this.collection = createCollection(nextSession);
         this.elements['setup-share-output'].value = url;
+        this.elements['answer-own-invitation'].href = url;
         this.elements['setup-share-panel'].hidden = false;
         this.elements['setup-share-status'].textContent = 'Setup ready. No placements or working state are included.';
         return;
@@ -638,9 +650,8 @@ const facilitatorApp = {
   renderConvergenceBoard(convergence) {
     const namespace = 'http://www.w3.org/2000/svg';
     const board = this.elements['convergence-board'];
-    const title = document.createElementNS(namespace, 'title');
-    title.textContent = `${convergence.responseCount} Quadrant responses with every submitted placement`;
-    board.replaceChildren(title);
+    board.setAttribute('aria-label', `${convergence.responseCount} Quadrant responses with every submitted placement`);
+    board.replaceChildren();
     const palette = ['#6f5ae8', '#f18b6d', '#4e9b55', '#bc7a16', '#247f91', '#a64f79'];
     convergence.items.forEach((item, itemIndex) => {
       const color = palette[itemIndex % palette.length];
@@ -683,13 +694,14 @@ const facilitatorApp = {
         board.append(mark);
       });
     });
-    const collisionLayout = new Map(layoutResolutionCards(this.resolution.items, { cardDiameter: 0.145 }).map((item) => [item.id, item]));
+    const collisionLayout = new Map(layoutResolutionCards(this.resolution.items, { cardDiameter: 0.18 }).map((item) => [item.id, item]));
     this.resolution.items.forEach((item, itemIndex) => {
       const color = palette[itemIndex % palette.length];
       const convergenceItem = convergence.items.find(({ id }) => id === item.id);
       const display = collisionLayout.get(item.id).displayResolved;
       const halo = document.createElementNS(namespace, 'circle');
       halo.classList.add('resolution-halo');
+      if (this.focusedResolutionId === item.id) halo.classList.add('focused');
       halo.dataset.disagreementHalo = item.id;
       halo.setAttribute('cx', String(8 + item.resolved.x * 84));
       halo.setAttribute('cy', String(72 - item.resolved.y * 64));
@@ -701,6 +713,7 @@ const facilitatorApp = {
       if (display.x !== item.resolved.x || display.y !== item.resolved.y) {
         const leader = document.createElementNS(namespace, 'line');
         leader.classList.add('collision-leader');
+        if (this.focusedResolutionId === item.id) leader.classList.add('focused');
         leader.dataset.collisionLeader = item.id;
         leader.dataset.trueX = String(item.resolved.x);
         leader.dataset.trueY = String(item.resolved.y);
@@ -710,7 +723,16 @@ const facilitatorApp = {
         leader.setAttribute('y1', String(72 - item.resolved.y * 64));
         leader.setAttribute('x2', String(8 + display.x * 84));
         leader.setAttribute('y2', String(72 - display.y * 64));
-        board.append(leader);
+        const anchor = document.createElementNS(namespace, 'circle');
+        anchor.classList.add('collision-anchor');
+        if (this.focusedResolutionId === item.id) anchor.classList.add('focused');
+        anchor.dataset.collisionAnchor = item.id;
+        anchor.dataset.itemId = item.id;
+        anchor.setAttribute('cx', leader.getAttribute('x1'));
+        anchor.setAttribute('cy', leader.getAttribute('y1'));
+        anchor.setAttribute('r', '1.6');
+        anchor.setAttribute('fill', color);
+        board.append(leader, anchor);
       }
 
       const card = document.createElementNS(namespace, 'g');
@@ -728,16 +750,38 @@ const facilitatorApp = {
       card.setAttribute('tabindex', '0');
       const collisionNote = display.x !== item.resolved.x || display.y !== item.resolved.y ? '; display offset to avoid overlap' : '';
       card.setAttribute('aria-label', `${item.text}; resolved at ${Math.round(item.resolved.x * 100)} percent ${this.collection.setup.xLabel}, ${Math.round(item.resolved.y * 100)} percent ${this.collection.setup.yLabel}${collisionNote}`);
-      card.addEventListener('click', () => this.focusResolution(item.id));
+      card.addEventListener('click', (event) => { if (event.detail === 0) this.toggleResolutionFocus(item.id); });
       card.addEventListener('keydown', (event) => this.moveResolutionByKeyboard(event, item.id));
       card.addEventListener('pointerdown', (event) => this.startResolutionDrag(event, item.id));
+      const hitTarget = document.createElementNS(namespace, 'circle');
+      hitTarget.classList.add('resolution-hit-target');
+      hitTarget.setAttribute('r', '6.5');
       const circle = document.createElementNS(namespace, 'circle');
       circle.setAttribute('r', '4.6');
       const label = document.createElementNS(namespace, 'text');
       label.textContent = String(itemIndex + 1);
-      card.append(circle, label);
+      card.append(hitTarget, circle, label);
       board.append(card);
     });
+    const addAxisLabel = (text, x, y, { anchor = 'start', transform = '', title: isTitle = false } = {}) => {
+      const label = document.createElementNS(namespace, 'text');
+      label.classList.add('convergence-axis-label');
+      if (isTitle) label.classList.add('convergence-axis-title');
+      label.dataset.convergenceAxisLabel = '';
+      label.textContent = text;
+      label.setAttribute('x', String(x));
+      label.setAttribute('y', String(y));
+      label.setAttribute('text-anchor', anchor);
+      if (transform) label.setAttribute('transform', transform);
+      board.append(label);
+    };
+    const { xLabel, xLow, xHigh, yLabel, yLow, yHigh } = this.collection.setup;
+    addAxisLabel(xLow, 8, 78);
+    addAxisLabel(xLabel, 50, 78, { anchor: 'middle', title: true });
+    addAxisLabel(xHigh, 92, 78, { anchor: 'end' });
+    addAxisLabel(yLow, 10, 70);
+    addAxisLabel(yLabel, 3, 40, { anchor: 'middle', transform: 'rotate(-90 3 40)', title: true });
+    addAxisLabel(yHigh, 10, 11);
     board.classList.toggle('has-focus', Boolean(this.focusedResolutionId));
     this.renderResolutionInspector(convergence);
   },
@@ -745,6 +789,14 @@ const facilitatorApp = {
   focusResolution(itemId) {
     this.focusedResolutionId = itemId;
     this.renderCollection();
+  },
+
+  toggleResolutionFocus(itemId) {
+    this.focusResolution(this.focusedResolutionId === itemId ? null : itemId);
+  },
+
+  restoreResolutionCardFocus(itemId) {
+    this.elements['convergence-board'].querySelector(`[data-resolution-card][data-item-id="${itemId}"]`)?.focus();
   },
 
   commitResolution(next) {
@@ -756,16 +808,27 @@ const facilitatorApp = {
   },
 
   moveResolutionByKeyboard(event, itemId) {
+    if (['Enter', ' '].includes(event.key)) {
+      event.preventDefault();
+      this.toggleResolutionFocus(itemId);
+      this.restoreResolutionCardFocus(itemId);
+      return;
+    }
     const delta = event.shiftKey ? 0.05 : 0.02;
     const movement = { ArrowLeft: [-delta, 0], ArrowRight: [delta, 0], ArrowUp: [0, delta], ArrowDown: [0, -delta] }[event.key];
     if (!movement) return;
     event.preventDefault();
+    if (this.focusedResolutionId !== itemId) {
+      this.focusResolution(itemId);
+      this.restoreResolutionCardFocus(itemId);
+      return;
+    }
     const item = this.resolution.items.find(({ id }) => id === itemId);
-    this.focusedResolutionId = itemId;
     this.commitResolution(adjustResolution(this.resolution, itemId, {
       x: clamp(item.resolved.x + movement[0], 0, 1),
       y: clamp(item.resolved.y + movement[1], 0, 1),
     }));
+    this.restoreResolutionCardFocus(itemId);
   },
 
   resolutionPoint(event) {
@@ -779,11 +842,20 @@ const facilitatorApp = {
   startResolutionDrag(event, itemId) {
     event.preventDefault();
     this.draggedResolutionId = itemId;
-    this.focusedResolutionId = itemId;
+    this.resolutionPointerStart = { x: event.clientX, y: event.clientY };
+    this.resolutionPointerMoved = false;
+    this.resolutionPointerCanAdjust = this.focusedResolutionId === itemId;
   },
 
   previewResolutionDrag(event) {
-    if (!this.draggedResolutionId) return;
+    if (!this.draggedResolutionId || !this.resolutionPointerStart) return;
+    const distance = Math.hypot(
+      event.clientX - this.resolutionPointerStart.x,
+      event.clientY - this.resolutionPointerStart.y,
+    );
+    if (distance < 5) return;
+    this.resolutionPointerMoved = true;
+    if (!this.resolutionPointerCanAdjust) return;
     const point = this.resolutionPoint(event);
     const card = this.elements['convergence-board'].querySelector(`[data-item-id="${this.draggedResolutionId}"].resolution-card`);
     card?.setAttribute('transform', `translate(${8 + point.x * 84} ${72 - point.y * 64})`);
@@ -792,7 +864,20 @@ const facilitatorApp = {
   finishResolutionDrag(event) {
     if (!this.draggedResolutionId) return;
     const itemId = this.draggedResolutionId;
+    const moved = this.resolutionPointerMoved;
+    const canAdjust = this.resolutionPointerCanAdjust;
     this.draggedResolutionId = null;
+    this.resolutionPointerStart = null;
+    this.resolutionPointerMoved = false;
+    this.resolutionPointerCanAdjust = false;
+    if (!moved) {
+      this.toggleResolutionFocus(itemId);
+      return;
+    }
+    if (!canAdjust) {
+      this.focusResolution(itemId);
+      return;
+    }
     this.commitResolution(adjustResolution(this.resolution, itemId, this.resolutionPoint(event)));
   },
 
@@ -820,14 +905,22 @@ const facilitatorApp = {
       button.dataset.navigatorItem = '';
       button.dataset.itemId = item.id;
       button.setAttribute('aria-current', String(item.id === this.focusedResolutionId));
-      button.setAttribute('aria-label', `${item.text}: ${item.placements.length} placements, ${Math.round(item.disagreement / Math.SQRT2 * 100)} percent spread`);
+      const itemNumber = String(item.inputIndex + 1);
+      button.setAttribute('aria-label', `Item ${itemNumber}, ${item.text}: ${item.placements.length} placements, ${Math.round(item.disagreement / Math.SQRT2 * 100)} percent spread`);
+      const identity = document.createElement('span');
+      identity.className = 'navigator-identity';
+      const number = document.createElement('span');
+      number.className = 'item-number';
+      number.dataset.itemNumber = '';
+      number.textContent = itemNumber;
       const label = document.createElement('strong');
       label.textContent = item.text;
+      identity.append(number, label);
       const spread = document.createElement('span');
       spread.className = 'navigator-spread';
       spread.textContent = `${Math.round(item.disagreement / Math.SQRT2 * 100)}% spread`;
-      button.append(label, spread);
-      button.addEventListener('click', () => this.focusResolution(item.id));
+      button.append(identity, spread);
+      button.addEventListener('click', () => this.toggleResolutionFocus(item.id));
       row.append(button);
       return row;
     }));
@@ -863,7 +956,14 @@ const facilitatorApp = {
     inspector.hidden = false;
     inspector.dataset.itemId = item.id;
     const heading = document.createElement('h3');
-    heading.textContent = item.text;
+    heading.className = 'resolution-heading';
+    const number = document.createElement('span');
+    number.className = 'item-number';
+    number.dataset.itemNumber = '';
+    number.textContent = String(this.resolution.items.findIndex(({ id }) => id === item.id) + 1);
+    const label = document.createElement('span');
+    label.textContent = item.text;
+    heading.append(number, label);
     const detail = document.createElement('p');
     detail.className = 'hint';
     detail.textContent = `${item.placements.length} placements · ${Math.round(item.disagreement / Math.SQRT2 * 100)}% spread`;
@@ -878,6 +978,13 @@ const facilitatorApp = {
 
   renderCollection() {
     const responses = this.collection?.responses ?? [];
+    const grid = this.elements['collection-grid'];
+    const importPanel = this.elements['response-import-panel'];
+    const hadResponses = grid.classList.contains('has-responses');
+    const hasResponses = responses.length > 0;
+    grid.classList.toggle('has-responses', hasResponses);
+    if (!hasResponses) importPanel.open = true;
+    else if (!hadResponses) importPanel.open = false;
     this.elements['response-count'].textContent = `${responses.length} ${responses.length === 1 ? 'response' : 'responses'}`;
     this.elements['response-list'].replaceChildren(...responses.map(({ contributor }) => {
       const item = document.createElement('li');
@@ -896,7 +1003,10 @@ const facilitatorApp = {
     this.renderResolutionNavigator(convergence);
     this.renderConvergenceBoard(convergence);
     const disputed = convergence.items.filter(({ disagreement }) => disagreement > 0).length;
-    this.elements['convergence-summary'].textContent = `${disputed} of ${convergence.items.length} options have differing placements. Every placement is retained.`;
+    const collisionNote = this.elements['convergence-board'].querySelector('.collision-leader')
+      ? ' Numbers may move to stay readable; solid connectors point to each true resolved position—the response midpoint until adjusted.'
+      : '';
+    this.elements['convergence-summary'].textContent = `${disputed} of ${convergence.items.length} options have differing placements. Every placement is retained.${collisionNote}`;
   },
 
   async copy() {
