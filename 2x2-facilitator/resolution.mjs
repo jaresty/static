@@ -120,7 +120,7 @@ export function formatResolutionExport(state, { includeAdjustments = false } = {
     if (includeAdjustments) {
       lines.push(item.adjustment.distancePercent
         ? `   Facilitator adjustment: ${item.adjustment.distancePercent}% of the board ${item.adjustment.direction}`
-        : '   Facilitator adjustment: None — participant midpoint retained');
+        : '   Facilitator adjustment: None — participant average retained');
     }
   });
   return `${lines.join('\n')}\n`;
