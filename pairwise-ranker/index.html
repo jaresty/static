@@ -50,6 +50,15 @@
     .mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 30px; }
     .tour-offer { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:18px; padding:14px 18px; border:1px solid #c9d99f; border-radius:16px; background:#f1f8df; }
     .tour-offer p { margin:3px 0 0; color:var(--muted); font-size:.84rem; }
+    .ai-callout { display:flex; align-items:center; justify-content:space-between; gap:18px; margin:24px 0 0; padding:18px; border:1px solid #cabffc; border-radius:18px; background:#eeeaff; }
+    .ai-callout p { margin:4px 0 0; color:var(--muted); }
+    .ai-dialog { width:min(680px, calc(100% - 20px)); max-height:min(820px, calc(100vh - 20px)); padding:0; border:0; border-radius:24px; background:var(--surface); color:var(--ink); box-shadow:0 28px 80px rgba(23,32,27,.28); }
+    .ai-dialog::backdrop { background:rgba(23,32,27,.62); }
+    .ai-dialog-body { padding:clamp(22px, 4vw, 38px); }
+    .ai-dialog-head { display:flex; align-items:start; justify-content:space-between; gap:18px; }
+    .ai-dialog-head h2 { margin:0; }
+    .ai-import-actions { display:flex; flex-wrap:wrap; gap:10px; margin:22px 0; }
+    @media (max-width:560px) { .ai-callout { align-items:flex-start; flex-direction:column; } }
     .mode-card { display: flex; min-height: 190px; flex-direction: column; align-items: flex-start; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); color: var(--ink); text-align: left; box-shadow: 0 12px 34px rgba(29,40,33,.08); }
     .mode-card:hover { border-color: #7ca63e; transform: translateY(-2px); }
     .mode-card strong { margin-top: auto; font-size: 1.28rem; letter-spacing: -.025em; }
@@ -176,6 +185,7 @@
         <p class="lede">Stack ranking creates a clear priority order by comparing two items at a time against one criterion, such as customer impact.</p>
         <p class="hint">Use it when everything feels important and a long list or scoring debate is not producing a decision.</p>
       </div>
+      <aside class="ai-callout"><div><strong>Want help framing the exercise?</strong><p>Use any AI assistant to propose a draft. You review everything before it becomes a setup.</p></div><div class="button-row" style="margin:0"><button class="button button-secondary" type="button" data-copy-ai-prompt>Copy AI prompt</button><button class="button button-primary" type="button" data-open-ai>Draft with AI</button></div></aside>
       <div class="mode-grid">
         <button class="mode-card mode-card-primary" id="solo-mode" type="button"><strong>Work solo</strong><span>Compare the options on your own and leave with a ranked list.</span></button>
         <button class="mode-card" id="setup-mode" type="button"><strong>Invite responses</strong><span>Send everyone the same criterion and options so they can rank privately.</span></button>
@@ -231,6 +241,8 @@
           <div class="button-row">
             <button class="button button-primary" id="setup-submit" type="submit">Start comparing <span aria-hidden="true">→</span></button>
             <button class="button button-secondary" id="example-button" type="button">Use an example</button>
+            <button class="button button-secondary" type="button" data-copy-ai-prompt>Copy AI prompt</button>
+            <button class="button button-quiet" type="button" data-open-ai>Draft with AI</button>
           </div>
           <div id="setup-share-panel" hidden><label for="setup-share-output" style="margin-top:22px">Setup link</label><textarea class="share-output" id="setup-share-output" readonly></textarea><div class="button-row"><button class="button button-accent" id="copy-setup-slack" type="button">Copy for Slack</button><button class="button button-secondary" id="copy-setup-link" type="button">Copy link</button></div><p class="status" id="setup-share-status" role="status"></p></div>
         </form>
@@ -318,6 +330,7 @@
       </section>
     </section>
 
+    <dialog class="ai-dialog" id="ai-draft-dialog" data-ai-import-panel aria-labelledby="ai-draft-title"><div class="ai-dialog-body"><div class="ai-dialog-head"><div><p class="eyebrow">AI-prepared draft</p><h2 id="ai-draft-title">Bring in a suggested setup.</h2></div><button class="button button-quiet" type="button" data-close-ai>Close AI setup</button></div><p class="lede">This app does not contact an AI or send your data anywhere. Copy instructions to any AI assistant, then open its draft link or import the fallback JSON.</p><div class="ai-import-actions"><button class="button button-primary" type="button" data-copy-ai-prompt>Copy AI prompt</button><button class="button button-secondary" id="ai-import-clipboard" type="button">Import from clipboard</button><button class="button button-quiet" id="ai-manual-toggle" type="button">Paste JSON manually</button></div><p class="status" id="ai-draft-status" role="status"></p><div id="ai-manual-import" hidden><label for="ai-draft-input">AI setup JSON</label><textarea id="ai-draft-input" placeholder="Paste the fallback JSON here"></textarea><button class="button button-primary" id="ai-review-json" type="button">Review JSON</button></div><section id="ai-draft-review" hidden aria-labelledby="ai-review-title"><h3 id="ai-review-title">Review and edit this draft</h3><label for="ai-review-criterion">Ranking criterion</label><input id="ai-review-criterion"><label for="ai-review-items" style="margin-top:14px">Items</label><textarea id="ai-review-items"></textarea><div class="button-row"><button class="button button-primary" id="ai-use-solo" type="button">Use solo</button><button class="button button-secondary" id="ai-use-invite" type="button">Invite responses</button><button class="button button-quiet" id="ai-discard-draft" type="button">Discard</button></div></section></div></dialog>
     <div id="live-region" class="sr-only" aria-live="polite"></div>
   </main>
   <script type="module" src="./app.js"></script>

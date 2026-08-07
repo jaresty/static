@@ -104,7 +104,8 @@
     input, select { min-height: 50px; padding: 0 14px; }
     textarea { min-height: 180px; padding: 14px; resize: vertical; line-height: 1.5; }
     input:focus, textarea:focus, select:focus, button:focus-visible { border-color: var(--violet); box-shadow: 0 0 0 4px rgba(111,90,232,.15); outline: none; }
-    .axis-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .axis-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .axis-grid > div:first-child { grid-column: 1 / -1; }
     .axis-block { margin-top: 24px; padding: 18px; border-radius: 16px; background: #f8f5ed; border: 1px solid var(--line); }
     .axis-block legend { padding: 0 8px; font-weight: 850; }
     .meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; color: var(--muted); font-size: .78rem; }
@@ -125,6 +126,9 @@
     .resume small { color: #5c6d4a; }
     .view-head { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 26px; }
     .round { color: var(--muted); font-size: .9rem; }
+    .placement-orientation { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: -10px 0 18px; }
+    .placement-orientation p { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,253,247,.72); color: var(--muted); font-size: .8rem; }
+    .placement-orientation strong { color: var(--ink); }
     .placement-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .65fr); gap: 18px; align-items: start; }
     .placement-controls { position: sticky; top: 18px; }
     .candidate-card { width: 100%; min-height: 120px; margin: 16px 0; padding: 20px; border: 2px dashed var(--violet); border-radius: 18px; background: var(--violet-soft); color: var(--ink); font-size: clamp(1.25rem, 3vw, 2rem); font-weight: 850; letter-spacing: -.035em; line-height: 1.1; overflow-wrap: anywhere; touch-action: none; }
@@ -139,6 +143,9 @@
     .board-wrap::before { content: "Y"; position: absolute; left: -38px; top: -4px; font-weight: 900; }
     .board-wrap::after { content: "X"; position: absolute; right: 0; bottom: -32px; font-weight: 900; }
     .axis-label { position: absolute; color: var(--muted); font-size: .72rem; font-weight: 750; pointer-events: none; }
+    .axis-title { position: absolute; z-index: 2; padding: 5px 8px; border-radius: 8px; background: rgba(255,253,247,.92); color: var(--ink); font-size: .72rem; font-weight: 850; pointer-events: none; }
+    .axis-title-x { left: 50%; bottom: 8px; transform: translateX(-50%); }
+    .axis-title-y { left: 8px; top: 50%; transform: translateY(-50%) rotate(-90deg); }
     .axis-x-low { left: 0; bottom: -28px; }
     .axis-x-high { right: 24px; bottom: -28px; }
     .axis-y-low { left: -44px; bottom: 12px; writing-mode: vertical-rl; transform: rotate(180deg); }
@@ -183,6 +190,21 @@
     .tour-offer { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 0 0 18px; padding: 14px 18px; border: 1px solid #c9d99f; border-radius: 16px; background: #f1f8df; }
     .tour-offer strong { display: block; }
     .tour-offer p { margin: 3px 0 0; color: var(--muted); font-size: .84rem; }
+    .ai-callout { display:flex; align-items:center; justify-content:space-between; gap:18px; margin:24px 0 0; padding:18px; border:1px solid #cabffc; border-radius:18px; background:var(--violet-soft); }
+    .ai-callout p { margin:4px 0 0; color:var(--muted); }
+    .ai-assistance { margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
+    .ai-assistance summary { width:max-content; color:var(--muted); font-size:.84rem; font-weight:800; cursor:pointer; }
+    .ai-assistance p { margin:10px 0 0; color:var(--muted); font-size:.8rem; line-height:1.45; }
+    .ai-assistance .button-row { margin-top:8px; }
+    .ai-dialog { width:min(720px, calc(100% - 20px)); max-height:min(820px, calc(100vh - 20px)); padding:0; border:0; border-radius:24px; background:var(--surface); color:var(--ink); box-shadow:0 28px 80px rgba(23,32,27,.28); }
+    .ai-dialog::backdrop { background:rgba(23,32,27,.62); }
+    .ai-dialog-body { padding:clamp(22px, 4vw, 38px); }
+    .ai-dialog-head { display:flex; align-items:start; justify-content:space-between; gap:18px; }
+    .ai-dialog-head h2 { margin:0; }
+    .ai-import-actions { display:flex; flex-wrap:wrap; gap:10px; margin:22px 0; }
+    .ai-review-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .ai-review-grid .wide { grid-column:1 / -1; }
+    @media (max-width:560px) { .ai-callout { align-items:flex-start; flex-direction:column; } .ai-review-grid { grid-template-columns:1fr; } .ai-review-grid .wide { grid-column:auto; } }
     @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
   </style>
 </head>
@@ -206,6 +228,7 @@
         <p class="lede">A 2×2 map places each option on two axes, such as effort and impact, so you can see trade-offs, clusters, and disagreement at a glance.</p>
         <p class="hint">Use it when a group needs to compare ideas without hiding the conversation inside one score.</p>
       </div>
+      <aside class="ai-callout"><div><strong>Want help framing the exercise?</strong><p>Use any AI assistant to propose a draft. You review everything before it becomes a setup.</p></div><div class="button-row" style="margin:0"><button class="button button-secondary" type="button" data-copy-ai-prompt>Copy AI prompt</button><button class="button button-primary" type="button" data-open-ai>Draft with AI</button></div></aside>
       <div class="mode-grid">
         <button class="mode-card mode-card-primary" id="solo-mode" type="button"><strong>Work solo</strong><span>Build one map yourself and leave with a visual set of priorities.</span></button>
         <button class="mode-card" id="setup-mode" type="button"><strong>Invite responses</strong><span>Send everyone the same prompt, axes, and options so they can map their view privately.</span></button>
@@ -267,6 +290,7 @@
           </div>
           <p class="error" id="setup-error" role="alert"></p>
           <div class="button-row"><button class="button button-primary" id="setup-submit" type="submit">Start placing</button><button class="button button-secondary" id="example-button" type="button">Use an example</button></div>
+          <details class="ai-assistance"><summary>Need help drafting?</summary><p>Use an external AI assistant to propose a setup, then review every field here.</p><div class="button-row"><button class="button button-quiet" type="button" data-copy-ai-prompt>Copy AI prompt</button><button class="button button-quiet" type="button" data-open-ai>Draft with AI</button></div></details>
           <div id="setup-share-panel" hidden><label for="setup-share-output" style="margin-top:22px">Setup link</label><textarea class="share-output" id="setup-share-output" readonly></textarea><div class="button-row"><button class="button button-accent" id="copy-setup-slack" type="button">Copy for Slack</button><button class="button button-secondary" id="copy-setup-link" type="button">Copy link</button></div><p class="status" id="setup-share-status" role="status"></p></div>
         </form>
         <aside class="panel setup-preview">
@@ -286,11 +310,14 @@
     </section>
 
     <section class="view" id="placement-view" aria-labelledby="placement-title" hidden>
-      <div class="view-head"><div><p class="eyebrow" id="placement-round">Round 1 · place on the grid</p><h2 id="placement-title">Put the conversation on the board.</h2></div><p class="round" id="placement-progress"></p></div>
+      <div class="view-head"><div><p class="eyebrow" id="placement-round">Round 1 · place on the grid</p><h2 id="placement-title">Put the conversation on the board.</h2><p class="placement-prompt" id="placement-prompt"></p></div><p class="round" id="placement-progress"></p></div>
+      <div class="placement-orientation" id="placement-orientation" aria-label="Decision frame"><p><strong>X</strong> <span id="placement-x-summary"></span></p><p><strong>Y</strong> <span id="placement-y-summary"></span></p></div>
       <div class="placement-layout">
         <section class="panel board-panel">
           <p class="eyebrow">Drag directly on both axes</p>
           <div class="board-wrap" id="placement-board" role="region" aria-label="2×2 placement board">
+            <span class="axis-title axis-title-x" id="placement-x-title"></span>
+            <span class="axis-title axis-title-y" id="placement-y-title"></span>
             <span class="axis-label axis-x-low" id="placement-x-low"></span><span class="axis-label axis-x-high" id="placement-x-high"></span>
             <span class="axis-label axis-y-low" id="placement-y-low"></span><span class="axis-label axis-y-high" id="placement-y-high"></span>
           </div>
@@ -336,6 +363,7 @@
         <div class="export-grid"><div><label for="export-format">Format</label><select id="export-format"><option value="markdown">Markdown</option><option value="json">JSON backup</option><option value="svg">SVG board</option></select><div class="button-row"><button class="button button-accent" id="copy-button" type="button">Copy</button><button class="button button-secondary" id="download-button" type="button">Download</button></div><p class="status" id="copy-status" role="status"></p></div><textarea id="export-output" readonly aria-label="Portable workshop result"></textarea></div>
       </section>
     </section>
+    <dialog class="ai-dialog" id="ai-draft-dialog" data-ai-import-panel aria-labelledby="ai-draft-title"><div class="ai-dialog-body"><div class="ai-dialog-head"><div><p class="eyebrow">AI-prepared draft</p><h2 id="ai-draft-title">Bring in a suggested setup.</h2></div><button class="button button-quiet" type="button" data-close-ai>Close AI setup</button></div><p class="lede">This app does not contact an AI or send your data anywhere. Copy instructions to any AI assistant, then open its draft link or import the fallback JSON.</p><div class="ai-import-actions"><button class="button button-primary" type="button" data-copy-ai-prompt>Copy AI prompt</button><button class="button button-secondary" id="ai-import-clipboard" type="button">Import from clipboard</button><button class="button button-quiet" id="ai-manual-toggle" type="button">Paste JSON manually</button></div><p class="status" id="ai-draft-status" role="status"></p><div id="ai-manual-import" hidden><label for="ai-draft-input">AI setup JSON</label><textarea id="ai-draft-input" placeholder="Paste the fallback JSON here"></textarea><button class="button button-primary" id="ai-review-json" type="button">Review JSON</button></div><section id="ai-draft-review" hidden aria-labelledby="ai-review-title"><h3 id="ai-review-title">Review and edit this draft</h3><div class="ai-review-grid"><div class="wide"><label for="ai-review-question">Decision question</label><input id="ai-review-question"></div><div><label for="ai-review-x-label">Horizontal criterion</label><input id="ai-review-x-label"></div><div><label for="ai-review-y-label">Vertical criterion</label><input id="ai-review-y-label"></div><div><label for="ai-review-x-low">Left endpoint</label><input id="ai-review-x-low"></div><div><label for="ai-review-x-high">Right endpoint</label><input id="ai-review-x-high"></div><div><label for="ai-review-y-low">Bottom endpoint</label><input id="ai-review-y-low"></div><div><label for="ai-review-y-high">Top endpoint</label><input id="ai-review-y-high"></div><div class="wide"><label for="ai-review-options">Options</label><textarea id="ai-review-options"></textarea></div></div><div class="button-row"><button class="button button-primary" id="ai-use-solo" type="button">Use solo</button><button class="button button-secondary" id="ai-use-invite" type="button">Invite responses</button><button class="button button-quiet" id="ai-discard-draft" type="button">Discard</button></div></section></div></dialog>
     <div class="sr-only" id="live-region" aria-live="polite"></div>
   </main>
   <script type="module" src="./app.js"></script>

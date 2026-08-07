@@ -26,6 +26,7 @@ import {
   undoResolution,
 } from './resolution.mjs';
 import { layoutResolutionCards } from './collision-layout.mjs';
+import { decodeQuadrantDraftFragment, parseQuadrantDraft, quadrantAiPrompt } from './ai-draft.mjs';
 
 const appStorage = new URLSearchParams(location.search).get('walkthrough') === '1' ? sessionStorage : localStorage;
 const clamp = (value) => Math.max(0, Math.min(1, Number(value.toFixed(2))));
@@ -54,15 +55,17 @@ const facilitatorApp = {
       'setup-view', 'workspace-mode-label', 'setup-submit', 'setup-share-panel', 'setup-share-output', 'copy-setup-slack', 'copy-setup-link', 'setup-share-status',
       'placement-view', 'review-view', 'setup-form', 'prompt', 'x-label', 'x-low', 'x-high',
       'y-label', 'y-low', 'y-high', 'items', 'item-count', 'setup-error', 'example-button', 'resume-banner',
-      'resume-summary', 'resume-button', 'discard-button', 'placement-round', 'placement-progress', 'placement-board',
-      'placement-x-low', 'placement-x-high', 'placement-y-low', 'placement-y-high', 'candidate-card',
+      'resume-summary', 'resume-button', 'discard-button', 'placement-round', 'placement-progress', 'placement-prompt', 'placement-board',
+      'placement-x-title', 'placement-y-title', 'placement-x-summary', 'placement-y-summary', 'placement-x-low', 'placement-x-high', 'placement-y-low', 'placement-y-high', 'candidate-card',
       'placement-coordinates', 'place-option', 'placement-undo', 'placement-reset', 'review-round', 'review-prompt',
       'new-workshop', 'board', 'board-x-low', 'board-x-high', 'board-y-low', 'board-y-high',
       'setup-preview-prompt', 'setup-x-edit', 'setup-y-edit', 'setup-x-low', 'setup-x-high', 'setup-y-low', 'setup-y-high', 'setup-options',
       'review-undo', 'response-share-panel', 'contributor-name', 'include-response-preview', 'copy-response-slack', 'copy-response-link', 'response-share-status',
       'export-format', 'export-output', 'copy-button', 'download-button', 'copy-status', 'live-region',
+      'ai-draft-dialog', 'ai-import-clipboard', 'ai-manual-toggle', 'ai-manual-import', 'ai-draft-input', 'ai-review-json', 'ai-draft-status', 'ai-draft-review', 'ai-review-question', 'ai-review-x-label', 'ai-review-x-low', 'ai-review-x-high', 'ai-review-y-label', 'ai-review-y-low', 'ai-review-y-high', 'ai-review-options', 'ai-use-solo', 'ai-use-invite', 'ai-discard-draft',
     ];
     this.elements = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
+    this.initAiDraft();
 
     this.elements['solo-mode'].addEventListener('click', () => this.enterSolo());
     this.elements['setup-mode'].addEventListener('click', () => this.enterFacilitatorSetup());
@@ -120,6 +123,103 @@ const facilitatorApp = {
     if (!this.loadShared() && !this.loadSavedResolution()) this.load();
     this.updateCount();
     this.updatePreview();
+    if (location.hash.startsWith('#draft=')) {
+      try { this.reviewAiDraft(decodeQuadrantDraftFragment(location.hash)); }
+      catch (error) { this.showAiError(error); }
+    }
+  },
+
+  initAiDraft() {
+    const dialog = this.elements['ai-draft-dialog'];
+    document.querySelectorAll('[data-open-ai]').forEach((button) => button.addEventListener('click', () => dialog.showModal()));
+    document.querySelectorAll('[data-close-ai]').forEach((button) => button.addEventListener('click', () => dialog.close()));
+    document.querySelectorAll('[data-copy-ai-prompt]').forEach((button) => button.addEventListener('click', () => this.copyAiPrompt(button)));
+    this.elements['ai-manual-toggle'].addEventListener('click', () => {
+      this.elements['ai-manual-import'].hidden = false;
+      this.elements['ai-draft-input'].focus();
+    });
+    this.elements['ai-review-json'].addEventListener('click', () => this.reviewAiDraft(this.elements['ai-draft-input'].value));
+    this.elements['ai-import-clipboard'].addEventListener('click', async () => {
+      try { this.reviewAiDraft(await navigator.clipboard.readText()); }
+      catch (error) { this.showAiError(error); }
+    });
+    this.elements['ai-use-solo'].addEventListener('click', () => this.useAiDraft('solo'));
+    this.elements['ai-use-invite'].addEventListener('click', () => this.useAiDraft('invite'));
+    this.elements['ai-discard-draft'].addEventListener('click', () => this.discardAiDraft());
+  },
+
+  async copyAiPrompt(button) {
+    try {
+      await navigator.clipboard.writeText(quadrantAiPrompt(new URL(location.pathname, location.origin).href));
+      this.elements['ai-draft-status'].textContent = 'AI prompt copied.';
+      this.elements['live-region'].textContent = 'AI setup prompt copied.';
+      button.textContent = 'Prompt copied';
+      window.clearTimeout(button.copyFeedbackTimer);
+      button.copyFeedbackTimer = window.setTimeout(() => { button.textContent = 'Copy AI prompt'; }, 2000);
+    } catch {
+      this.showAiError(new Error('Clipboard access was unavailable. Open Draft with AI to copy manually.'));
+    }
+  },
+
+  showAiError(error) {
+    const dialog = this.elements['ai-draft-dialog'];
+    this.elements['ai-draft-status'].textContent = error.message;
+    if (!dialog.open) dialog.showModal();
+  },
+
+  reviewAiDraft(raw) {
+    const draft = parseQuadrantDraft(raw);
+    this.elements['ai-review-question'].value = draft.question;
+    this.elements['ai-review-x-label'].value = draft.x.label;
+    this.elements['ai-review-x-low'].value = draft.x.low;
+    this.elements['ai-review-x-high'].value = draft.x.high;
+    this.elements['ai-review-y-label'].value = draft.y.label;
+    this.elements['ai-review-y-low'].value = draft.y.low;
+    this.elements['ai-review-y-high'].value = draft.y.high;
+    this.elements['ai-review-options'].value = draft.options.join('\n');
+    this.elements['ai-draft-review'].hidden = false;
+    this.elements['ai-draft-status'].textContent = 'Draft loaded. Review every field before choosing how to use it.';
+    if (!this.elements['ai-draft-dialog'].open) this.elements['ai-draft-dialog'].showModal();
+  },
+
+  aiDraftFromReview() {
+    return parseQuadrantDraft({
+      version: 1,
+      kind: 'quadrant-draft',
+      question: this.elements['ai-review-question'].value,
+      x: { label: this.elements['ai-review-x-label'].value, low: this.elements['ai-review-x-low'].value, high: this.elements['ai-review-x-high'].value },
+      y: { label: this.elements['ai-review-y-label'].value, low: this.elements['ai-review-y-low'].value, high: this.elements['ai-review-y-high'].value },
+      options: this.elements['ai-review-options'].value.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean),
+    });
+  },
+
+  useAiDraft(mode) {
+    try {
+      const draft = this.aiDraftFromReview();
+      this.elements.prompt.value = draft.question;
+      this.elements['x-label'].value = draft.x.label;
+      this.elements['x-low'].value = draft.x.low;
+      this.elements['x-high'].value = draft.x.high;
+      this.elements['y-label'].value = draft.y.label;
+      this.elements['y-low'].value = draft.y.low;
+      this.elements['y-high'].value = draft.y.high;
+      this.elements.items.value = draft.options.join('\n');
+      this.updateCount();
+      this.updatePreview();
+      history.replaceState(null, '', `${location.pathname}${location.search}`);
+      this.elements['ai-draft-dialog'].close();
+      if (mode === 'solo') this.enterSolo(); else this.enterFacilitatorSetup();
+      this.elements.prompt.focus();
+    } catch (error) { this.showAiError(error); }
+  },
+
+  discardAiDraft() {
+    history.replaceState(null, '', `${location.pathname}${location.search}`);
+    this.elements['ai-draft-input'].value = '';
+    this.elements['ai-draft-review'].hidden = true;
+    this.elements['ai-manual-import'].hidden = true;
+    this.elements['ai-draft-status'].textContent = '';
+    this.elements['ai-draft-dialog'].close();
   },
 
   loadSavedResolution() {
@@ -362,6 +462,10 @@ const facilitatorApp = {
           this.draftPosition = latest;
           this.elements['placement-coordinates'].textContent = this.describePosition(latest);
         }
+        if (!candidate && this.session.phase === 'placement') {
+          this.elements['candidate-card'].textContent = this.item(itemId).text;
+          this.elements['placement-coordinates'].textContent = this.describePosition(latest);
+        }
       };
       const finish = (upEvent) => {
         element.releasePointerCapture(upEvent.pointerId);
@@ -381,6 +485,9 @@ const facilitatorApp = {
           this.save();
           this.announce(`${this.item(itemId).text} repositioned.`);
           this.render();
+        } else if (this.session.phase === 'placement') {
+          this.elements['candidate-card'].textContent = this.item(this.session.candidateId).text;
+          this.elements['placement-coordinates'].textContent = this.describePosition(this.draftPosition);
         }
       };
       element.addEventListener('pointermove', move);
@@ -400,6 +507,11 @@ const facilitatorApp = {
     const placedCount = Object.keys(this.session.positions).length;
     if (document.body.dataset.mode !== 'response') this.elements['placement-round'].textContent = `Round ${this.session.round} · place on the grid`;
     this.elements['placement-progress'].textContent = `${placedCount} of ${this.session.items.length} placed`;
+    this.elements['placement-prompt'].textContent = this.session.prompt;
+    this.elements['placement-x-title'].textContent = this.session.xLabel;
+    this.elements['placement-y-title'].textContent = this.session.yLabel;
+    this.elements['placement-x-summary'].textContent = `${this.session.xLabel}: ${this.session.xLow} — ${this.session.xHigh}`;
+    this.elements['placement-y-summary'].textContent = `${this.session.yLabel}: ${this.session.yLow} — ${this.session.yHigh}`;
     this.setAxisLabels('placement');
     this.renderPlacedItems(this.elements['placement-board']);
     this.makeBoardItem({ ...candidate, ...this.draftPosition, focused: false }, this.elements['placement-board'], { candidate: true });

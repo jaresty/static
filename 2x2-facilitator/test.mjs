@@ -180,6 +180,133 @@ test('c12 Quadrant convergence preserves placements and exposes disagreement', a
   assert.ok(result.items.find(({ id }) => id === 'item-1').disagreement > 0);
 });
 
+test('participant placement names the decision question', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+  const script = await readFile(new URL('./app.js', import.meta.url), 'utf8');
+
+  assert.ok(
+    /id="placement-prompt"/.test(html) && /placement-prompt[^\n]*textContent\s*=\s*this\.session\.prompt/.test(script),
+    'participant placement must render the session decision question',
+  );
+});
+
+test('participant placement names the horizontal criterion', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+  const script = await readFile(new URL('./app.js', import.meta.url), 'utf8');
+  assert.ok(
+    /id="placement-x-title"/.test(html) && /placement-x-title[^\n]*textContent\s*=\s*this\.session\.xLabel/.test(script),
+    'participant placement must render the horizontal criterion title',
+  );
+});
+
+test('participant placement names the vertical criterion', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+  const script = await readFile(new URL('./app.js', import.meta.url), 'utf8');
+  assert.ok(
+    /id="placement-y-title"/.test(html) && /placement-y-title[^\n]*textContent\s*=\s*this\.session\.yLabel/.test(script),
+    'participant placement must render the vertical criterion title',
+  );
+});
+
+test('participant sees both complete endpoint pairs before placement controls', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+  const script = await readFile(new URL('./app.js', import.meta.url), 'utf8');
+  const orientationIndex = html.indexOf('id="placement-orientation"');
+  assert.ok(
+    orientationIndex >= 0
+      && orientationIndex < html.indexOf('class="placement-layout"')
+      && /id="placement-x-summary"/.test(html)
+      && /id="placement-y-summary"/.test(html)
+      && /placement-x-summary[^\n]*this\.session\.xLow[^\n]*this\.session\.xHigh/.test(script)
+      && /placement-y-summary[^\n]*this\.session\.yLow[^\n]*this\.session\.yHigh/.test(script),
+    'participant orientation must show both endpoint pairs before placement',
+  );
+});
+
+test('existing-option drag feedback names the actively dragged option', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const script = await readFile(new URL('./app.js', import.meta.url), 'utf8');
+  assert.ok(
+    /if \(!candidate && this\.session\.phase === 'placement'\)[\s\S]*?candidate-card[^\n]*this\.item\(itemId\)\.text/.test(script),
+    'existing-option drag must name the actively dragged option',
+  );
+});
+
+test('existing-option drag feedback follows the active coordinates', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const script = await readFile(new URL('./app.js', import.meta.url), 'utf8');
+  assert.ok(
+    /if \(!candidate && this\.session\.phase === 'placement'\)[\s\S]*?placement-coordinates[^\n]*this\.describePosition\(latest\)/.test(script),
+    'existing-option drag must show the actively dragged coordinates',
+  );
+});
+
+test('solo setup keeps Start placing as its sole primary action', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+  const form = html.match(/<form class="panel" id="setup-form">[\s\S]*?<\/form>/)?.[0] ?? '';
+  assert.ok(
+    /class="button button-primary" id="setup-submit"[^>]*>Start placing<\/button>/.test(form)
+      && (form.match(/button-primary/g) ?? []).length === 1,
+    'solo setup must have Start placing as its sole primary action',
+  );
+});
+
+test('invite setup keeps Create setup link as its sole primary action', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+  const script = await readFile(new URL('./app.js', import.meta.url), 'utf8');
+  const form = html.match(/<form class="panel" id="setup-form">[\s\S]*?<\/form>/)?.[0] ?? '';
+  assert.ok(
+    /class="button button-primary" id="setup-submit"/.test(form)
+      && (form.match(/button-primary/g) ?? []).length === 1
+      && /enterFacilitatorSetup\(\)[\s\S]*?setup-submit[^\n]*Create setup link/.test(script),
+    'invite setup must have Create setup link as its sole primary action',
+  );
+});
+
+test('facilitator setup groups AI controls as alternate assistance', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+  const form = html.match(/<form class="panel" id="setup-form">[\s\S]*?<\/form>/)?.[0] ?? '';
+  const assistance = form.match(/<details class="ai-assistance"[\s\S]*?<\/details>/)?.[0] ?? '';
+  assert.ok(
+    /<summary>Need help drafting\?<\/summary>/.test(assistance)
+      && /data-copy-ai-prompt/.test(assistance)
+      && /data-open-ai/.test(assistance)
+      && form.indexOf('class="ai-assistance"') > form.indexOf('id="example-button"'),
+    'AI controls must live in a labeled alternate-assistance disclosure',
+  );
+});
+
+test('facilitator axis inputs give endpoint pairs two columns', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+  assert.ok(/\.axis-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*1fr\)/.test(html), 'axis input grid must use two columns');
+});
+
+test('facilitator criterion input spans the endpoint columns', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+  assert.ok(/\.axis-grid\s*>\s*div:first-child\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/.test(html), 'criterion input must span both endpoint columns');
+});
+
+test('unchanged existing-option drag restores the current candidate name', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const script = await readFile(new URL('./app.js', import.meta.url), 'utf8');
+  assert.ok(/else if \(this\.session\.phase === 'placement'\)[\s\S]*?candidate-card[^\n]*this\.item\(this\.session\.candidateId\)\.text/.test(script), 'finished existing-option drag must restore the candidate name');
+});
+
+test('unchanged existing-option drag restores the candidate coordinates', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const script = await readFile(new URL('./app.js', import.meta.url), 'utf8');
+  assert.ok(/else if \(this\.session\.phase === 'placement'\)\s*\{[^}]*placement-coordinates[^\n]*this\.describePosition\(this\.draftPosition\)/.test(script), 'finished existing-option drag must restore the candidate coordinates');
+});
+
 test('static artifact passes without runtime dependencies and exposes keyboard-addressable controls', async () => {
   const { readFile } = await import('node:fs/promises');
   const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
@@ -212,7 +339,7 @@ test('static artifact passes without runtime dependencies and exposes keyboard-a
   assert.match(script, /placeAt/);
   assert.match(script, /localStorage/);
   assert.doesNotMatch(script, /scrollIntoView/);
-  assert.match(script, /const scrollY = window\.scrollY[\s\S]*requestAnimationFrame[\s\S]*scrollTo\(\{ top: scrollY/);
+  assert.match(script, /const scrollY = \['placement', 'review'\]\.includes\(name\) \? window\.scrollY : 0;[\s\S]*requestAnimationFrame[\s\S]*scrollTo\(\{ top: scrollY/);
   assert.match(script, /ArrowLeft|ArrowRight/);
   assert.match(script, /ArrowUp|ArrowDown/);
   assert.match(html, /@media \(max-width: 560px\)[\s\S]*?\.board-wrap\s*\{[^}]*min-height:\s*0[^}]*aspect-ratio:\s*\.78/is);

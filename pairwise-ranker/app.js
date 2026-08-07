@@ -14,6 +14,7 @@ import {
   encodeSetupUrl,
   convergeResponses,
 } from './collaboration.mjs';
+import { decodeStackDraftFragment, parseStackDraft, stackAiPrompt } from './ai-draft.mjs';
 
 const appStorage = new URLSearchParams(location.search).get('walkthrough') === '1' ? sessionStorage : localStorage;
 
@@ -39,8 +40,10 @@ const rankingApp = {
       'uncertainty-notice', 'back-to-compare-button', 'new-ranking-button', 'export-format',
       'response-share-panel', 'contributor-name', 'include-response-preview', 'copy-response-slack', 'copy-response-link', 'response-share-status',
       'export-output', 'copy-button', 'copy-status', 'live-region',
+      'ai-draft-dialog', 'ai-import-clipboard', 'ai-manual-toggle', 'ai-manual-import', 'ai-draft-input', 'ai-review-json', 'ai-draft-status', 'ai-draft-review', 'ai-review-criterion', 'ai-review-items', 'ai-use-solo', 'ai-use-invite', 'ai-discard-draft',
     ];
     this.elements = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
+    this.initAiDraft();
 
     this.elements['solo-mode'].addEventListener('click', () => this.enterSolo());
     this.elements['setup-mode'].addEventListener('click', () => this.enterFacilitatorSetup());
@@ -77,6 +80,88 @@ const rankingApp = {
 
     if (!this.loadShared()) this.loadSavedSession();
     this.updateCount();
+    if (location.hash.startsWith('#draft=')) {
+      try { this.reviewAiDraft(decodeStackDraftFragment(location.hash)); }
+      catch (error) { this.showAiError(error); }
+    }
+  },
+
+  initAiDraft() {
+    const dialog = this.elements['ai-draft-dialog'];
+    document.querySelectorAll('[data-open-ai]').forEach((button) => button.addEventListener('click', () => dialog.showModal()));
+    document.querySelectorAll('[data-close-ai]').forEach((button) => button.addEventListener('click', () => dialog.close()));
+    document.querySelectorAll('[data-copy-ai-prompt]').forEach((button) => button.addEventListener('click', () => this.copyAiPrompt(button)));
+    this.elements['ai-manual-toggle'].addEventListener('click', () => {
+      this.elements['ai-manual-import'].hidden = false;
+      this.elements['ai-draft-input'].focus();
+    });
+    this.elements['ai-review-json'].addEventListener('click', () => this.reviewAiDraft(this.elements['ai-draft-input'].value));
+    this.elements['ai-import-clipboard'].addEventListener('click', async () => {
+      try { this.reviewAiDraft(await navigator.clipboard.readText()); }
+      catch (error) { this.showAiError(error); }
+    });
+    this.elements['ai-use-solo'].addEventListener('click', () => this.useAiDraft('solo'));
+    this.elements['ai-use-invite'].addEventListener('click', () => this.useAiDraft('invite'));
+    this.elements['ai-discard-draft'].addEventListener('click', () => this.discardAiDraft());
+  },
+
+  async copyAiPrompt(button) {
+    try {
+      await navigator.clipboard.writeText(stackAiPrompt(new URL(location.pathname, location.origin).href));
+      this.elements['ai-draft-status'].textContent = 'AI prompt copied.';
+      this.elements['live-region'].textContent = 'AI setup prompt copied.';
+      button.textContent = 'Prompt copied';
+      window.clearTimeout(button.copyFeedbackTimer);
+      button.copyFeedbackTimer = window.setTimeout(() => { button.textContent = 'Copy AI prompt'; }, 2000);
+    } catch {
+      this.showAiError(new Error('Clipboard access was unavailable. Open Draft with AI to copy manually.'));
+    }
+  },
+
+  showAiError(error) {
+    const dialog = this.elements['ai-draft-dialog'];
+    this.elements['ai-draft-status'].textContent = error.message;
+    if (!dialog.open) dialog.showModal();
+  },
+
+  reviewAiDraft(raw) {
+    const draft = parseStackDraft(raw);
+    this.elements['ai-review-criterion'].value = draft.criterion;
+    this.elements['ai-review-items'].value = draft.items.join('\n');
+    this.elements['ai-draft-review'].hidden = false;
+    this.elements['ai-draft-status'].textContent = 'Draft loaded. Review every field before choosing how to use it.';
+    if (!this.elements['ai-draft-dialog'].open) this.elements['ai-draft-dialog'].showModal();
+  },
+
+  aiDraftFromReview() {
+    return parseStackDraft({
+      version: 1,
+      kind: 'stack-rank-draft',
+      criterion: this.elements['ai-review-criterion'].value,
+      items: this.elements['ai-review-items'].value.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean),
+    });
+  },
+
+  useAiDraft(mode) {
+    try {
+      const draft = this.aiDraftFromReview();
+      this.elements.criterion.value = draft.criterion;
+      this.elements.items.value = draft.items.join('\n');
+      this.updateCount();
+      history.replaceState(null, '', `${location.pathname}${location.search}`);
+      this.elements['ai-draft-dialog'].close();
+      if (mode === 'solo') this.enterSolo(); else this.enterFacilitatorSetup();
+      this.elements.criterion.focus();
+    } catch (error) { this.showAiError(error); }
+  },
+
+  discardAiDraft() {
+    history.replaceState(null, '', `${location.pathname}${location.search}`);
+    this.elements['ai-draft-input'].value = '';
+    this.elements['ai-draft-review'].hidden = true;
+    this.elements['ai-manual-import'].hidden = true;
+    this.elements['ai-draft-status'].textContent = '';
+    this.elements['ai-draft-dialog'].close();
   },
 
   itemById(id) {
