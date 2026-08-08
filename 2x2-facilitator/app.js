@@ -105,8 +105,8 @@ const facilitatorApp = {
     this.elements['show-response-names'].addEventListener('change', (event) => { this.showResponseNames = event.currentTarget.checked; this.renderCollection(); });
     this.elements['export-resolution'].addEventListener('click', () => this.renderResolutionExport());
     this.elements['copy-resolution-export'].addEventListener('click', () => this.copyResolutionExport());
-    this.elements['copy-facilitator-view'].addEventListener('click', () => this.copyFacilitatorShare('view'));
-    this.elements['copy-facilitator-handoff'].addEventListener('click', () => this.copyFacilitatorShare('handoff'));
+    this.elements['copy-facilitator-view'].addEventListener('click', (event) => this.copyFacilitatorShare('view', event.currentTarget));
+    this.elements['copy-facilitator-handoff'].addEventListener('click', (event) => this.copyFacilitatorShare('handoff', event.currentTarget));
     this.elements['download-facilitator-backup'].addEventListener('click', () => this.downloadFacilitatorBackup());
     this.elements['import-facilitator-handoff'].addEventListener('click', () => this.importFacilitatorHandoff());
     this.elements['discard-facilitator-handoff'].addEventListener('click', () => this.discardFacilitatorHandoff());
@@ -1141,8 +1141,10 @@ const facilitatorApp = {
     }
   },
 
-  async copyFacilitatorShare(kind) {
+  async copyFacilitatorShare(kind, button) {
     if (!this.resolution) return;
+    this.elements['copy-facilitator-view'].textContent = 'Copy view-only link';
+    this.elements['copy-facilitator-handoff'].textContent = 'Copy editable handoff';
     const includeNames = this.elements['include-handoff-names'].checked;
     const artifact = kind === 'view'
       ? createFacilitatorViewArtifact(this.resolution)
@@ -1152,14 +1154,22 @@ const facilitatorApp = {
       : createFacilitatorHandoffArtifact(this.resolution, { includeNames });
     const output = this.elements['facilitator-share-output'];
     const status = this.elements['facilitator-share-status'];
+    status.setAttribute('role', 'status');
     try {
       const url = encodeFacilitatorArtifactUrl(artifact, new URL(location.pathname, location.origin).toString());
       output.value = url;
       status.textContent = kind === 'view'
         ? 'View-only link ready. It excludes participant names and individual placements.'
         : `Editable handoff ready. Individual placements included; participant names ${includeNames ? 'included' : 'excluded'}.`;
-      try { await navigator.clipboard.writeText(url); status.textContent += ' Link copied.'; }
-      catch { output.select(); status.textContent += ' Select and copy the link.'; }
+      try {
+        await navigator.clipboard.writeText(url);
+        button.textContent = 'Copied!';
+        status.textContent += ' Link copied.';
+      } catch {
+        output.select();
+        status.setAttribute('role', 'alert');
+        status.textContent += ' Copy failed — select and copy the link below.';
+      }
     } catch (error) {
       output.value = facilitatorArtifactJson(this.facilitatorBackupArtifact);
       status.textContent = `${error.message} Editable JSON is ready below or as a download.`;

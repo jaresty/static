@@ -27,7 +27,8 @@ for spec in "quadrant:2x2-facilitator:$quadrant_url:placement-view" "stack-rank:
   session="collaboration-modes-$name-$$"
 
   agent-browser --session "$session" open "http://127.0.0.1:$PORT/$path/?check=$$" >/dev/null
-  agent-browser --session "$session" click '#setup-mode' >/dev/null
+  agent-browser --session "$session" eval 'document.querySelector("#setup-mode").click()' >/dev/null
+  agent-browser --session "$session" wait --fn 'window.scrollY === 0' >/dev/null
   setup_ok="$(agent-browser --session "$session" eval 'document.body.dataset.mode === "facilitator-setup" && !document.querySelector("#setup-view")?.hidden && document.querySelector("#workspace-mode-label")?.textContent.trim() === "FACILITATOR SETUP" && document.querySelector("#workspace-mode-label").getBoundingClientRect().top >= 0 && window.scrollY === 0 && /links contain setup data/i.test(document.querySelector("#privacy-note")?.textContent || "")')"
   [[ "$setup_ok" == true ]] || failures+=("$name facilitator setup")
 
