@@ -59,6 +59,46 @@ test('persistence behavior passes for adjustment, undo, and serialized restorati
   assert.deepEqual(JSON.parse(JSON.stringify(session)), session);
 });
 
+test('workshop history stays flat, bounded, compact, and repeatedly undoable', async () => {
+  const { moveItem, undo } = await loadCore();
+  const original = await completedSession();
+  const itemId = original.items[0].id;
+  const states = [original];
+  for (let index = 0; index < 8; index += 1) {
+    states.push(moveItem(states.at(-1), itemId, 'x', index % 2 === 0 ? 1 : -1));
+  }
+  const current = states.at(-1);
+  assert.ok(current.history.every((entry) => entry.history.length === 0), 'history snapshots must not contain nested history');
+  assert.ok(JSON.stringify(current).length < 50_000, 'a short edit sequence must remain compact');
+
+  const legacy = structuredClone(original);
+  legacy.history = Array.from({ length: 60 }, () => ({ ...structuredClone(original), history: [structuredClone(original)] }));
+  const normalized = moveItem(legacy, itemId, 'x', 1);
+  assert.equal(normalized.history.length, 50, 'the next transition must bound legacy history');
+  assert.ok(normalized.history.every((entry) => entry.history.length === 0), 'legacy history must flatten on the next transition');
+
+  let undone = current;
+  for (let index = states.length - 2; index >= 0; index -= 1) {
+    undone = undo(undone);
+    assert.deepEqual(undone.positions, states[index].positions);
+  }
+});
+
+test('serialized session growth stays constant after the history limit', async () => {
+  const { moveItem } = await loadCore();
+  let session = await completedSession();
+  const itemId = session.items[0].id;
+  for (let index = 0; index < 60; index += 1) {
+    session = moveItem(session, itemId, 'x', index % 2 === 0 ? 1 : -1);
+  }
+  const bytesAtLimit = JSON.stringify(session).length;
+  for (let index = 60; index < 1000; index += 1) {
+    session = moveItem(session, itemId, 'x', index % 2 === 0 ? 1 : -1);
+  }
+  const bytesAfterManyEdits = JSON.stringify(session).length;
+  assert.ok(bytesAfterManyEdits <= bytesAtLimit + 1_000, `serialized history grew from ${bytesAtLimit} to ${bytesAfterManyEdits} bytes`);
+});
+
 test('regrid behavior passes by turning selected focus items into a new round', async () => {
   const { setFocus, regridFocus } = await loadCore();
   let session = await completedSession();

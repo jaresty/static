@@ -198,6 +198,7 @@
     .export-grid { display: grid; grid-template-columns: 180px 1fr; gap: 12px; align-items: start; }
     .export-panel textarea { min-height: 210px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem; }
     .status { min-height: 1.4em; color: var(--muted); font-size: .8rem; }
+    .storage-status { margin:-34px 0 24px; padding:10px 12px; border:1px solid #d59a42; border-radius:12px; background:#fff3d8; color:#714913; font-size:.84rem; font-weight:750; }
     @media (max-width: 820px) {
       .collection-grid.has-responses { grid-template-columns: 1fr; }
       .resolution-workspace { grid-template-columns: 1fr; grid-template-areas: "main" "side" "export"; }
@@ -246,6 +247,7 @@
       <div class="brand"><a class="home-link" id="home-link" href="./" aria-label="Quadrant home"><span class="mark" aria-hidden="true">⌗</span><span>Quadrant</span></a></div>
       <div class="button-row" style="margin:0"><a class="button button-quiet" data-all-tools href="../">All tools</a><button class="button button-quiet" id="back-to-choices" type="button" hidden>← Back to choices</button><button class="button button-quiet" id="take-tour" type="button">Take a tour</button><div class="privacy" id="privacy-note">Everything stays in this browser</div></div>
     </header>
+    <p class="storage-status" id="storage-status" role="status" hidden></p>
     <aside class="tour-offer" data-tour-offer><div><strong>New to Quadrant?</strong><p>Practice the complete workflow with disposable sample data.</p></div><div class="button-row" style="margin:0"><button class="button button-primary" type="button" data-start-tour>Show me</button><button class="button button-quiet" type="button" data-dismiss-tour>Not now</button></div></aside>
 
     <div class="resume" id="resume-banner" hidden>
