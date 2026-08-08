@@ -62,13 +62,14 @@ const facilitatorApp = {
   aiOptionDescriptions: new Map(),
   facilitatorShareArtifact: null,
   facilitatorBackupArtifact: null,
+  sharedFocusedResultId: null,
   elements: {},
 
   init() {
     compactQuadrantStorage(appStorage);
     const ids = [
       'mode-view', 'solo-mode', 'setup-mode', 'combine-mode', 'facilitator-backup-input', 'facilitator-backup-status', 'back-to-choices', 'privacy-note', 'invitation-view', 'invitation-summary', 'start-response',
-      'shared-facilitator-view', 'shared-facilitator-title', 'shared-facilitator-description', 'shared-facilitator-meta', 'shared-facilitator-x-summary', 'shared-facilitator-y-summary', 'shared-facilitator-board', 'shared-facilitator-results',
+      'shared-facilitator-view', 'shared-facilitator-title', 'shared-facilitator-description', 'shared-facilitator-meta', 'shared-facilitator-x-summary', 'shared-facilitator-y-summary', 'shared-facilitator-board', 'shared-facilitator-results', 'shared-facilitator-disagreement-list', 'shared-facilitator-inspector',
       'facilitator-handoff-view', 'facilitator-handoff-summary', 'import-facilitator-handoff', 'discard-facilitator-handoff',
       'collection-view', 'collection-grid', 'response-import-panel', 'response-links', 'collect-responses', 'clear-responses', 'collection-status', 'response-count', 'response-list', 'disagreement-list', 'previous-disagreement', 'next-disagreement', 'undo-resolution', 'reset-all-resolutions', 'show-response-names', 'convergence-board', 'resolution-inspector', 'convergence-summary', 'include-resolution-adjustments', 'export-resolution', 'copy-resolution-export', 'resolution-export-output', 'resolution-export-status',
       'include-handoff-names', 'copy-facilitator-view', 'copy-facilitator-handoff', 'download-facilitator-backup', 'facilitator-share-output', 'facilitator-share-status',
@@ -346,6 +347,7 @@ const facilitatorApp = {
       document.body.dataset.mode = 'shared-facilitator';
       this.elements['privacy-note'].textContent = 'This link contains aggregate results only';
       const { setup, responseCount, items } = artifact.payload;
+      this.sharedFocusedResultId = null;
       this.elements['shared-facilitator-title'].textContent = setup.prompt;
       this.setOptionalText(this.elements['shared-facilitator-description'], setup.activityDescription);
       this.elements['shared-facilitator-meta'].textContent = `${responseCount} ${responseCount === 1 ? 'response' : 'responses'} · ${setup.xLabel} × ${setup.yLabel}`;
@@ -363,14 +365,31 @@ const facilitatorApp = {
         const y = 72 - item.resolved.y * 64;
         const baselineX = 8 + item.baseline.x * 84;
         const baselineY = 72 - item.baseline.y * 64;
-        if (Math.hypot(x - baselineX, y - baselineY) > .01) nodes.push(svg('line', { x1: baselineX, y1: baselineY, x2: x, y2: y, stroke: '#6f5ae8', 'stroke-width': '.7' }));
-        nodes.push(svg('circle', { cx: x, cy: y, r: 4.5 + Math.min(5, item.disagreement * 5), fill: 'rgba(111,90,232,.12)', stroke: '#6f5ae8' }));
-        nodes.push(svg('circle', { cx: x, cy: y, r: 3.2, fill: '#17201b' }));
-        const number = svg('text', { x, y: y + 1.2, fill: '#c7f36b', 'font-size': '3.5', 'font-weight': '900', 'text-anchor': 'middle' });
+        const group = svg('g', { class: 'shared-result-group', tabindex: '0', role: 'button', 'data-shared-result-item': '', 'data-item-id': item.id, 'aria-label': `Item ${index + 1}, ${item.text}` });
+        if (Math.hypot(x - baselineX, y - baselineY) > .01) group.append(svg('line', { class: 'adjustment-line', x1: baselineX, y1: baselineY, x2: x, y2: y }));
+        group.append(svg('circle', { class: 'resolution-halo', cx: x, cy: y, r: 4.5 + Math.min(5, item.disagreement * 5), fill: '#6f5ae8', stroke: '#6f5ae8' }));
+        const card = svg('g', { class: 'resolution-card' });
+        card.append(svg('circle', { cx: x, cy: y, r: 3.2 }));
+        const number = svg('text', { x, y: y + 1.2, 'pointer-events': 'none' });
         number.textContent = String(index + 1);
-        nodes.push(number);
+        card.append(number);
+        group.append(card);
+        group.addEventListener('click', () => this.toggleSharedResultFocus(item.id));
+        group.addEventListener('keydown', (event) => {
+          if (!['Enter', ' '].includes(event.key)) return;
+          event.preventDefault();
+          this.toggleSharedResultFocus(item.id);
+        });
+        nodes.push(group);
       });
       board.replaceChildren(...nodes);
+      this.renderResultNavigator(items, {
+        list: this.elements['shared-facilitator-disagreement-list'],
+        focusedId: this.sharedFocusedResultId,
+        onToggle: (itemId) => this.toggleSharedResultFocus(itemId),
+        responseCount,
+        itemDataset: 'sharedNavigatorItem',
+      });
       this.elements['shared-facilitator-results'].replaceChildren(...items.map((item, index) => {
         const row = document.createElement('li');
         const heading = document.createElement('strong');
@@ -383,6 +402,7 @@ const facilitatorApp = {
         row.append(heading, description, result);
         return row;
       }));
+      this.renderSharedResultFocus();
       this.show('shared-facilitator');
       return true;
     }
@@ -399,6 +419,49 @@ const facilitatorApp = {
     summary.replaceChildren(title, count, disclosure);
     this.show('facilitator-handoff');
     return true;
+  },
+
+  toggleSharedResultFocus(itemId) {
+    this.sharedFocusedResultId = this.sharedFocusedResultId === itemId ? null : itemId;
+    this.renderSharedResultFocus();
+  },
+
+  renderSharedResultFocus() {
+    if (this.facilitatorShareArtifact?.kind !== 'facilitator-view') return;
+    const { setup, items } = this.facilitatorShareArtifact.payload;
+    for (const button of this.elements['shared-facilitator-disagreement-list'].querySelectorAll('[data-shared-navigator-item]')) {
+      button.setAttribute('aria-current', String(button.dataset.itemId === this.sharedFocusedResultId));
+    }
+    const board = this.elements['shared-facilitator-board'];
+    board.classList.toggle('has-focus', Boolean(this.sharedFocusedResultId));
+    for (const group of board.querySelectorAll('[data-shared-result-item]')) {
+      const focused = group.dataset.itemId === this.sharedFocusedResultId;
+      group.classList.toggle('focused', focused);
+      for (const mark of group.querySelectorAll('.resolution-halo, .resolution-card, .adjustment-line')) mark.classList.toggle('focused', focused);
+    }
+    const inspector = this.elements['shared-facilitator-inspector'];
+    const item = items.find(({ id }) => id === this.sharedFocusedResultId);
+    if (!item) {
+      inspector.hidden = true;
+      delete inspector.dataset.itemId;
+      return;
+    }
+    inspector.hidden = false;
+    inspector.dataset.itemId = item.id;
+    const title = document.createElement('h3');
+    title.className = 'resolution-heading';
+    title.textContent = item.text;
+    const description = document.createElement('p');
+    description.className = 'context-description';
+    description.textContent = item.description;
+    description.hidden = !item.description;
+    const finalPosition = document.createElement('p');
+    finalPosition.className = 'hint';
+    finalPosition.textContent = `Final position: ${Math.round(item.resolved.x * 100)}% ${setup.xLabel}, ${Math.round(item.resolved.y * 100)}% ${setup.yLabel}`;
+    const spread = document.createElement('p');
+    spread.className = 'hint';
+    spread.textContent = `${Math.round(item.disagreement / Math.SQRT2 * 100)}% disagreement · aggregate result only`;
+    inspector.replaceChildren(title, description, finalPosition, spread);
   },
 
   async reviewFacilitatorBackup(event) {
@@ -1091,18 +1154,19 @@ const facilitatorApp = {
     this.focusResolution(items[next].id);
   },
 
-  renderResolutionNavigator(convergence) {
-    const items = this.navigatorItems(convergence);
-    this.elements['disagreement-list'].replaceChildren(...items.map((item) => {
+  renderResultNavigator(sourceItems, { list, focusedId, onToggle = null, responseCount = null, itemDataset = 'navigatorItem' }) {
+    const items = this.navigatorItems({ items: sourceItems });
+    list.replaceChildren(...items.map((item) => {
       const row = document.createElement('li');
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'navigator-item';
-      button.dataset.navigatorItem = '';
+      button.dataset[itemDataset] = '';
       button.dataset.itemId = item.id;
-      button.setAttribute('aria-current', String(item.id === this.focusedResolutionId));
+      button.setAttribute('aria-current', String(item.id === focusedId));
       const itemNumber = String(item.inputIndex + 1);
-      button.setAttribute('aria-label', `Item ${itemNumber}, ${item.text}: ${item.placements.length} placements, ${Math.round(item.disagreement / Math.SQRT2 * 100)} percent spread`);
+      const evidenceCount = responseCount ?? item.placements.length;
+      button.setAttribute('aria-label', `Item ${itemNumber}, ${item.text}: ${evidenceCount} responses, ${Math.round(item.disagreement / Math.SQRT2 * 100)} percent spread`);
       const identity = document.createElement('span');
       identity.className = 'navigator-identity';
       const number = document.createElement('span');
@@ -1116,10 +1180,18 @@ const facilitatorApp = {
       spread.className = 'navigator-spread';
       spread.textContent = `${Math.round(item.disagreement / Math.SQRT2 * 100)}% spread`;
       button.append(identity, spread);
-      button.addEventListener('click', () => this.toggleResolutionFocus(item.id));
+      if (onToggle) button.addEventListener('click', () => onToggle(item.id));
       row.append(button);
       return row;
     }));
+  },
+
+  renderResolutionNavigator(convergence) {
+    this.renderResultNavigator(convergence.items, {
+      list: this.elements['disagreement-list'],
+      focusedId: this.focusedResolutionId,
+      onToggle: (itemId) => this.toggleResolutionFocus(itemId),
+    });
   },
 
   renderResolutionExport() {
