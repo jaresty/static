@@ -367,13 +367,8 @@ const facilitatorApp = {
         const baselineY = 72 - item.baseline.y * 64;
         const group = svg('g', { class: 'shared-result-group', tabindex: '0', role: 'button', 'data-shared-result-item': '', 'data-item-id': item.id, 'aria-label': `Item ${index + 1}, ${item.text}` });
         if (Math.hypot(x - baselineX, y - baselineY) > .01) group.append(svg('line', { class: 'adjustment-line', x1: baselineX, y1: baselineY, x2: x, y2: y }));
-        group.append(svg('circle', { class: 'resolution-halo', cx: x, cy: y, r: 4.5 + Math.min(5, item.disagreement * 5), fill: '#6f5ae8', stroke: '#6f5ae8' }));
-        const card = svg('g', { class: 'resolution-card' });
-        card.append(svg('circle', { cx: x, cy: y, r: 3.2 }));
-        const number = svg('text', { x, y: y + 1.2, 'pointer-events': 'none' });
-        number.textContent = String(index + 1);
-        card.append(number);
-        group.append(card);
+        group.append(this.createResultHalo(item, index, item.disagreement));
+        group.append(this.createResultCard(item, index));
         group.addEventListener('click', () => this.toggleSharedResultFocus(item.id));
         group.addEventListener('keydown', (event) => {
           if (!['Enter', ' '].includes(event.key)) return;
@@ -383,7 +378,12 @@ const facilitatorApp = {
         nodes.push(group);
       });
       board.replaceChildren(...nodes);
+      this.appendResultAxisLabels(board, setup);
       const hasDisagreement = items.some(({ disagreement }) => disagreement > 0);
+      const hasAdjustments = items.some((item) => Math.hypot(item.resolved.x - item.baseline.x, item.resolved.y - item.baseline.y) > .01);
+      for (const entry of this.elements['shared-facilitator-view'].querySelectorAll('[data-legend-layer]')) {
+        entry.hidden = entry.dataset.legendLayer === 'disagreement' ? !hasDisagreement : !hasAdjustments;
+      }
       this.elements['shared-facilitator-navigator-heading'].textContent = hasDisagreement ? 'Items · most disagreement first' : 'Items · select to inspect';
       this.elements['shared-facilitator-navigator-meta'].textContent = items.length > 6 ? `${items.length} items · scroll to see all` : `${items.length} items`;
       this.renderResultNavigator(items, {
@@ -422,7 +422,7 @@ const facilitatorApp = {
 
   renderSharedResultFocus() {
     if (this.facilitatorShareArtifact?.kind !== 'facilitator-view') return;
-    const { setup, items } = this.facilitatorShareArtifact.payload;
+    const { setup, responseCount, items } = this.facilitatorShareArtifact.payload;
     for (const button of this.elements['shared-facilitator-disagreement-list'].querySelectorAll('[data-shared-navigator-item]')) {
       button.setAttribute('aria-current', String(button.dataset.itemId === this.sharedFocusedResultId));
     }
@@ -454,7 +454,9 @@ const facilitatorApp = {
     finalPosition.textContent = `Final position: ${Math.round(item.resolved.x * 100)}% ${setup.xLabel}, ${Math.round(item.resolved.y * 100)}% ${setup.yLabel}`;
     const spread = document.createElement('p');
     spread.className = 'hint';
-    spread.textContent = `${Math.round(item.disagreement / Math.SQRT2 * 100)}% disagreement · aggregate result only`;
+    spread.textContent = responseCount === 1
+      ? 'Single response result'
+      : `${Math.round(item.disagreement / Math.SQRT2 * 100)}% disagreement · aggregate result only`;
     inspector.replaceChildren(title, description, finalPosition, spread);
   },
 
@@ -923,14 +925,68 @@ const facilitatorApp = {
     this.renderCollection();
   },
 
+  resultColor(index) {
+    return ['#6f5ae8', '#f18b6d', '#4e9b55', '#bc7a16', '#247f91', '#a64f79'][index % 6];
+  },
+
+  createResultHalo(item, index, disagreement) {
+    const halo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const color = this.resultColor(index);
+    halo.classList.add('resolution-halo');
+    halo.setAttribute('cx', String(8 + item.resolved.x * 84));
+    halo.setAttribute('cy', String(72 - item.resolved.y * 64));
+    halo.setAttribute('r', String(4 + Math.min(9, disagreement * 10)));
+    halo.setAttribute('fill', color);
+    halo.setAttribute('stroke', color);
+    return halo;
+  },
+
+  createResultCard(item, index) {
+    const namespace = 'http://www.w3.org/2000/svg';
+    const card = document.createElementNS(namespace, 'g');
+    card.classList.add('resolution-card');
+    card.setAttribute('transform', `translate(${8 + item.resolved.x * 84} ${72 - item.resolved.y * 64})`);
+    const hitTarget = document.createElementNS(namespace, 'circle');
+    hitTarget.classList.add('resolution-hit-target');
+    hitTarget.setAttribute('r', '6.6');
+    const circle = document.createElementNS(namespace, 'circle');
+    circle.setAttribute('r', '4.6');
+    const label = document.createElementNS(namespace, 'text');
+    label.textContent = String(index + 1);
+    card.append(hitTarget, circle, label);
+    return card;
+  },
+
+  appendResultAxisLabels(board, setup) {
+    const namespace = 'http://www.w3.org/2000/svg';
+    const addLabel = (text, x, y, { anchor = 'start', transform = '', title = false } = {}) => {
+      const label = document.createElementNS(namespace, 'text');
+      label.classList.add('convergence-axis-label');
+      if (title) label.classList.add('convergence-axis-title');
+      label.dataset.convergenceAxisLabel = '';
+      label.textContent = text;
+      label.setAttribute('x', String(x));
+      label.setAttribute('y', String(y));
+      label.setAttribute('text-anchor', anchor);
+      if (transform) label.setAttribute('transform', transform);
+      board.append(label);
+    };
+    const { xLabel, xLow, xHigh, yLabel, yLow, yHigh } = setup;
+    addLabel(xLow, 8, 78);
+    addLabel(xLabel, 50, 78, { anchor: 'middle', title: true });
+    addLabel(xHigh, 92, 78, { anchor: 'end' });
+    addLabel(yLow, 10, 70);
+    addLabel(yLabel, 3, 40, { anchor: 'middle', transform: 'rotate(-90 3 40)', title: true });
+    addLabel(yHigh, 10, 11);
+  },
+
   renderConvergenceBoard(convergence) {
     const namespace = 'http://www.w3.org/2000/svg';
     const board = this.elements['convergence-board'];
     board.setAttribute('aria-label', `${convergence.responseCount} Quadrant responses with every submitted placement`);
     board.replaceChildren();
-    const palette = ['#6f5ae8', '#f18b6d', '#4e9b55', '#bc7a16', '#247f91', '#a64f79'];
     convergence.items.forEach((item, itemIndex) => {
-      const color = palette[itemIndex % palette.length];
+      const color = this.resultColor(itemIndex);
       item.placements.forEach((placement) => {
         const mark = document.createElementNS(namespace, 'circle');
         mark.classList.add('placement-mark');
@@ -948,18 +1004,11 @@ const facilitatorApp = {
       });
     });
     this.resolution.items.forEach((item, itemIndex) => {
-      const color = palette[itemIndex % palette.length];
       const convergenceItem = convergence.items.find(({ id }) => id === item.id);
       const display = item.resolved;
-      const halo = document.createElementNS(namespace, 'circle');
-      halo.classList.add('resolution-halo');
+      const halo = this.createResultHalo(item, itemIndex, convergenceItem.disagreement);
       if (this.focusedResolutionId === item.id) halo.classList.add('focused');
       halo.dataset.disagreementHalo = item.id;
-      halo.setAttribute('cx', String(8 + item.resolved.x * 84));
-      halo.setAttribute('cy', String(72 - item.resolved.y * 64));
-      halo.setAttribute('r', String(4 + Math.min(9, convergenceItem.disagreement * 10)));
-      halo.setAttribute('fill', color);
-      halo.setAttribute('stroke', color);
       board.append(halo);
 
       const adjusted = item.resolved.x !== item.baseline.x || item.resolved.y !== item.baseline.y;
@@ -983,8 +1032,7 @@ const facilitatorApp = {
         board.append(adjustmentLine, averageMarker);
       }
 
-      const card = document.createElementNS(namespace, 'g');
-      card.classList.add('resolution-card');
+      const card = this.createResultCard(item, itemIndex);
       if (this.focusedResolutionId === item.id) card.classList.add('focused');
       card.dataset.resolutionCard = item.id;
       card.dataset.itemId = item.id;
@@ -995,42 +1043,15 @@ const facilitatorApp = {
       card.dataset.averageY = String(item.baseline.y);
       card.dataset.displayX = String(display.x);
       card.dataset.displayY = String(display.y);
-      card.setAttribute('transform', `translate(${8 + display.x * 84} ${72 - display.y * 64})`);
       card.setAttribute('role', 'button');
       card.setAttribute('tabindex', '0');
       card.setAttribute('aria-label', `${item.text}; current group result at ${Math.round(item.resolved.x * 100)} percent ${this.collection.setup.xLabel}, ${Math.round(item.resolved.y * 100)} percent ${this.collection.setup.yLabel}`);
       card.addEventListener('click', (event) => { if (event.detail === 0) this.toggleResolutionFocus(item.id); });
       card.addEventListener('keydown', (event) => this.moveResolutionByKeyboard(event, item.id));
       card.addEventListener('pointerdown', (event) => this.startResolutionDrag(event, item.id));
-      const hitTarget = document.createElementNS(namespace, 'circle');
-      hitTarget.classList.add('resolution-hit-target');
-      hitTarget.setAttribute('r', '6.5');
-      const circle = document.createElementNS(namespace, 'circle');
-      circle.setAttribute('r', '4.6');
-      const label = document.createElementNS(namespace, 'text');
-      label.textContent = String(itemIndex + 1);
-      card.append(hitTarget, circle, label);
       board.append(card);
     });
-    const addAxisLabel = (text, x, y, { anchor = 'start', transform = '', title: isTitle = false } = {}) => {
-      const label = document.createElementNS(namespace, 'text');
-      label.classList.add('convergence-axis-label');
-      if (isTitle) label.classList.add('convergence-axis-title');
-      label.dataset.convergenceAxisLabel = '';
-      label.textContent = text;
-      label.setAttribute('x', String(x));
-      label.setAttribute('y', String(y));
-      label.setAttribute('text-anchor', anchor);
-      if (transform) label.setAttribute('transform', transform);
-      board.append(label);
-    };
-    const { xLabel, xLow, xHigh, yLabel, yLow, yHigh } = this.collection.setup;
-    addAxisLabel(xLow, 8, 78);
-    addAxisLabel(xLabel, 50, 78, { anchor: 'middle', title: true });
-    addAxisLabel(xHigh, 92, 78, { anchor: 'end' });
-    addAxisLabel(yLow, 10, 70);
-    addAxisLabel(yLabel, 3, 40, { anchor: 'middle', transform: 'rotate(-90 3 40)', title: true });
-    addAxisLabel(yHigh, 10, 11);
+    this.appendResultAxisLabels(board, this.collection.setup);
     const focusedEvidence = board.querySelectorAll(`[data-placement-mark][data-item-id="${this.focusedResolutionId}"], [data-adjustment-line="${this.focusedResolutionId}"], [data-average-marker="${this.focusedResolutionId}"]`);
     focusedEvidence.forEach((node) => board.append(node));
     const focusedCard = board.querySelector(`[data-resolution-card][data-item-id="${this.focusedResolutionId}"]`);
@@ -1160,7 +1181,10 @@ const facilitatorApp = {
       button.setAttribute('aria-current', String(item.id === focusedId));
       const itemNumber = String(item.inputIndex + 1);
       const evidenceCount = responseCount ?? item.placements.length;
-      button.setAttribute('aria-label', `Item ${itemNumber}, ${item.text}: ${evidenceCount} responses, ${Math.round(item.disagreement / Math.SQRT2 * 100)} percent spread`);
+      const secondary = secondaryText ? secondaryText(item) : `${Math.round(item.disagreement / Math.SQRT2 * 100)}% spread`;
+      button.setAttribute('aria-label', secondaryText
+        ? `Item ${itemNumber}, ${item.text}: ${secondary}`
+        : `Item ${itemNumber}, ${item.text}: ${evidenceCount} responses, ${Math.round(item.disagreement / Math.SQRT2 * 100)} percent spread`);
       const identity = document.createElement('span');
       identity.className = 'navigator-identity';
       const number = document.createElement('span');
@@ -1172,7 +1196,7 @@ const facilitatorApp = {
       identity.append(number, label);
       const spread = document.createElement('span');
       spread.className = 'navigator-spread';
-      spread.textContent = secondaryText ? secondaryText(item) : `${Math.round(item.disagreement / Math.SQRT2 * 100)}% spread`;
+      spread.textContent = secondary;
       button.append(identity, spread);
       if (onToggle) button.addEventListener('click', () => onToggle(item.id));
       row.append(button);

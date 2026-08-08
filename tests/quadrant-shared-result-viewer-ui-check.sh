@@ -25,7 +25,7 @@ agent-browser --session "$session" eval 'localStorage.clear();localStorage.setIt
 agent-browser --session "$session" open "$url" >/dev/null
 case "$PROPERTY" in
   1)
-    contract="$(agent-browser --session "$session" eval 'Boolean(document.querySelector("#shared-facilitator-board")&&document.querySelector("#shared-facilitator-view .resolution-legend")&&document.querySelector("#shared-facilitator-disagreement-list")&&document.querySelectorAll("#shared-facilitator-disagreement-list [data-shared-navigator-item]").length===2)')"
+    contract="$(agent-browser --session "$session" eval '(()=>{const labels=[...document.querySelectorAll("#shared-facilitator-board .convergence-axis-label")].map(node=>node.textContent);return JSON.stringify(labels)===JSON.stringify(["Lower value","Value","Higher value","Lower confidence","Confidence","Higher confidence"])})()')"
     ;;
   2)
     agent-browser --session "$session" eval 'document.querySelector("#shared-facilitator-disagreement-list [data-shared-navigator-item]").click()' >/dev/null
@@ -33,7 +33,7 @@ case "$PROPERTY" in
     ;;
   3)
     [[ "${VIOLATE_PRIVACY:-0}" != 1 ]] || agent-browser --session "$session" eval 'localStorage.setItem("quadrant:leak","1");const button=document.createElement("button");button.dataset.editableControl="";document.querySelector("#shared-facilitator-view").append(button)' >/dev/null
-    contract="$(agent-browser --session "$session" eval 'localStorage.length===1&&localStorage.getItem("sentinel")==="unchanged"&&!document.querySelector("#shared-facilitator-view [data-participant-position],#shared-facilitator-view [data-editable-control],#shared-facilitator-view #show-response-names,#shared-facilitator-view #undo-resolution,#shared-facilitator-view #reset-all-resolutions")')"
+    contract="$(agent-browser --session "$session" eval '(()=>{const view=document.querySelector("#shared-facilitator-view");return localStorage.length===1&&localStorage.getItem("sentinel")==="unchanged"&&!view.querySelector("[data-participant-position],[data-editable-control],#show-response-names,#undo-resolution,#reset-all-resolutions")&&!/Alex|Blair/.test(view.innerText)})()')"
     ;;
   4)
     agent-browser --session "$session" set viewport 390 844 >/dev/null
@@ -41,7 +41,7 @@ case "$PROPERTY" in
     contract="$(agent-browser --session "$session" eval '(()=>{const targets=[...document.querySelectorAll("#shared-facilitator-disagreement-list [data-shared-navigator-item]")];return document.documentElement.scrollWidth===document.documentElement.clientWidth&&targets.length===2&&targets.every(target=>target.getBoundingClientRect().height>=42)})()')"
     ;;
   5)
-    contract="$(agent-browser --session "$session" eval 'Boolean(document.querySelector("#shared-facilitator-board .resolution-halo")&&document.querySelector("#shared-facilitator-board .resolution-card")&&document.querySelector("#shared-facilitator-board .adjustment-line"))')"
+    contract="$(agent-browser --session "$session" eval '(()=>{const groups=[...document.querySelectorAll("#shared-facilitator-board [data-shared-result-item]")];return groups.length===2&&groups.every(group=>{const halo=group.querySelector(".resolution-halo");const card=group.querySelector(".resolution-card");const hit=card?.querySelector(".resolution-hit-target");const point=card?.querySelector("circle:not(.resolution-hit-target)");const text=card?.querySelector("text");return /^translate\(/.test(card?.getAttribute("transform")||"")&&point?.getAttribute("r")==="4.6"&&hit?.getAttribute("r")==="6.6"&&!point.hasAttribute("cx")&&!point.hasAttribute("cy")&&!text.hasAttribute("x")&&!text.hasAttribute("y")&&getComputedStyle(text).dominantBaseline==="central"&&!point.hasAttribute("fill")&&halo.getAttribute("fill")===halo.getAttribute("stroke")})&&groups[0].querySelector(".resolution-halo").getAttribute("fill")==="#6f5ae8"&&groups[1].querySelector(".resolution-halo").getAttribute("fill")==="#f18b6d"&&Number(groups[0].querySelector(".resolution-halo").getAttribute("r"))>8&&Boolean(document.querySelector("#shared-facilitator-board .adjustment-line"))})()')"
     ;;
   6)
     agent-browser --session "$session" eval 'document.querySelector("#shared-facilitator-disagreement-list [data-shared-navigator-item]").click()' >/dev/null

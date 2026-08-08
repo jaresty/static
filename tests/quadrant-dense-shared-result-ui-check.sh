@@ -34,6 +34,17 @@ case "$PROPERTY" in
   4)
     contract="$(agent-browser --session "$session" eval 'document.querySelector("#shared-facilitator-navigator-meta")?.innerText.trim()==="14 items · scroll to see all"')"
     ;;
+  5)
+    agent-browser --session "$session" eval 'document.querySelector("#shared-facilitator-disagreement-list [data-shared-navigator-item]").click()' >/dev/null
+    contract="$(agent-browser --session "$session" eval '(()=>{const legend=document.querySelector("#shared-facilitator-view .resolution-legend");const inspector=document.querySelector("#shared-facilitator-inspector");return legend.querySelectorAll("[data-legend-entry]:not([hidden])").length===0&&/single response result/i.test(inspector.innerText)&&!/aggregate result|disagreement/i.test(inspector.innerText)})()')"
+    ;;
+  6)
+    contract="$(agent-browser --session "$session" eval '(()=>[...document.querySelectorAll("#shared-facilitator-disagreement-list [data-shared-navigator-item]")].every(button=>{const visible=button.querySelector(".navigator-spread").innerText;const label=button.getAttribute("aria-label");return label.includes(visible)&&!/percent spread|responses/i.test(label)}))()')"
+    ;;
+  7)
+    agent-browser --session "$session" set viewport 390 844 >/dev/null
+    contract="$(agent-browser --session "$session" eval '(()=>[...document.querySelectorAll("#shared-facilitator-board [data-shared-result-item]")].every(group=>Math.min(group.getBoundingClientRect().width,group.getBoundingClientRect().height)>=42))()')"
+    ;;
   *) echo "Unknown property: $PROPERTY"; exit 2;;
 esac
 [[ "$contract" == true ]] || { echo "FAIL dense shared result property $PROPERTY: contract=$contract"; exit 1; }

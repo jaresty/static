@@ -12,8 +12,8 @@ const checks = {
   '4': [html.includes('Participant dots are intentionally excluded from this link'), 'FAIL property 4: view-only result does not explain omitted participant dots'],
   '5': [app.includes("button.textContent = 'Copied!'") && app.includes("status.setAttribute('role', 'status')") && app.includes("status.textContent += ' Link copied.'"), 'FAIL property 5: successful clipboard writes lack unmistakable button and live-status feedback'],
   '6': [app.includes("status.setAttribute('role', 'alert')") && app.includes('Copy failed — select and copy the link below.'), 'FAIL property 6: rejected clipboard writes lack an actionable alert fallback'],
-  '7': [sharedView.includes('data-legend-entry><i class="legend-halo"'), 'FAIL property 7: view-only halo legend has no visible matching swatch'],
-  '8': [sharedView.includes('data-legend-entry><i class="legend-line legend-line-adjustment"'), 'FAIL property 8: view-only adjustment legend has no visible purple swatch'],
+  '7': [sharedView.includes('data-legend-layer="disagreement"><i class="legend-halo"'), 'FAIL property 7: view-only halo legend has no visible matching swatch'],
+  '8': [sharedView.includes('data-legend-layer="adjustment"><i class="legend-line legend-line-adjustment"'), 'FAIL property 8: view-only adjustment legend has no visible purple swatch'],
 };
 
 if (!checks[property]) {
