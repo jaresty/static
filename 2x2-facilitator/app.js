@@ -28,6 +28,15 @@ import {
 } from './resolution.mjs';
 import { decodeQuadrantDraftFragment, parseQuadrantDraft, quadrantAiPrompt } from './ai-draft.mjs';
 import { compactQuadrantStorage, persistWithRecovery } from './storage-recovery.mjs';
+import {
+  createFacilitatorViewArtifact,
+  createFacilitatorHandoffArtifact,
+  decodeFacilitatorArtifact,
+  encodeFacilitatorArtifactUrl,
+  facilitatorArtifactJson,
+  parseFacilitatorArtifactJson,
+  restoreFacilitatorHandoff,
+} from './facilitator-share.mjs';
 
 const appStorage = new URLSearchParams(location.search).get('walkthrough') === '1' ? sessionStorage : localStorage;
 const clamp = (value) => Math.max(0, Math.min(1, Number(value.toFixed(2))));
@@ -51,13 +60,18 @@ const facilitatorApp = {
   showResponseNames: false,
   optionDescriptions: new Map(),
   aiOptionDescriptions: new Map(),
+  facilitatorShareArtifact: null,
+  facilitatorBackupArtifact: null,
   elements: {},
 
   init() {
     compactQuadrantStorage(appStorage);
     const ids = [
-      'mode-view', 'solo-mode', 'setup-mode', 'combine-mode', 'back-to-choices', 'privacy-note', 'invitation-view', 'invitation-summary', 'start-response',
+      'mode-view', 'solo-mode', 'setup-mode', 'combine-mode', 'facilitator-backup-input', 'facilitator-backup-status', 'back-to-choices', 'privacy-note', 'invitation-view', 'invitation-summary', 'start-response',
+      'shared-facilitator-view', 'shared-facilitator-title', 'shared-facilitator-description', 'shared-facilitator-meta', 'shared-facilitator-x-summary', 'shared-facilitator-y-summary', 'shared-facilitator-board', 'shared-facilitator-results',
+      'facilitator-handoff-view', 'facilitator-handoff-summary', 'import-facilitator-handoff', 'discard-facilitator-handoff',
       'collection-view', 'collection-grid', 'response-import-panel', 'response-links', 'collect-responses', 'clear-responses', 'collection-status', 'response-count', 'response-list', 'disagreement-list', 'previous-disagreement', 'next-disagreement', 'undo-resolution', 'reset-all-resolutions', 'show-response-names', 'convergence-board', 'resolution-inspector', 'convergence-summary', 'include-resolution-adjustments', 'export-resolution', 'copy-resolution-export', 'resolution-export-output', 'resolution-export-status',
+      'include-handoff-names', 'copy-facilitator-view', 'copy-facilitator-handoff', 'download-facilitator-backup', 'facilitator-share-output', 'facilitator-share-status',
       'setup-view', 'workspace-mode-label', 'setup-submit', 'setup-share-panel', 'setup-share-output', 'copy-setup-slack', 'copy-setup-link', 'answer-own-invitation', 'setup-share-status',
       'placement-view', 'review-view', 'setup-form', 'prompt', 'activity-description', 'x-label', 'x-low', 'x-high',
       'y-label', 'y-low', 'y-high', 'items', 'option-details', 'item-count', 'setup-error', 'example-button', 'resume-banner',
@@ -91,6 +105,12 @@ const facilitatorApp = {
     this.elements['show-response-names'].addEventListener('change', (event) => { this.showResponseNames = event.currentTarget.checked; this.renderCollection(); });
     this.elements['export-resolution'].addEventListener('click', () => this.renderResolutionExport());
     this.elements['copy-resolution-export'].addEventListener('click', () => this.copyResolutionExport());
+    this.elements['copy-facilitator-view'].addEventListener('click', () => this.copyFacilitatorShare('view'));
+    this.elements['copy-facilitator-handoff'].addEventListener('click', () => this.copyFacilitatorShare('handoff'));
+    this.elements['download-facilitator-backup'].addEventListener('click', () => this.downloadFacilitatorBackup());
+    this.elements['import-facilitator-handoff'].addEventListener('click', () => this.importFacilitatorHandoff());
+    this.elements['discard-facilitator-handoff'].addEventListener('click', () => this.discardFacilitatorHandoff());
+    this.elements['facilitator-backup-input'].addEventListener('change', (event) => this.reviewFacilitatorBackup(event));
     this.elements['convergence-board'].addEventListener('pointermove', (event) => this.previewResolutionDrag(event));
     this.elements['convergence-board'].addEventListener('pointerup', (event) => this.finishResolutionDrag(event));
     this.elements['convergence-board'].addEventListener('click', (event) => {
@@ -319,7 +339,108 @@ const facilitatorApp = {
     return true;
   },
 
+  showFacilitatorShare(artifact) {
+    this.facilitatorShareArtifact = artifact;
+    this.elements['back-to-choices'].hidden = true;
+    if (artifact.kind === 'facilitator-view') {
+      document.body.dataset.mode = 'shared-facilitator';
+      this.elements['privacy-note'].textContent = 'This link contains aggregate results only';
+      const { setup, responseCount, items } = artifact.payload;
+      this.elements['shared-facilitator-title'].textContent = setup.prompt;
+      this.setOptionalText(this.elements['shared-facilitator-description'], setup.activityDescription);
+      this.elements['shared-facilitator-meta'].textContent = `${responseCount} ${responseCount === 1 ? 'response' : 'responses'} · ${setup.xLabel} × ${setup.yLabel}`;
+      this.elements['shared-facilitator-x-summary'].textContent = `${setup.xLabel}: ${setup.xLow} — ${setup.xHigh}`;
+      this.elements['shared-facilitator-y-summary'].textContent = `${setup.yLabel}: ${setup.yLow} — ${setup.yHigh}`;
+      const board = this.elements['shared-facilitator-board'];
+      const svg = (name, attributes = {}) => {
+        const node = document.createElementNS('http://www.w3.org/2000/svg', name);
+        for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+        return node;
+      };
+      const nodes = [];
+      items.forEach((item, index) => {
+        const x = 8 + item.resolved.x * 84;
+        const y = 72 - item.resolved.y * 64;
+        const baselineX = 8 + item.baseline.x * 84;
+        const baselineY = 72 - item.baseline.y * 64;
+        if (Math.hypot(x - baselineX, y - baselineY) > .01) nodes.push(svg('line', { x1: baselineX, y1: baselineY, x2: x, y2: y, stroke: '#6f5ae8', 'stroke-width': '.7' }));
+        nodes.push(svg('circle', { cx: x, cy: y, r: 4.5 + Math.min(5, item.disagreement * 5), fill: 'rgba(111,90,232,.12)', stroke: '#6f5ae8' }));
+        nodes.push(svg('circle', { cx: x, cy: y, r: 3.2, fill: '#17201b' }));
+        const number = svg('text', { x, y: y + 1.2, fill: '#c7f36b', 'font-size': '3.5', 'font-weight': '900', 'text-anchor': 'middle' });
+        number.textContent = String(index + 1);
+        nodes.push(number);
+      });
+      board.replaceChildren(...nodes);
+      this.elements['shared-facilitator-results'].replaceChildren(...items.map((item, index) => {
+        const row = document.createElement('li');
+        const heading = document.createElement('strong');
+        heading.textContent = `${index + 1}. ${item.text}`;
+        const description = document.createElement('p');
+        description.textContent = item.description;
+        description.hidden = !item.description;
+        const result = document.createElement('p');
+        result.textContent = `Final position: ${Math.round(item.resolved.x * 100)}% ${setup.xLabel}, ${Math.round(item.resolved.y * 100)}% ${setup.yLabel} · ${Math.round(item.disagreement / Math.SQRT2 * 100)}% disagreement`;
+        row.append(heading, description, result);
+        return row;
+      }));
+      this.show('shared-facilitator');
+      return true;
+    }
+
+    document.body.dataset.mode = 'facilitator-handoff';
+    this.elements['privacy-note'].textContent = 'Nothing is imported until you confirm';
+    const summary = this.elements['facilitator-handoff-summary'];
+    const title = document.createElement('strong');
+    title.textContent = artifact.payload.setup.prompt;
+    const count = document.createElement('p');
+    count.textContent = `${artifact.payload.responses.length} responses · ${artifact.payload.setup.items.length} options`;
+    const disclosure = document.createElement('p');
+    disclosure.textContent = `${artifact.payload.includesNames ? 'Names included' : 'Names excluded'} · Individual placements included for continued facilitation`;
+    summary.replaceChildren(title, count, disclosure);
+    this.show('facilitator-handoff');
+    return true;
+  },
+
+  async reviewFacilitatorBackup(event) {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    try {
+      const artifact = parseFacilitatorArtifactJson(await file.text());
+      if (artifact.kind !== 'facilitator-handoff') throw new Error('Choose an editable facilitator handoff JSON file.');
+      this.elements['facilitator-backup-status'].textContent = '';
+      this.showFacilitatorShare(artifact);
+    } catch (error) {
+      this.elements['facilitator-backup-status'].textContent = error.message;
+    } finally {
+      event.currentTarget.value = '';
+    }
+  },
+
+  importFacilitatorHandoff() {
+    if (this.facilitatorShareArtifact?.kind !== 'facilitator-handoff') return;
+    const restored = restoreFacilitatorHandoff(this.facilitatorShareArtifact);
+    this.collection = restored.collection;
+    this.resolution = restored.resolution;
+    this.focusedResolutionId = null;
+    appStorage.setItem(this.resolutionLatestKey, this.collection.exerciseId);
+    saveResolution(appStorage, this.resolution);
+    history.replaceState(null, '', `${location.pathname}${location.search}`);
+    this.facilitatorShareArtifact = null;
+    this.enterCollection();
+    this.announce('Facilitator handoff imported as an independent local copy.');
+  },
+
+  discardFacilitatorHandoff() {
+    history.replaceState(null, '', `${location.pathname}${location.search}`);
+    this.facilitatorShareArtifact = null;
+    this.enterEntry();
+  },
+
   loadShared() {
+    if (location.hash.startsWith('#facilitator=')) {
+      try { return this.showFacilitatorShare(decodeFacilitatorArtifact(location.href)); }
+      catch (error) { this.elements['setup-error'].textContent = error.message; return false; }
+    }
     if (!location.hash.startsWith('#quadrant=')) return false;
     try {
       const artifact = decodeShareUrl(location.href);
@@ -356,7 +477,7 @@ const facilitatorApp = {
 
   show(name) {
     const scrollY = ['placement', 'review'].includes(name) ? window.scrollY : 0;
-    for (const view of ['mode', 'invitation', 'collection', 'setup', 'placement', 'review']) this.elements[`${view}-view`].hidden = view !== name;
+    for (const view of ['mode', 'invitation', 'shared-facilitator', 'facilitator-handoff', 'collection', 'setup', 'placement', 'review']) this.elements[`${view}-view`].hidden = view !== name;
     requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' }));
   },
 
@@ -1018,6 +1139,43 @@ const facilitatorApp = {
       this.elements['resolution-export-output'].select();
       this.elements['resolution-export-status'].textContent = 'Select and copy the prepared text.';
     }
+  },
+
+  async copyFacilitatorShare(kind) {
+    if (!this.resolution) return;
+    const includeNames = this.elements['include-handoff-names'].checked;
+    const artifact = kind === 'view'
+      ? createFacilitatorViewArtifact(this.resolution)
+      : createFacilitatorHandoffArtifact(this.resolution, { includeNames });
+    this.facilitatorBackupArtifact = kind === 'handoff'
+      ? artifact
+      : createFacilitatorHandoffArtifact(this.resolution, { includeNames });
+    const output = this.elements['facilitator-share-output'];
+    const status = this.elements['facilitator-share-status'];
+    try {
+      const url = encodeFacilitatorArtifactUrl(artifact, new URL(location.pathname, location.origin).toString());
+      output.value = url;
+      status.textContent = kind === 'view'
+        ? 'View-only link ready. It excludes participant names and individual placements.'
+        : `Editable handoff ready. Individual placements included; participant names ${includeNames ? 'included' : 'excluded'}.`;
+      try { await navigator.clipboard.writeText(url); status.textContent += ' Link copied.'; }
+      catch { output.select(); status.textContent += ' Select and copy the link.'; }
+    } catch (error) {
+      output.value = facilitatorArtifactJson(this.facilitatorBackupArtifact);
+      status.textContent = `${error.message} Editable JSON is ready below or as a download.`;
+    }
+  },
+
+  downloadFacilitatorBackup() {
+    if (!this.resolution) return;
+    const artifact = this.facilitatorBackupArtifact ?? createFacilitatorHandoffArtifact(this.resolution, { includeNames: this.elements['include-handoff-names'].checked });
+    const blob = new Blob([facilitatorArtifactJson(artifact)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `quadrant-facilitator-${artifact.exerciseId}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    this.elements['facilitator-share-status'].textContent = 'Editable facilitator JSON downloaded.';
   },
 
   renderResolutionInspector(convergence) {

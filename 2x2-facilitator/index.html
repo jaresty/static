@@ -55,6 +55,13 @@
     .invitation-panel { max-width: 760px; border-top: 8px solid var(--coral); }
     .invitation-summary { margin: 24px 0; padding: 20px; border-radius: 16px; background: #f8f5ed; }
     .invitation-summary strong { display: block; margin-bottom: 8px; }
+    .facilitator-share-panel { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--line); }
+    .facilitator-share-output { min-height: 110px; margin-top: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .72rem; }
+    .shared-facilitator-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, .65fr); gap: 18px; align-items: start; }
+    .shared-facilitator-board { display: block; width: 100%; aspect-ratio: 1.25; border: 1px solid var(--line); border-radius: 16px; background: linear-gradient(to right, transparent 49.7%, rgba(23,32,27,.12) 50%, transparent 50.3%), linear-gradient(to bottom, transparent 49.7%, rgba(23,32,27,.12) 50%, transparent 50.3%), #faf8f2; }
+    .shared-result-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+    .shared-result-list li { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+    .shared-result-list p { margin: 6px 0 0; color: var(--muted); line-height: 1.45; }
     .collection-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .7fr); gap: 18px; align-items: start; }
     .collection-grid.has-responses { grid-template-columns: 1fr; }
     .collection-grid.has-responses .response-import-panel { padding: 14px 18px; }
@@ -210,7 +217,7 @@
     @media (max-width: 820px) {
       .collection-grid.has-responses { grid-template-columns: 1fr; }
       .resolution-workspace { grid-template-columns: 1fr; grid-template-areas: "main" "side" "export"; }
-      .mode-grid, .collection-grid, .setup-grid, .placement-layout, .review-grid { grid-template-columns: 1fr; }
+      .mode-grid, .collection-grid, .setup-grid, .placement-layout, .review-grid, .shared-facilitator-layout { grid-template-columns: 1fr; }
       .setup-grid, .setup-grid > * { min-width: 0; width: 100%; }
       .mode-card { min-height: 150px; }
       .setup-preview { position: static; grid-column: auto; grid-row: auto; order: -1; }
@@ -233,9 +240,9 @@
     .tour-offer p { margin: 3px 0 0; color: var(--muted); font-size: .84rem; }
     .ai-callout { display:flex; align-items:center; justify-content:space-between; gap:18px; margin:24px 0 0; padding:18px; border:1px solid #cabffc; border-radius:18px; background:var(--violet-soft); }
     .ai-callout p { margin:4px 0 0; color:var(--muted); }
-    .ai-assistance { margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
-    .ai-assistance summary { width:max-content; color:var(--muted); font-size:.84rem; font-weight:800; cursor:pointer; }
-    .ai-assistance p { margin:10px 0 0; color:var(--muted); font-size:.8rem; line-height:1.45; }
+    .ai-assistance, .facilitator-backup-import { margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
+    .ai-assistance summary, .facilitator-backup-import summary { width:max-content; color:var(--muted); font-size:.84rem; font-weight:800; cursor:pointer; }
+    .ai-assistance p, .facilitator-backup-import p { margin:10px 0 0; color:var(--muted); font-size:.8rem; line-height:1.45; }
     .ai-assistance .button-row { margin-top:8px; }
     .ai-dialog { width:min(900px, calc(100% - 20px)); max-height:min(820px, calc(100vh - 20px)); padding:0; border:0; border-radius:24px; background:var(--surface); color:var(--ink); box-shadow:0 28px 80px rgba(23,32,27,.28); }
     .ai-dialog::backdrop { background:rgba(23,32,27,.62); }
@@ -279,6 +286,7 @@
         <button class="mode-card" id="setup-mode" type="button"><strong>Create a 2×2 for a group</strong><span>Set it up, then invite people to map their view privately and asynchronously.</span></button>
         <button class="mode-card" id="combine-mode" type="button"><strong>Combine completed responses</strong><span>Bring completed maps together to compare agreement and disagreement.</span></button>
       </div>
+      <details class="facilitator-backup-import"><summary>Received an editable facilitator JSON backup?</summary><p>Review it before creating an independent local working copy.</p><label class="button button-secondary" style="display:inline-flex;align-items:center;margin-top:10px">Choose facilitator JSON<input class="sr-only" id="facilitator-backup-input" type="file" accept="application/json,.json"></label><p class="status" id="facilitator-backup-status" role="status"></p></details>
     </section>
 
     <section class="view" id="invitation-view" aria-labelledby="invitation-title" hidden>
@@ -292,6 +300,17 @@
       </div>
     </section>
 
+    <section class="view" id="shared-facilitator-view" aria-labelledby="shared-facilitator-title" hidden>
+      <div class="mode-banner">VIEW-ONLY RESULT</div>
+      <div class="view-head" style="margin-top:18px"><div><p class="eyebrow">Shared facilitator result</p><h2 id="shared-facilitator-title"></h2><p class="context-description" id="shared-facilitator-description" hidden></p><p class="hint" id="shared-facilitator-meta"></p></div><a class="button button-secondary" href="./">Open Quadrant</a></div>
+      <div class="shared-facilitator-layout"><section class="panel"><p class="eyebrow">Completed view</p><div class="placement-orientation"><p><strong>X</strong> <span id="shared-facilitator-x-summary"></span></p><p><strong>Y</strong> <span id="shared-facilitator-y-summary"></span></p></div><p class="hint">Numbers show final results. Purple lines show participant average → facilitator result.</p><svg class="shared-facilitator-board" id="shared-facilitator-board" viewBox="0 0 100 80" role="img" aria-label="Read-only completed Quadrant result"></svg></section><aside class="panel"><p class="eyebrow">Final results</p><ol class="shared-result-list" id="shared-facilitator-results"></ol></aside></div>
+    </section>
+
+    <section class="view" id="facilitator-handoff-view" aria-labelledby="facilitator-handoff-title" hidden>
+      <div class="mode-banner">EDITABLE HANDOFF</div>
+      <div class="panel invitation-panel" style="margin-top:18px"><p class="eyebrow">Facilitator working copy</p><h2 id="facilitator-handoff-title">Review before importing.</h2><div class="invitation-summary" id="facilitator-handoff-summary"></div><p class="hint">Nothing has been saved in this browser. Importing creates an independent local copy; it does not change the sender’s view.</p><div class="button-row"><button class="button button-accent" id="import-facilitator-handoff" type="button">Import facilitator view</button><button class="button button-quiet" id="discard-facilitator-handoff" type="button">Discard</button></div></div>
+    </section>
+
     <section class="view" id="collection-view" aria-labelledby="collection-title" hidden>
       <div class="mode-banner" id="collection-mode-label">FACILITATOR VIEW</div>
       <div class="view-head" style="margin-top:18px"><div><h2 id="collection-title">Combine team responses.</h2><p class="lede">Paste completed response links. They stay in this browser and are checked against one setup.</p></div></div>
@@ -303,7 +322,7 @@
             <div id="convergence-summary" class="hint" style="margin-top:14px"></div>
           </div>
           <div class="resolution-sidebar" id="resolution-sidebar"><p class="eyebrow">Collected locally</p><h3 id="response-count">0 responses</h3><ol class="response-list" id="response-list"></ol><div class="navigator-head"><p class="eyebrow" style="margin:0">Items · most disagreement first</p><div><button class="button button-quiet" id="previous-disagreement" type="button" aria-label="Previous item">←</button><button class="button button-quiet" id="next-disagreement" type="button" aria-label="Next item">→</button></div></div><ol class="navigator-list" id="disagreement-list" aria-label="Items ordered by disagreement"></ol><div class="resolution-toolbar"><button class="button button-quiet" id="undo-resolution" type="button">Undo</button><button class="button button-quiet" id="reset-all-resolutions" type="button">Reset all</button><label class="layer-toggle"><input id="show-response-names" type="checkbox"> Names</label></div><div class="resolution-inspector" id="resolution-inspector" hidden></div></div>
-          <section class="resolution-export" aria-labelledby="resolution-export-title"><p class="eyebrow" id="resolution-export-title">Final resolution</p><label class="layer-toggle"><input id="include-resolution-adjustments" type="checkbox"> Include facilitator adjustments</label><div class="button-row"><button class="button button-primary" id="export-resolution" type="button">Prepare text export</button><button class="button button-quiet" id="copy-resolution-export" type="button">Copy text</button></div><textarea id="resolution-export-output" readonly aria-label="Human-readable resolution export"></textarea><p class="hint" id="resolution-export-status" role="status"></p></section>
+          <section class="resolution-export" aria-labelledby="resolution-export-title"><p class="eyebrow" id="resolution-export-title">Final resolution</p><label class="layer-toggle"><input id="include-resolution-adjustments" type="checkbox"> Include facilitator adjustments</label><div class="button-row"><button class="button button-primary" id="export-resolution" type="button">Prepare text export</button><button class="button button-quiet" id="copy-resolution-export" type="button">Copy text</button></div><textarea id="resolution-export-output" readonly aria-label="Human-readable resolution export"></textarea><p class="hint" id="resolution-export-status" role="status"></p><div class="facilitator-share-panel"><p class="eyebrow">Reshare facilitator view</p><p class="hint">A view-only link contains aggregate results only. An editable handoff includes individual placements and creates a separate local copy when imported.</p><label class="layer-toggle"><input id="include-handoff-names" type="checkbox"> Include participant names in editable handoff</label><div class="button-row"><button class="button button-accent" id="copy-facilitator-view" type="button">Copy view-only link</button><button class="button button-secondary" id="copy-facilitator-handoff" type="button">Copy editable handoff</button><button class="button button-quiet" id="download-facilitator-backup" type="button">Download editable JSON</button></div><textarea class="facilitator-share-output" id="facilitator-share-output" readonly aria-label="Facilitator share link or JSON fallback"></textarea><p class="status" id="facilitator-share-status" role="status"></p></div></section>
         </aside>
       </div>
     </section>
