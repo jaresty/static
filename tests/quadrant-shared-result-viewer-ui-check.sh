@@ -28,7 +28,7 @@ case "$PROPERTY" in
     contract="$(agent-browser --session "$session" eval 'Boolean(document.querySelector("#shared-facilitator-board")&&document.querySelector("#shared-facilitator-view .resolution-legend")&&document.querySelector("#shared-facilitator-disagreement-list")&&document.querySelectorAll("#shared-facilitator-disagreement-list [data-shared-navigator-item]").length===2)')"
     ;;
   2)
-    agent-browser --session "$session" click '#shared-facilitator-disagreement-list [data-shared-navigator-item]' >/dev/null
+    agent-browser --session "$session" eval 'document.querySelector("#shared-facilitator-disagreement-list [data-shared-navigator-item]").click()' >/dev/null
     contract="$(agent-browser --session "$session" eval '(()=>{const selected=document.querySelector("#shared-facilitator-disagreement-list [aria-current=true]");const inspector=document.querySelector("#shared-facilitator-inspector");return Boolean(selected&&inspector&&!inspector.hidden&&inspector.dataset.itemId===selected.dataset.itemId&&/Final position/.test(inspector.innerText)&&!/Reset|Undo|drag/i.test(inspector.innerText))})()')"
     ;;
   3)
@@ -44,7 +44,7 @@ case "$PROPERTY" in
     contract="$(agent-browser --session "$session" eval 'Boolean(document.querySelector("#shared-facilitator-board .resolution-halo")&&document.querySelector("#shared-facilitator-board .resolution-card")&&document.querySelector("#shared-facilitator-board .adjustment-line"))')"
     ;;
   6)
-    agent-browser --session "$session" click '#shared-facilitator-disagreement-list [data-shared-navigator-item]' >/dev/null
+    agent-browser --session "$session" eval 'document.querySelector("#shared-facilitator-disagreement-list [data-shared-navigator-item]").click()' >/dev/null
     contract="$(agent-browser --session "$session" eval '(()=>{const groups=[...document.querySelectorAll("#shared-facilitator-board [data-shared-result-item]")];const selected=groups.find(group=>group.classList.contains("focused"));const other=groups.find(group=>group!==selected);return Boolean(selected&&getComputedStyle(selected.querySelector(".resolution-card")).opacity==="1"&&Number(getComputedStyle(selected.querySelector(".resolution-halo")).opacity)>0&&Number(getComputedStyle(other.querySelector(".resolution-card")).opacity)<1)})()')"
     ;;
   *) echo "Unknown property: $PROPERTY"; exit 2;;

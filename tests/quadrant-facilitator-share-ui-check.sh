@@ -24,6 +24,7 @@ view_session="quadrant-facilitator-share-view-$$"
 agent-browser --session "$view_session" open "$base?recipient=view" >/dev/null
 agent-browser --session "$view_session" eval 'localStorage.clear();localStorage.setItem("sentinel","unchanged")' >/dev/null
 agent-browser --session "$view_session" open "$view_url" >/dev/null
+agent-browser --session "$view_session" eval 'document.querySelector("#shared-facilitator-disagreement-list [data-shared-navigator-item]").click()' >/dev/null
 view_contract="$(agent-browser --session "$view_session" eval '(()=>{const root=document.querySelector("#shared-facilitator-view");const text=root.innerText;const halo=getComputedStyle(root.querySelector(".legend-halo"),"::before");const line=getComputedStyle(root.querySelector(".legend-line-adjustment"),"::before");return localStorage.length===1&&localStorage.getItem("sentinel")==="unchanged"&&/Which launch/.test(text)&&/A limited release/.test(text)&&/2 responses/.test(text)&&/Number · final facilitator result/.test(text)&&/Halo · larger means more disagreement/.test(text)&&/Purple line · participant average to facilitator result/.test(text)&&/Participant dots are intentionally excluded/.test(text)&&parseFloat(halo.width)>0&&halo.borderTopStyle==="solid"&&parseFloat(line.width)>0&&line.borderTopColor==="rgb(111, 90, 232)"&&!/Alex|Blair/.test(text)&&!document.querySelector("[data-participant-position]")})()')"
 
 handoff_session="quadrant-facilitator-share-handoff-$$"
