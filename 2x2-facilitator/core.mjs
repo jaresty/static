@@ -1,4 +1,5 @@
 const clone = (value) => structuredClone(value);
+const HISTORY_LIMIT = 50;
 
 function clean(value) {
   return String(value ?? '').trim();
@@ -17,10 +18,20 @@ function parseItems(value) {
   return texts.map((text, index) => ({ id: `item-${index + 1}`, text }));
 }
 
+function historyFree(session) {
+  const { history: _history, ...state } = session;
+  return { ...clone(state), history: [] };
+}
+
+function flatHistory(session) {
+  return (Array.isArray(session.history) ? session.history : [])
+    .map(historyFree)
+    .slice(-HISTORY_LIMIT);
+}
+
 function snapshot(session) {
-  const previous = clone(session);
   const next = clone(session);
-  next.history.push(previous);
+  next.history = [...flatHistory(session), historyFree(session)].slice(-HISTORY_LIMIT);
   return next;
 }
 
@@ -80,9 +91,12 @@ export function moveItem(session, itemId, axis, delta) {
 }
 
 export function undo(session) {
-  const previous = session.history.at(-1);
+  const history = flatHistory(session);
+  const previous = history.at(-1);
   if (!previous) throw new Error('There is nothing to undo.');
-  return clone(previous);
+  const next = clone(previous);
+  next.history = history.slice(0, -1);
+  return next;
 }
 
 export function setFocus(session, ids) {

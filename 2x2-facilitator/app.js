@@ -62,7 +62,7 @@ const facilitatorApp = {
       'new-workshop', 'board', 'board-x-low', 'board-x-high', 'board-y-low', 'board-y-high',
       'setup-preview-prompt', 'setup-x-edit', 'setup-y-edit', 'setup-x-low', 'setup-x-high', 'setup-y-low', 'setup-y-high', 'setup-options',
       'review-undo', 'response-share-panel', 'contributor-name', 'include-response-preview', 'copy-response-slack', 'copy-response-link', 'response-share-status',
-      'export-format', 'export-output', 'copy-button', 'download-button', 'copy-status', 'live-region',
+      'export-format', 'export-output', 'copy-button', 'download-button', 'copy-status', 'storage-status', 'live-region',
       'ai-draft-dialog', 'ai-import-clipboard', 'ai-manual-toggle', 'ai-manual-import', 'ai-draft-input', 'ai-review-json', 'ai-draft-status', 'ai-draft-review', 'ai-review-question', 'ai-review-x-label', 'ai-review-x-low', 'ai-review-x-high', 'ai-review-y-label', 'ai-review-y-low', 'ai-review-y-high', 'ai-review-options', 'ai-use-solo', 'ai-use-invite', 'ai-discard-draft',
     ];
     this.elements = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
@@ -1024,7 +1024,19 @@ const facilitatorApp = {
   },
 
   save() {
-    appStorage.setItem(this.activeStorageKey(), JSON.stringify(this.session));
+    const status = this.elements['storage-status'];
+    try {
+      appStorage.setItem(this.activeStorageKey(), JSON.stringify(this.session));
+      status.hidden = true;
+      status.textContent = '';
+      return true;
+    } catch (error) {
+      if (error?.name !== 'QuotaExceededError') throw error;
+      status.textContent = 'Browser storage is full. Your current work remains available in this tab, but it may not survive a reload.';
+      status.hidden = false;
+      this.announce(status.textContent);
+      return false;
+    }
   },
 
   migrate(saved) {
