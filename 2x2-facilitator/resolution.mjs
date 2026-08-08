@@ -1,13 +1,13 @@
 const coordinate = (value) => Number(value.toFixed(6));
 
 export function createResolution(collection) {
-  const items = collection.setup.items.map(({ id, text }) => {
+  const items = collection.setup.items.map(({ id, text, description = '' }) => {
     const placements = collection.responses.map(({ payload }) => payload.positions[id]);
     const baseline = {
       x: coordinate(placements.reduce((sum, point) => sum + point.x, 0) / placements.length),
       y: coordinate(placements.reduce((sum, point) => sum + point.y, 0) / placements.length),
     };
-    return { id, text, baseline, resolved: { ...baseline } };
+    return { id, text, description, baseline, resolved: { ...baseline } };
   });
   return { version: 1, collection: structuredClone(collection), items, history: [] };
 }
@@ -75,7 +75,8 @@ export function exportResolution(state, { includeAdjustments = false } = {}) {
     version: 1,
     exerciseId: state.collection.exerciseId,
     prompt: state.collection.setup.prompt,
-    items: state.items.map(({ id, text, resolved }) => ({ id, text, resolved: { ...resolved } })),
+    activityDescription: state.collection.setup.activityDescription ?? '',
+    items: state.items.map(({ id, text, description = '', resolved }) => ({ id, text, description, resolved: { ...resolved } })),
   };
   if (!includeAdjustments) return exported;
   const { xLow, xHigh, yLow, yHigh } = state.collection.setup;
@@ -102,6 +103,7 @@ export function formatResolutionExport(state, { includeAdjustments = false } = {
     'QUADRANT RESOLUTION',
     '',
     exported.prompt,
+    ...(exported.activityDescription ? [exported.activityDescription] : []),
     `Responses collected: ${state.collection.responses.length}`,
     '',
     'AXES',
@@ -114,6 +116,7 @@ export function formatResolutionExport(state, { includeAdjustments = false } = {
     lines.push(
       '',
       `${index + 1}. ${item.text}`,
+      ...(item.description ? [`   Detail: ${item.description}`] : []),
       `   Position: ${item.resolved.x >= 0.5 ? xHigh : xLow} / ${item.resolved.y >= 0.5 ? yHigh : yLow}`,
       `   Coordinates: ${Math.round(item.resolved.x * 100)}% ${xLabel}, ${Math.round(item.resolved.y * 100)}% ${yLabel}`,
     );

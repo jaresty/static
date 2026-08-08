@@ -21,6 +21,11 @@ const quadrant = {
   y: { label: 'Impact', low: 'Lower impact', high: 'Higher impact' },
   options: ['Improve onboarding', 'Add keyboard shortcuts'],
 };
+const normalizedQuadrant = {
+  ...quadrant,
+  activityDescription: '',
+  options: quadrant.options.map((title) => ({ title, description: '' })),
+};
 const stack = {
   version: 1,
   kind: 'stack-rank-draft',
@@ -29,7 +34,31 @@ const stack = {
 };
 
 test('Quadrant accepts only its normalized draft setup projection', () => {
-  assert.deepEqual(parseQuadrantDraft(JSON.stringify(quadrant)), quadrant);
+  assert.deepEqual(parseQuadrantDraft(JSON.stringify(quadrant)), normalizedQuadrant);
+});
+
+test('Quadrant AI drafts round-trip optional activity and option descriptions', () => {
+  const described = {
+    ...quadrant,
+    activityDescription: 'Give participants enough context to interpret unfamiliar options.',
+    options: [
+      { title: 'Improve onboarding', description: 'Clarify the first successful workflow.' },
+      { title: 'Add keyboard shortcuts' },
+    ],
+  };
+  assert.deepEqual(parseQuadrantDraft(described), {
+    ...described,
+    options: [
+      { title: 'Improve onboarding', description: 'Clarify the first successful workflow.' },
+      { title: 'Add keyboard shortcuts', description: '' },
+    ],
+  });
+  assert.deepEqual(
+    decodeQuadrantDraftFragment(encodeQuadrantDraftFragment(described, 'https://example.test/2x2-facilitator/')),
+    parseQuadrantDraft(described),
+  );
+  assert.match(quadrantAiPrompt('https://example.test/2x2-facilitator/'), /activityDescription/);
+  assert.match(quadrantAiPrompt('https://example.test/2x2-facilitator/'), /description/);
 });
 
 test('Stack Rank accepts only its normalized draft setup projection', () => {
@@ -50,7 +79,7 @@ test('fragment links round-trip Unicode drafts independently', () => {
   assert.deepEqual([
     decodeQuadrantDraftFragment(encodeQuadrantDraftFragment(q, 'https://example.test/2x2-facilitator/')),
     decodeStackDraftFragment(encodeStackDraftFragment(s, 'https://example.test/pairwise-ranker/')),
-  ], [q, s]);
+  ], [parseQuadrantDraft(q), s]);
 });
 
 test('Quadrant prompt recommends short criterion names', () => {

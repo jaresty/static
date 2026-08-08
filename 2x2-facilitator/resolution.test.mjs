@@ -6,9 +6,10 @@ const collection = {
   exerciseId: 'quadrant-test',
   setup: {
     prompt: 'Choose a launch idea',
+    activityDescription: 'Use the launch brief when interpreting each option.',
     xLabel: 'Value', xLow: 'Low value', xHigh: 'High value',
     yLabel: 'Confidence', yLow: 'Low confidence', yHigh: 'High confidence',
-    items: [{ id: 'item-1', text: 'Alpha' }, { id: 'item-2', text: 'Beta' }],
+    items: [{ id: 'item-1', text: 'Alpha', description: 'A focused pilot for existing customers.' }, { id: 'item-2', text: 'Beta', description: '' }],
   },
   responses: [
     { contributionId: 'response-a', contributor: 'Alex', payload: { positions: { 'item-1': { x: 0.2, y: 0.8 }, 'item-2': { x: 0.1, y: 0.4 } } } },
@@ -78,6 +79,16 @@ test('r10 disclosed export describes distance and axis-relative direction for ev
   const exported = exportResolution(state, { includeAdjustments: true });
   assert.deepEqual(exported.items[0].adjustment, { distancePercent: 30, direction: 'toward High value and Low confidence' });
   assert.deepEqual(exported.items[1].adjustment, { distancePercent: 0, direction: 'No facilitator adjustment' });
+});
+
+test('resolution exports preserve optional activity and item descriptions', async () => {
+  const { createResolution, exportResolution, formatResolutionExport } = await import('./resolution.mjs');
+  const state = createResolution(collection);
+  const exported = exportResolution(state);
+  assert.equal(exported.activityDescription, collection.setup.activityDescription);
+  assert.equal(exported.items[0].description, collection.setup.items[0].description);
+  assert.match(formatResolutionExport(state), /Use the launch brief/);
+  assert.match(formatResolutionExport(state), /A focused pilot/);
 });
 
 test('r9-r10 final resolution export is readable plain text with optional provenance', async () => {

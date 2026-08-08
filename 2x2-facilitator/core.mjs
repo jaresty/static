@@ -6,16 +6,19 @@ function clean(value) {
 }
 
 function parseItems(value) {
-  const texts = String(value ?? '')
-    .split(/\r?\n/)
-    .map((text) => text.trim())
-    .filter(Boolean);
-  if (texts.length < 2) throw new Error('Add at least 2 options.');
-  if (texts.length > 20) throw new Error('Keep the workshop to 20 options or fewer.');
-  if (new Set(texts.map((text) => text.toLocaleLowerCase())).size !== texts.length) {
+  const sources = Array.isArray(value)
+    ? value
+    : String(value ?? '').split(/\r?\n/).map((text) => ({ text }));
+  const items = sources
+    .map((item) => (typeof item === 'string' ? { text: item } : item))
+    .map((item) => ({ text: clean(item?.text), description: clean(item?.description) }))
+    .filter(({ text }) => Boolean(text));
+  if (items.length < 2) throw new Error('Add at least 2 options.');
+  if (items.length > 20) throw new Error('Keep the workshop to 20 options or fewer.');
+  if (new Set(items.map(({ text }) => text.toLocaleLowerCase())).size !== items.length) {
     throw new Error('Every option must be unique.');
   }
-  return texts.map((text, index) => ({ id: `item-${index + 1}`, text }));
+  return items.map((item, index) => ({ id: `item-${index + 1}`, ...item }));
 }
 
 function historyFree(session) {
@@ -55,6 +58,7 @@ export function createWorkshop(input) {
     version: 1,
     round: Number(input.round) || 1,
     prompt,
+    activityDescription: clean(input.activityDescription),
     xLabel,
     xLow: clean(input.xLow) || `Lower ${xLabel}`,
     xHigh: clean(input.xHigh) || `Higher ${xLabel}`,
@@ -130,13 +134,14 @@ export function regridFocus(session) {
   const selected = session.focusIds.map((id) => session.items.find((item) => item.id === id));
   return createWorkshop({
     prompt: session.prompt,
+    activityDescription: session.activityDescription,
     xLabel: session.xLabel,
     xLow: session.xLow,
     xHigh: session.xHigh,
     yLabel: session.yLabel,
     yLow: session.yLow,
     yHigh: session.yHigh,
-    items: selected.map(({ text }) => text).join('\n'),
+    items: selected.map(({ text, description }) => ({ text, description })),
     round: session.round + 1,
   });
 }
@@ -161,6 +166,7 @@ function markdown(session) {
   const byId = new Map(session.items.map((item) => [item.id, item]));
   const lines = [
     `# 2×2: ${session.prompt}`,
+    ...(session.activityDescription ? ['', session.activityDescription] : []),
     '',
     `- X axis: ${session.xLabel} (${session.xLow} → ${session.xHigh})`,
     `- Y axis: ${session.yLabel} (${session.yLow} → ${session.yHigh})`,
@@ -170,7 +176,7 @@ function markdown(session) {
   ];
   coordinates(session)
     .sort((a, b) => (b.x + b.y) - (a.x + a.y))
-    .forEach((item) => lines.push(`- ${item.text} — X ${item.x.toFixed(2)}, Y ${item.y.toFixed(2)}${item.focused ? ' — focus' : ''}`));
+    .forEach((item) => lines.push(`- ${item.text}${item.description ? ` — ${item.description}` : ''} — X ${item.x.toFixed(2)}, Y ${item.y.toFixed(2)}${item.focused ? ' — focus' : ''}`));
   if (session.focusIds.length) {
     lines.push('', '## Focus choices', ...session.focusIds.map((id) => `- ${byId.get(id).text}`));
   }

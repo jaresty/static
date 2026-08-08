@@ -120,6 +120,12 @@
     .setup-preview-prompt { margin: 0 0 12px; font-size: 1.15rem; line-height: 1.3; }
     .setup-options { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
     .setup-option { padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; background: #fff; font-size: .76rem; font-weight: 750; }
+    .context-description { margin: 8px 0 18px; color: var(--muted); line-height: 1.55; white-space: pre-wrap; }
+    .option-details { display: grid; gap: 10px; margin-top: 14px; }
+    .option-detail { padding: 12px; border: 1px solid var(--line); border-radius: 13px; background: #f8f5ed; }
+    .option-detail summary { display: flex; justify-content: space-between; gap: 12px; cursor: pointer; font-size: .84rem; font-weight: 780; }
+    .option-detail[open] summary { margin-bottom: 10px; }
+    .option-detail textarea { min-height: 86px; background: #fff; }
     .setup-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 30px; color: var(--muted); text-align: center; font-weight: 700; }
     .setup-axis-edit { position: absolute; z-index: 2; min-height: 34px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); font-size: .74rem; font-weight: 850; box-shadow: 0 4px 12px rgba(23,32,27,.1); }
     .setup-axis-edit:hover { border-color: var(--violet); color: var(--violet); }
@@ -166,7 +172,7 @@
     .board-item { touch-action: none; cursor: grab; }
     .board-item:active { cursor: grabbing; }
     .board-item.candidate-preview { border-style: dashed; border-color: var(--violet); background: var(--violet-soft); z-index: 3; }
-    .board-item.dragging { opacity: .82; box-shadow: 0 14px 34px rgba(111,90,232,.3); }
+    .board-item.dragging { z-index: 60; opacity: .82; box-shadow: 0 14px 34px rgba(111,90,232,.3); }
     .review-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .65fr); gap: 18px; align-items: start; }
     .board-panel { padding: 26px; }
     .board-wrap { position: relative; aspect-ratio: 1.35; min-height: 500px; margin: 18px 12px 42px 48px; border-left: 3px solid var(--ink); border-bottom: 3px solid var(--ink); background: linear-gradient(to right, transparent 49.8%, rgba(23,32,27,.16) 50%, transparent 50.2%), linear-gradient(to bottom, transparent 49.8%, rgba(23,32,27,.16) 50%, transparent 50.2%), #faf8f2; }
@@ -182,9 +188,11 @@
     .axis-y-high { left: -44px; top: 12px; writing-mode: vertical-rl; transform: rotate(180deg); }
     .board-item { position: absolute; width: clamp(86px, 15%, 132px); min-height: 54px; padding: 8px; border: 2px solid var(--ink); border-radius: 14px; background: var(--surface); color: var(--ink); font-size: clamp(.68rem, 1.2vw, .82rem); font-weight: 780; line-height: 1.15; transform: translate(-50%, 50%); box-shadow: 0 8px 20px rgba(23,32,27,.12); overflow-wrap: anywhere; }
     .board-item.focused { background: var(--lime); }
-    .board-item.selected { border-color: var(--violet); box-shadow: 0 0 0 4px rgba(111,90,232,.16); }
+    .board-item.selected { z-index: 50; border-color: var(--violet); box-shadow: 0 0 0 4px rgba(111,90,232,.16); }
     .controls { position: sticky; top: 18px; }
     .selected-card { margin: 14px 0; padding: 14px; border-radius: 14px; background: var(--violet-soft); }
+    .item-description-inspector { margin: 16px 0; padding: 14px; border: 1px solid #cabffc; border-radius: 14px; background: var(--violet-soft); }
+    .item-description-inspector p { margin: 8px 0 0; color: var(--muted); line-height: 1.5; white-space: pre-wrap; }
     .nudge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 22px; }
     .nudge-grid .button { min-height: 42px; padding: 0 8px; }
     .nudge-up { grid-column: 2; }
@@ -311,6 +319,10 @@
             <label for="prompt">What decision are we making? <span class="hint">Write this before the axes</span></label>
             <input id="prompt" required placeholder="Which ideas should we explore next?">
           </div>
+          <div class="field">
+            <label for="activity-description">Activity context <span class="hint">Optional · explain unfamiliar terms or constraints</span></label>
+            <textarea id="activity-description" placeholder="What should participants know before placing the options?"></textarea>
+          </div>
           <fieldset class="axis-block">
             <legend>X axis · invite discussion</legend>
             <div class="axis-grid">
@@ -331,6 +343,7 @@
             <label for="items">Options <span class="hint">One per line; keep it under 20</span></label>
             <textarea id="items" required placeholder="Improve search&#10;Add keyboard shortcuts&#10;Clarify onboarding"></textarea>
             <div class="meta"><span>2–20 unique options</span><span id="item-count">0 options</span></div>
+            <div class="option-details" id="option-details" aria-label="Optional details for each option"></div>
           </div>
           <p class="error" id="setup-error" role="alert"></p>
           <div class="button-row"><button class="button button-primary" id="setup-submit" type="submit">Start placing</button><button class="button button-secondary" id="example-button" type="button">Use an example</button></div>
@@ -340,6 +353,7 @@
         <aside class="panel setup-preview">
           <p class="eyebrow">This is the exercise</p>
           <h3 class="setup-preview-prompt" id="setup-preview-prompt">Frame the decision, then place every option on both axes.</h3>
+          <p class="context-description" id="setup-preview-description" hidden></p>
           <div class="board-wrap" id="setup-board-preview" aria-label="2×2 setup preview">
             <button class="setup-axis-edit setup-axis-x" id="setup-x-edit" type="button" aria-controls="x-label" title="Edit the horizontal axis">Cost · edit</button>
             <button class="setup-axis-edit setup-axis-y" id="setup-y-edit" type="button" aria-controls="y-label" title="Edit the vertical axis">Value · edit</button>
@@ -354,7 +368,7 @@
     </section>
 
     <section class="view" id="placement-view" aria-labelledby="placement-title" hidden>
-      <div class="view-head"><div><p class="eyebrow" id="placement-round">Round 1 · place on the grid</p><h2 id="placement-title">Put the conversation on the board.</h2><p class="placement-prompt" id="placement-prompt"></p></div><p class="round" id="placement-progress"></p></div>
+      <div class="view-head"><div><p class="eyebrow" id="placement-round">Round 1 · place on the grid</p><h2 id="placement-title">Put the conversation on the board.</h2><p class="placement-prompt" id="placement-prompt"></p><p class="context-description" id="placement-activity-description" hidden></p></div><p class="round" id="placement-progress"></p></div>
       <div class="placement-orientation" id="placement-orientation" aria-label="Decision frame"><p><strong>X</strong> <span id="placement-x-summary"></span></p><p><strong>Y</strong> <span id="placement-y-summary"></span></p></div>
       <div class="placement-layout">
         <section class="panel board-panel">
@@ -370,6 +384,7 @@
         <aside class="panel placement-controls">
           <p class="eyebrow">Now placing</p>
           <h3 class="candidate-name" id="candidate-card"></h3>
+          <p class="context-description" id="candidate-description" hidden></p>
           <p class="placement-drag-instruction" id="placement-drag-instruction">The highlighted card starts in the center. Drag it to where it belongs, or use the arrow keys.</p>
           <p class="coordinate-readout" id="placement-coordinates">Center · use arrow keys for precise movement</p>
           <button class="button button-accent" id="place-option" type="button" style="width:100%; margin-top:16px">Confirm this position</button>
@@ -379,7 +394,7 @@
     </section>
 
     <section class="view" id="review-view" aria-labelledby="review-title" hidden>
-      <div class="view-head"><div><p class="eyebrow" id="review-round">Round 1 · review together</p><h2 id="review-title">What does the map tell you?</h2><p class="lede" id="review-prompt"></p></div><button class="button button-quiet" id="new-workshop" type="button">Start a new workshop</button></div>
+      <div class="view-head"><div><p class="eyebrow" id="review-round">Round 1 · review together</p><h2 id="review-title">What does the map tell you?</h2><p class="lede" id="review-prompt"></p><p class="context-description" id="review-activity-description" hidden></p></div><button class="button button-quiet" id="new-workshop" type="button">Start a new workshop</button></div>
       <div class="review-grid">
         <section class="panel board-panel">
           <p class="eyebrow">The board</p>
@@ -393,6 +408,7 @@
           <p class="eyebrow">Map complete</p>
           <h3>Review together</h3>
           <p class="hint">The map is the result. Adjust any card if the group sees something differently, or export it below.</p>
+          <div class="item-description-inspector" id="item-description-inspector" hidden><strong id="item-description-title"></strong><p id="item-description-text"></p></div>
           <div class="button-row"><button class="button button-secondary" id="review-undo" type="button">Undo last change</button></div>
         </aside>
       </div>
@@ -408,7 +424,7 @@
         <div class="export-grid"><div><label for="export-format">Format</label><select id="export-format"><option value="markdown">Markdown</option><option value="json">JSON backup</option><option value="svg">SVG board</option></select><div class="button-row"><button class="button button-accent" id="copy-button" type="button">Copy</button><button class="button button-secondary" id="download-button" type="button">Download</button></div><p class="status" id="copy-status" role="status"></p></div><textarea id="export-output" readonly aria-label="Portable workshop result"></textarea></div>
       </section>
     </section>
-    <dialog class="ai-dialog" id="ai-draft-dialog" data-ai-import-panel aria-labelledby="ai-draft-title"><div class="ai-dialog-body"><div class="ai-dialog-head"><div><p class="eyebrow">AI-prepared draft</p><h2 id="ai-draft-title">Bring in a suggested setup.</h2></div><button class="button button-quiet" type="button" data-close-ai>Close AI setup</button></div><p class="lede">This app does not contact an AI or send your data anywhere. Copy instructions to any AI assistant, then open its draft link or import the fallback JSON.</p><div class="ai-import-actions"><button class="button button-primary" type="button" data-copy-ai-prompt>Copy AI prompt</button><button class="button button-secondary" id="ai-import-clipboard" type="button">Import from clipboard</button><button class="button button-quiet" id="ai-manual-toggle" type="button">Paste JSON manually</button></div><p class="status" id="ai-draft-status" role="status"></p><div id="ai-manual-import" hidden><label for="ai-draft-input">AI setup JSON</label><textarea id="ai-draft-input" placeholder="Paste the fallback JSON here"></textarea><button class="button button-primary" id="ai-review-json" type="button">Review JSON</button></div><section id="ai-draft-review" hidden aria-labelledby="ai-review-title"><h3 id="ai-review-title">Review and edit this draft</h3><div class="ai-review-grid"><div class="wide"><label for="ai-review-question">Decision question</label><input id="ai-review-question"></div><fieldset class="ai-axis-group" data-axis-group="horizontal"><legend>Horizontal axis</legend><div class="criterion"><label for="ai-review-x-label">Horizontal criterion</label><input id="ai-review-x-label"></div><div><label for="ai-review-x-low">Left endpoint</label><input id="ai-review-x-low"></div><div><label for="ai-review-x-high">Right endpoint</label><input id="ai-review-x-high"></div></fieldset><fieldset class="ai-axis-group" data-axis-group="vertical"><legend>Vertical axis</legend><div class="criterion"><label for="ai-review-y-label">Vertical criterion</label><input id="ai-review-y-label"></div><div><label for="ai-review-y-low">Bottom endpoint</label><input id="ai-review-y-low"></div><div><label for="ai-review-y-high">Top endpoint</label><input id="ai-review-y-high"></div></fieldset><div class="wide"><label for="ai-review-options">Options</label><textarea id="ai-review-options"></textarea></div></div><div class="button-row"><button class="button button-primary" id="ai-use-solo" type="button">Use solo</button><button class="button button-secondary" id="ai-use-invite" type="button">Invite responses</button><button class="button button-quiet" id="ai-discard-draft" type="button">Discard</button></div></section></div></dialog>
+    <dialog class="ai-dialog" id="ai-draft-dialog" data-ai-import-panel aria-labelledby="ai-draft-title"><div class="ai-dialog-body"><div class="ai-dialog-head"><div><p class="eyebrow">AI-prepared draft</p><h2 id="ai-draft-title">Bring in a suggested setup.</h2></div><button class="button button-quiet" type="button" data-close-ai>Close AI setup</button></div><p class="lede">This app does not contact an AI or send your data anywhere. Copy instructions to any AI assistant, then open its draft link or import the fallback JSON.</p><div class="ai-import-actions"><button class="button button-primary" type="button" data-copy-ai-prompt>Copy AI prompt</button><button class="button button-secondary" id="ai-import-clipboard" type="button">Import from clipboard</button><button class="button button-quiet" id="ai-manual-toggle" type="button">Paste JSON manually</button></div><p class="status" id="ai-draft-status" role="status"></p><div id="ai-manual-import" hidden><label for="ai-draft-input">AI setup JSON</label><textarea id="ai-draft-input" placeholder="Paste the fallback JSON here"></textarea><button class="button button-primary" id="ai-review-json" type="button">Review JSON</button></div><section id="ai-draft-review" hidden aria-labelledby="ai-review-title"><h3 id="ai-review-title">Review and edit this draft</h3><div class="ai-review-grid"><div class="wide"><label for="ai-review-question">Decision question</label><input id="ai-review-question"></div><div class="wide"><label for="ai-review-activity-description">Activity context <span class="hint">Optional</span></label><textarea id="ai-review-activity-description"></textarea></div><fieldset class="ai-axis-group" data-axis-group="horizontal"><legend>Horizontal axis</legend><div class="criterion"><label for="ai-review-x-label">Horizontal criterion</label><input id="ai-review-x-label"></div><div><label for="ai-review-x-low">Left endpoint</label><input id="ai-review-x-low"></div><div><label for="ai-review-x-high">Right endpoint</label><input id="ai-review-x-high"></div></fieldset><fieldset class="ai-axis-group" data-axis-group="vertical"><legend>Vertical axis</legend><div class="criterion"><label for="ai-review-y-label">Vertical criterion</label><input id="ai-review-y-label"></div><div><label for="ai-review-y-low">Bottom endpoint</label><input id="ai-review-y-low"></div><div><label for="ai-review-y-high">Top endpoint</label><input id="ai-review-y-high"></div></fieldset><div class="wide"><label for="ai-review-options">Option titles</label><textarea id="ai-review-options"></textarea><div class="option-details" id="ai-review-option-details" aria-label="Optional AI option details"></div></div></div><div class="button-row"><button class="button button-primary" id="ai-use-solo" type="button">Use solo</button><button class="button button-secondary" id="ai-use-invite" type="button">Invite responses</button><button class="button button-quiet" id="ai-discard-draft" type="button">Discard</button></div></section></div></dialog>
     <div class="sr-only" id="live-region" aria-live="polite"></div>
   </main>
   <script type="module" src="./app.js"></script>

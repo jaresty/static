@@ -49,6 +49,8 @@ const facilitatorApp = {
   resolutionPointerMoved: false,
   resolutionPointerCanAdjust: false,
   showResponseNames: false,
+  optionDescriptions: new Map(),
+  aiOptionDescriptions: new Map(),
   elements: {},
 
   init() {
@@ -57,16 +59,16 @@ const facilitatorApp = {
       'mode-view', 'solo-mode', 'setup-mode', 'combine-mode', 'back-to-choices', 'privacy-note', 'invitation-view', 'invitation-summary', 'start-response',
       'collection-view', 'collection-grid', 'response-import-panel', 'response-links', 'collect-responses', 'clear-responses', 'collection-status', 'response-count', 'response-list', 'disagreement-list', 'previous-disagreement', 'next-disagreement', 'undo-resolution', 'reset-all-resolutions', 'show-response-names', 'convergence-board', 'resolution-inspector', 'convergence-summary', 'include-resolution-adjustments', 'export-resolution', 'copy-resolution-export', 'resolution-export-output', 'resolution-export-status',
       'setup-view', 'workspace-mode-label', 'setup-submit', 'setup-share-panel', 'setup-share-output', 'copy-setup-slack', 'copy-setup-link', 'answer-own-invitation', 'setup-share-status',
-      'placement-view', 'review-view', 'setup-form', 'prompt', 'x-label', 'x-low', 'x-high',
-      'y-label', 'y-low', 'y-high', 'items', 'item-count', 'setup-error', 'example-button', 'resume-banner',
-      'resume-summary', 'resume-button', 'discard-button', 'placement-round', 'placement-progress', 'placement-prompt', 'placement-board',
-      'placement-x-title', 'placement-y-title', 'placement-x-summary', 'placement-y-summary', 'placement-x-low', 'placement-x-high', 'placement-y-low', 'placement-y-high', 'candidate-card',
-      'placement-coordinates', 'place-option', 'placement-undo', 'placement-reset', 'review-round', 'review-prompt',
+      'placement-view', 'review-view', 'setup-form', 'prompt', 'activity-description', 'x-label', 'x-low', 'x-high',
+      'y-label', 'y-low', 'y-high', 'items', 'option-details', 'item-count', 'setup-error', 'example-button', 'resume-banner',
+      'resume-summary', 'resume-button', 'discard-button', 'placement-round', 'placement-progress', 'placement-prompt', 'placement-activity-description', 'placement-board',
+      'placement-x-title', 'placement-y-title', 'placement-x-summary', 'placement-y-summary', 'placement-x-low', 'placement-x-high', 'placement-y-low', 'placement-y-high', 'candidate-card', 'candidate-description',
+      'placement-coordinates', 'place-option', 'placement-undo', 'placement-reset', 'review-round', 'review-prompt', 'review-activity-description', 'item-description-inspector', 'item-description-title', 'item-description-text',
       'new-workshop', 'board', 'board-x-low', 'board-x-high', 'board-y-low', 'board-y-high',
-      'setup-preview-prompt', 'setup-x-edit', 'setup-y-edit', 'setup-x-low', 'setup-x-high', 'setup-y-low', 'setup-y-high', 'setup-options',
+      'setup-preview-prompt', 'setup-preview-description', 'setup-x-edit', 'setup-y-edit', 'setup-x-low', 'setup-x-high', 'setup-y-low', 'setup-y-high', 'setup-options',
       'review-undo', 'response-share-panel', 'contributor-name', 'include-response-preview', 'copy-response-slack', 'copy-response-link', 'response-share-status',
       'export-format', 'export-output', 'copy-button', 'download-button', 'copy-status', 'storage-status', 'live-region',
-      'ai-draft-dialog', 'ai-import-clipboard', 'ai-manual-toggle', 'ai-manual-import', 'ai-draft-input', 'ai-review-json', 'ai-draft-status', 'ai-draft-review', 'ai-review-question', 'ai-review-x-label', 'ai-review-x-low', 'ai-review-x-high', 'ai-review-y-label', 'ai-review-y-low', 'ai-review-y-high', 'ai-review-options', 'ai-use-solo', 'ai-use-invite', 'ai-discard-draft',
+      'ai-draft-dialog', 'ai-import-clipboard', 'ai-manual-toggle', 'ai-manual-import', 'ai-draft-input', 'ai-review-json', 'ai-draft-status', 'ai-draft-review', 'ai-review-question', 'ai-review-activity-description', 'ai-review-x-label', 'ai-review-x-low', 'ai-review-x-high', 'ai-review-y-label', 'ai-review-y-low', 'ai-review-y-high', 'ai-review-options', 'ai-review-option-details', 'ai-use-solo', 'ai-use-invite', 'ai-discard-draft',
     ];
     this.elements = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
     this.initAiDraft();
@@ -101,7 +103,7 @@ const facilitatorApp = {
       this.resolutionPointerCanAdjust = false;
     });
     this.elements['setup-form'].addEventListener('submit', (event) => this.start(event));
-    for (const id of ['prompt', 'x-label', 'x-low', 'x-high', 'y-label', 'y-low', 'y-high', 'items']) {
+    for (const id of ['prompt', 'activity-description', 'x-label', 'x-low', 'x-high', 'y-label', 'y-low', 'y-high', 'items']) {
       this.elements[id].addEventListener('input', () => {
         this.updateCount();
         this.updatePreview();
@@ -157,6 +159,7 @@ const facilitatorApp = {
     this.elements['ai-use-solo'].addEventListener('click', () => this.useAiDraft('solo'));
     this.elements['ai-use-invite'].addEventListener('click', () => this.useAiDraft('invite'));
     this.elements['ai-discard-draft'].addEventListener('click', () => this.discardAiDraft());
+    this.elements['ai-review-options'].addEventListener('input', () => this.renderOptionEditors('ai'));
   },
 
   async copyAiPrompt(button) {
@@ -181,13 +184,16 @@ const facilitatorApp = {
   reviewAiDraft(raw) {
     const draft = parseQuadrantDraft(raw);
     this.elements['ai-review-question'].value = draft.question;
+    this.elements['ai-review-activity-description'].value = draft.activityDescription;
     this.elements['ai-review-x-label'].value = draft.x.label;
     this.elements['ai-review-x-low'].value = draft.x.low;
     this.elements['ai-review-x-high'].value = draft.x.high;
     this.elements['ai-review-y-label'].value = draft.y.label;
     this.elements['ai-review-y-low'].value = draft.y.low;
     this.elements['ai-review-y-high'].value = draft.y.high;
-    this.elements['ai-review-options'].value = draft.options.join('\n');
+    this.elements['ai-review-options'].value = draft.options.map(({ title }) => title).join('\n');
+    this.aiOptionDescriptions = new Map(draft.options.map(({ title, description }) => [title, description]));
+    this.renderOptionEditors('ai');
     this.elements['ai-draft-review'].hidden = false;
     this.elements['ai-draft-status'].textContent = 'Draft loaded. Review every field before choosing how to use it.';
     if (!this.elements['ai-draft-dialog'].open) this.elements['ai-draft-dialog'].showModal();
@@ -198,9 +204,10 @@ const facilitatorApp = {
       version: 1,
       kind: 'quadrant-draft',
       question: this.elements['ai-review-question'].value,
+      activityDescription: this.elements['ai-review-activity-description'].value,
       x: { label: this.elements['ai-review-x-label'].value, low: this.elements['ai-review-x-low'].value, high: this.elements['ai-review-x-high'].value },
       y: { label: this.elements['ai-review-y-label'].value, low: this.elements['ai-review-y-low'].value, high: this.elements['ai-review-y-high'].value },
-      options: this.elements['ai-review-options'].value.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean),
+      options: this.optionTitles('ai-review-options').map((title) => ({ title, description: this.aiOptionDescriptions.get(title) ?? '' })),
     });
   },
 
@@ -208,13 +215,15 @@ const facilitatorApp = {
     try {
       const draft = this.aiDraftFromReview();
       this.elements.prompt.value = draft.question;
+      this.elements['activity-description'].value = draft.activityDescription;
       this.elements['x-label'].value = draft.x.label;
       this.elements['x-low'].value = draft.x.low;
       this.elements['x-high'].value = draft.x.high;
       this.elements['y-label'].value = draft.y.label;
       this.elements['y-low'].value = draft.y.low;
       this.elements['y-high'].value = draft.y.high;
-      this.elements.items.value = draft.options.join('\n');
+      this.elements.items.value = draft.options.map(({ title }) => title).join('\n');
+      this.optionDescriptions = new Map(draft.options.map(({ title, description }) => [title, description]));
       this.updateCount();
       this.updatePreview();
       history.replaceState(null, '', `${location.pathname}${location.search}`);
@@ -290,7 +299,22 @@ const facilitatorApp = {
     title.textContent = artifact.payload.prompt;
     const detail = document.createElement('span');
     detail.textContent = `${artifact.payload.items.length} options · ${artifact.payload.xLabel} × ${artifact.payload.yLabel}`;
-    this.elements['invitation-summary'].replaceChildren(title, detail);
+    const context = document.createElement('p');
+    context.className = 'context-description';
+    context.textContent = artifact.payload.activityDescription;
+    context.hidden = !artifact.payload.activityDescription;
+    const describedItems = artifact.payload.items.filter(({ description }) => description);
+    const descriptions = document.createElement('ul');
+    descriptions.className = 'invitation-option-details';
+    for (const item of describedItems) {
+      const row = document.createElement('li');
+      const name = document.createElement('strong');
+      name.textContent = item.text;
+      row.append(name, document.createTextNode(` — ${item.description}`));
+      descriptions.append(row);
+    }
+    descriptions.hidden = describedItems.length === 0;
+    this.elements['invitation-summary'].replaceChildren(title, detail, context, descriptions);
     this.show('invitation');
     return true;
   },
@@ -316,11 +340,13 @@ const facilitatorApp = {
     } catch {
       appStorage.removeItem(this.responseStorageKey);
     }
+    const itemProjection = (items) => items?.map(({ id, text, description = '' }) => ({ id, text, description }));
     const sameSetup = saved?.prompt === setup.prompt
-      && JSON.stringify(saved.items?.map(({ id, text }) => ({ id, text }))) === JSON.stringify(setup.items);
+      && (saved.activityDescription ?? '') === setup.activityDescription
+      && JSON.stringify(itemProjection(saved.items)) === JSON.stringify(itemProjection(setup.items));
     this.session = sameSetup
       ? saved
-      : createWorkshop({ ...setup, items: setup.items.map(({ text }) => text).join('\n') });
+      : createWorkshop({ ...setup, items: setup.items });
     document.body.dataset.mode = 'response';
     this.elements['privacy-note'].textContent = 'Your response stays local until you copy it';
     document.body.dataset.setupId = this.sharedArtifact.exerciseId;
@@ -340,13 +366,14 @@ const facilitatorApp = {
     try {
       const nextSession = createWorkshop({
         prompt: this.elements.prompt.value,
+        activityDescription: this.elements['activity-description'].value,
         xLabel: this.elements['x-label'].value,
         xLow: this.elements['x-low'].value,
         xHigh: this.elements['x-high'].value,
         yLabel: this.elements['y-label'].value,
         yLow: this.elements['y-low'].value,
         yHigh: this.elements['y-high'].value,
-        items: this.elements.items.value,
+        items: this.setupItems(),
       });
       if (document.body.dataset.mode === 'facilitator-setup') {
         const url = encodeSetupUrl(nextSession, new URL(location.pathname, location.origin).toString());
@@ -370,6 +397,7 @@ const facilitatorApp = {
 
   useExample() {
     this.elements.prompt.value = 'Which ideas should we explore next?';
+    this.elements['activity-description'].value = 'Compare each idea by expected value and how confident we are in that estimate.';
     this.elements['x-label'].value = 'Expected value';
     this.elements['x-low'].value = 'Lower value';
     this.elements['x-high'].value = 'Higher value';
@@ -377,26 +405,87 @@ const facilitatorApp = {
     this.elements['y-low'].value = 'Lower confidence';
     this.elements['y-high'].value = 'Higher confidence';
     this.elements.items.value = ['Improve search', 'Add keyboard shortcuts', 'Clarify onboarding', 'Simplify navigation', 'Reduce page load time'].join('\n');
+    this.optionDescriptions = new Map([
+      ['Improve search', 'Help people recover when their first query does not find the right result.'],
+      ['Clarify onboarding', 'Make the first successful workflow easier to understand.'],
+    ]);
     this.updateCount();
     this.updatePreview();
     this.elements.prompt.focus();
   },
 
+  optionTitles(id = 'items') {
+    return this.elements[id].value.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
+  },
+
+  renderOptionEditors(mode = 'setup') {
+    const setup = mode === 'setup';
+    const container = this.elements[setup ? 'option-details' : 'ai-review-option-details'];
+    const titles = this.optionTitles(setup ? 'items' : 'ai-review-options');
+    const descriptions = setup ? this.optionDescriptions : this.aiOptionDescriptions;
+    const current = [...container.querySelectorAll('textarea[data-option-title]')];
+    const byTitle = new Map(current.map((input) => [input.dataset.optionTitle, input.value]));
+    const byIndex = current.map((input) => input.value);
+    const next = new Map();
+    const rows = titles.map((title, index) => {
+      const row = document.createElement('details');
+      row.className = 'option-detail';
+      const summary = document.createElement('summary');
+      summary.textContent = title;
+      const hint = document.createElement('span');
+      hint.className = 'hint';
+      hint.textContent = 'Optional detail';
+      summary.append(hint);
+      const label = document.createElement('label');
+      const input = document.createElement('textarea');
+      const id = `${setup ? 'option' : 'ai-option'}-description-${index}`;
+      label.htmlFor = id;
+      label.className = 'sr-only';
+      label.textContent = `Description for ${title}`;
+      input.id = id;
+      input.dataset.optionTitle = title;
+      input.dataset[setup ? 'optionDescription' : 'aiOptionDescription'] = String(index);
+      input.placeholder = `Add context for “${title}”`;
+      input.value = byTitle.get(title) ?? byIndex[index] ?? descriptions.get(title) ?? '';
+      row.open = Boolean(input.value);
+      next.set(title, input.value);
+      input.addEventListener('input', () => (setup ? this.optionDescriptions : this.aiOptionDescriptions).set(title, input.value));
+      row.append(summary, label, input);
+      return row;
+    });
+    if (setup) this.optionDescriptions = next; else this.aiOptionDescriptions = next;
+    container.replaceChildren(...rows);
+  },
+
+  setupItems() {
+    return this.optionTitles().map((text, index) => ({
+      text,
+      description: this.elements['option-details'].querySelector(`[data-option-description="${index}"]`)?.value ?? this.optionDescriptions.get(text) ?? '',
+    }));
+  },
+
+  setOptionalText(element, value) {
+    element.textContent = value ?? '';
+    element.hidden = !value;
+  },
+
   updateCount() {
-    const count = this.elements.items.value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).length;
+    const count = this.optionTitles().length;
     this.elements['item-count'].textContent = `${count} ${count === 1 ? 'option' : 'options'}`;
   },
 
   updatePreview() {
     this.elements['setup-preview-prompt'].textContent = this.elements.prompt.value.trim()
       || 'Frame the decision, then place every option on both axes.';
+    this.setOptionalText(this.elements['setup-preview-description'], this.elements['activity-description'].value.trim());
     this.elements['setup-x-edit'].textContent = `${this.elements['x-label'].value.trim() || 'X axis'} · edit`;
     this.elements['setup-y-edit'].textContent = `${this.elements['y-label'].value.trim() || 'Y axis'} · edit`;
     this.elements['setup-x-low'].textContent = this.elements['x-low'].value.trim() || 'Lower X';
     this.elements['setup-x-high'].textContent = this.elements['x-high'].value.trim() || 'Higher X';
     this.elements['setup-y-low'].textContent = this.elements['y-low'].value.trim() || 'Lower Y';
     this.elements['setup-y-high'].textContent = this.elements['y-high'].value.trim() || 'Higher Y';
-    const options = this.elements.items.value.split(/\r?\n/).map((text) => text.trim()).filter(Boolean);
+    const options = this.optionTitles();
+    this.renderOptionEditors('setup');
     this.elements['setup-options'].replaceChildren(...options.slice(0, 8).map((text) => {
       const option = document.createElement('span');
       option.className = 'setup-option';
@@ -448,7 +537,7 @@ const facilitatorApp = {
     button.className = `board-item${candidate ? ' candidate-preview' : ''}${point.focused ? ' focused' : ''}${point.id === this.selectedId ? ' selected' : ''}`;
     button.textContent = point.text;
     this.positionElement(button, point);
-    button.setAttribute('aria-label', `${point.text}; ${this.describePosition(point)}${candidate ? '; drag to place' : ''}`);
+    button.setAttribute('aria-label', `${point.text}${point.description ? '; details available' : ''}; ${this.describePosition(point)}${candidate ? '; drag to place' : ''}`);
     button.addEventListener('click', () => {
       if (candidate) return;
       this.selectedId = point.id;
@@ -475,7 +564,9 @@ const facilitatorApp = {
           this.elements['placement-coordinates'].textContent = this.describePosition(latest);
         }
         if (!candidate && this.session.phase === 'placement') {
-          this.elements['candidate-card'].textContent = this.item(itemId).text;
+          const activeItem = this.item(itemId);
+          this.elements['candidate-card'].textContent = activeItem.text;
+          this.setOptionalText(this.elements['candidate-description'], activeItem.description);
           this.elements['placement-coordinates'].textContent = this.describePosition(latest);
         }
       };
@@ -495,7 +586,9 @@ const facilitatorApp = {
           this.announce(`${this.item(itemId).text} repositioned.`);
           this.render();
         } else if (this.session.phase === 'placement') {
-          this.elements['candidate-card'].textContent = this.item(this.session.candidateId).text;
+          const candidateItem = this.item(this.session.candidateId);
+          this.elements['candidate-card'].textContent = candidateItem.text;
+          this.setOptionalText(this.elements['candidate-description'], candidateItem.description);
           this.elements['placement-coordinates'].textContent = this.describePosition(this.draftPosition);
         }
       };
@@ -517,6 +610,7 @@ const facilitatorApp = {
     if (document.body.dataset.mode !== 'response') this.elements['placement-round'].textContent = `Round ${this.session.round} · place on the grid`;
     this.elements['placement-progress'].textContent = `${placedCount} of ${this.session.items.length} placed`;
     this.elements['placement-prompt'].textContent = this.session.prompt;
+    this.setOptionalText(this.elements['placement-activity-description'], this.session.activityDescription);
     this.elements['placement-x-title'].textContent = this.session.xLabel;
     this.elements['placement-y-title'].textContent = this.session.yLabel;
     this.elements['placement-x-summary'].textContent = `${this.session.xLabel}: ${this.session.xLow} — ${this.session.xHigh}`;
@@ -525,6 +619,7 @@ const facilitatorApp = {
     this.renderPlacedItems(this.elements['placement-board']);
     const candidateButton = this.makeBoardItem({ ...candidate, ...this.draftPosition, focused: false }, this.elements['placement-board'], { candidate: true });
     this.elements['candidate-card'].textContent = candidate.text;
+    this.setOptionalText(this.elements['candidate-description'], candidate.description);
     this.elements['placement-coordinates'].textContent = this.describePosition(this.draftPosition);
     this.elements['placement-undo'].disabled = this.session.history.length === 0;
     this.show('placement');
@@ -544,9 +639,16 @@ const facilitatorApp = {
     this.elements['review-round'].textContent = document.body.dataset.mode === 'response' ? 'YOUR RESPONSE' : `Round ${this.session.round} · review together`;
     this.elements['new-workshop'].textContent = document.body.dataset.mode === 'response' ? 'Restart my response' : 'Start a new workshop';
     this.elements['review-prompt'].textContent = this.session.prompt;
+    this.setOptionalText(this.elements['review-activity-description'], this.session.activityDescription);
     this.setAxisLabels('board');
     this.renderPlacedItems(this.elements.board);
     this.elements['review-undo'].disabled = this.session.history.length === 0;
+    const selected = this.selectedId ? this.item(this.selectedId) : null;
+    this.elements['item-description-inspector'].hidden = !selected;
+    if (selected) {
+      this.elements['item-description-title'].textContent = selected.text;
+      this.elements['item-description-text'].textContent = selected.description || 'No additional detail was provided.';
+    }
     this.renderExport();
     this.elements['response-share-panel'].hidden = document.body.dataset.mode !== 'response';
     this.show('review');
@@ -937,6 +1039,10 @@ const facilitatorApp = {
     const label = document.createElement('span');
     label.textContent = item.text;
     heading.append(number, label);
+    const description = document.createElement('p');
+    description.className = 'context-description';
+    description.textContent = item.description;
+    description.hidden = !item.description;
     const detail = document.createElement('p');
     detail.className = 'hint';
     detail.textContent = `${item.placements.length} placements · ${Math.round(item.disagreement / Math.SQRT2 * 100)}% spread`;
@@ -946,7 +1052,7 @@ const facilitatorApp = {
     reset.className = 'button button-quiet';
     reset.textContent = 'Reset item to average';
     reset.addEventListener('click', () => this.commitResolution(resetResolutionItem(this.resolution, item.id)));
-    inspector.replaceChildren(heading, detail, reset);
+    inspector.replaceChildren(heading, description, detail, reset);
   },
 
   renderCollection() {

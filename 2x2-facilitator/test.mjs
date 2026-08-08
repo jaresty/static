@@ -37,6 +37,25 @@ test('framing validation passes for a clear prompt, two axes, and 2–20 unique 
   assert.throws(() => createWorkshop({ ...frame, items: Array.from({ length: 21 }, (_, index) => `Idea ${index}`).join('\n') }), /20/);
 });
 
+test('optional activity and option descriptions normalize into the workshop model', async () => {
+  const { createWorkshop } = await loadCore();
+  const session = createWorkshop({
+    ...frame,
+    activityDescription: 'Use this map to prepare the roadmap conversation.',
+    items: [
+      { text: 'Improve search', description: 'Help people recover when their first query misses.' },
+      { text: 'Add keyboard shortcuts', description: '' },
+      { text: 'Clarify onboarding' },
+    ],
+  });
+  assert.equal(session.activityDescription, 'Use this map to prepare the roadmap conversation.');
+  assert.deepEqual(session.items.map(({ text, description }) => ({ text, description })), [
+    { text: 'Improve search', description: 'Help people recover when their first query misses.' },
+    { text: 'Add keyboard shortcuts', description: '' },
+    { text: 'Clarify onboarding', description: '' },
+  ]);
+});
+
 test('direct grid placement passes with two-dimensional normalized coordinates', async () => {
   const { createWorkshop, placeAt, coordinates } = await loadCore();
   let session = createWorkshop(frame);
@@ -131,10 +150,20 @@ test('c1 Quadrant setup URLs round-trip only the independent setup projection', 
   assert.equal(artifact.app, 'quadrant');
   assert.equal(artifact.kind, 'setup');
   assert.equal(artifact.payload.prompt, session.prompt);
-  assert.deepEqual(artifact.payload.items, session.items.map(({ id, text }) => ({ id, text })));
+  assert.deepEqual(artifact.payload.items, session.items.map(({ id, text, description }) => ({ id, text, description })));
   for (const workingField of ['positions', 'pending', 'candidateId', 'focusIds', 'phase', 'history']) {
     assert.equal(artifact.payload[workingField], undefined, `${workingField} must remain local working state`);
   }
+});
+
+test('Quadrant setup links round-trip optional activity and option descriptions', async () => {
+  const { encodeSetupUrl, decodeShareUrl } = await import('./collaboration.mjs');
+  const session = await completedSession();
+  session.activityDescription = 'Discuss tradeoffs before making a roadmap commitment.';
+  session.items[0].description = 'A search result should explain why no exact match was found.';
+  const setup = decodeShareUrl(encodeSetupUrl(session, 'https://static.test/2x2-facilitator/')).payload;
+  assert.equal(setup.activityDescription, session.activityDescription);
+  assert.deepEqual(setup.items, session.items.map(({ id, text, description = '' }) => ({ id, text, description })));
 });
 
 test('c3 Quadrant response URLs preserve participant placements', async () => {
@@ -271,7 +300,7 @@ test('existing-option drag feedback names the actively dragged option', async ()
   const { readFile } = await import('node:fs/promises');
   const script = await readFile(new URL('./app.js', import.meta.url), 'utf8');
   assert.ok(
-    /if \(!candidate && this\.session\.phase === 'placement'\)[\s\S]*?candidate-card[^\n]*this\.item\(itemId\)\.text/.test(script),
+    /if \(!candidate && this\.session\.phase === 'placement'\)[\s\S]*?candidate-card[^\n]*activeItem\.text/.test(script),
     'existing-option drag must name the actively dragged option',
   );
 });
@@ -338,13 +367,20 @@ test('facilitator criterion input spans the endpoint columns', async () => {
 test('unchanged existing-option drag restores the current candidate name', async () => {
   const { readFile } = await import('node:fs/promises');
   const script = await readFile(new URL('./app.js', import.meta.url), 'utf8');
-  assert.ok(/else if \(this\.session\.phase === 'placement'\)[\s\S]*?candidate-card[^\n]*this\.item\(this\.session\.candidateId\)\.text/.test(script), 'finished existing-option drag must restore the candidate name');
+  assert.ok(/else if \(this\.session\.phase === 'placement'\)[\s\S]*?candidate-card[^\n]*candidateItem\.text/.test(script), 'finished existing-option drag must restore the candidate name');
 });
 
 test('unchanged existing-option drag restores the candidate coordinates', async () => {
   const { readFile } = await import('node:fs/promises');
   const script = await readFile(new URL('./app.js', import.meta.url), 'utf8');
   assert.ok(/else if \(this\.session\.phase === 'placement'\)\s*\{[^}]*placement-coordinates[^\n]*this\.describePosition\(this\.draftPosition\)/.test(script), 'finished existing-option drag must restore the candidate coordinates');
+});
+
+test('selected and dragged board notes have explicit topmost stacking levels', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
+  assert.match(html, /\.board-item\.selected\s*\{[^}]*z-index:\s*[4-9]\d*/);
+  assert.match(html, /\.board-item\.dragging\s*\{[^}]*z-index:\s*[5-9]\d*/);
 });
 
 test('static artifact passes without runtime dependencies and exposes keyboard-addressable controls', async () => {

@@ -9,6 +9,12 @@ function clean(value, max = 4000) {
   return text;
 }
 
+function optionalText(value, max = 4000) {
+  const text = String(value ?? '').trim();
+  if (text.length > max) throw new Error('Shared text is too long.');
+  return text;
+}
+
 function hash(value) {
   let result = 0x811c9dc5;
   for (const character of value) {
@@ -36,11 +42,16 @@ function decodeText(value) {
 }
 
 function setupFromSession(session) {
-  const items = session?.items?.map(({ id, text }) => ({ id: clean(id, 100), text: clean(text, 500) }));
+  const items = session?.items?.map(({ id, text, description }) => {
+    const item = { id: clean(id, 100), text: clean(text, 500) };
+    const detail = optionalText(description, 2000);
+    if (detail) item.description = detail;
+    return item;
+  });
   if (!items || items.length < 2 || items.length > 20 || new Set(items.map(({ id }) => id)).size !== items.length) {
     throw new Error('A shared Quadrant setup needs 2–20 uniquely identified options.');
   }
-  return {
+  const setup = {
     prompt: clean(session.prompt),
     xLabel: clean(session.xLabel, 500),
     xLow: clean(session.xLow, 500),
@@ -49,6 +60,17 @@ function setupFromSession(session) {
     yLow: clean(session.yLow, 500),
     yHigh: clean(session.yHigh, 500),
     items,
+  };
+  const activityDescription = optionalText(session.activityDescription, 4000);
+  if (activityDescription) setup.activityDescription = activityDescription;
+  return setup;
+}
+
+function canonicalSetup(setup) {
+  return {
+    ...setup,
+    activityDescription: optionalText(setup.activityDescription, 4000),
+    items: setup.items.map((item) => ({ ...item, description: optionalText(item.description, 2000) })),
   };
 }
 
@@ -65,7 +87,7 @@ function buildUrl(artifact, baseUrl) {
 }
 
 function validateSetup(payload) {
-  return setupFromSession(payload);
+  return canonicalSetup(setupFromSession(payload));
 }
 
 function validatePositions(positions, setup) {
@@ -119,12 +141,12 @@ export function decodeShareUrl(value) {
 
   if (artifact.kind === 'setup') {
     const payload = validateSetup(artifact.payload);
-    if (artifact.exerciseId !== exerciseIdFor(payload)) throw new Error('This Quadrant setup identity does not match its contents.');
+    if (artifact.exerciseId !== exerciseIdFor(artifact.payload)) throw new Error('This Quadrant setup identity does not match its contents.');
     return { ...artifact, payload };
   }
 
   const setup = validateSetup(artifact.setup);
-  if (artifact.exerciseId !== exerciseIdFor(setup)) throw new Error('This Quadrant response belongs to an invalid setup.');
+  if (artifact.exerciseId !== exerciseIdFor(artifact.setup)) throw new Error('This Quadrant response belongs to an invalid setup.');
   return {
     ...artifact,
     contributor: clean(artifact.contributor, 120),
@@ -156,8 +178,8 @@ export function buildSlackMessage(artifact, url, { preview = false } = {}) {
 }
 
 export function createCollection(session) {
-  const setup = setupFromSession(session);
-  return { app: APP, exerciseId: exerciseIdFor(setup), setup, responses: [] };
+  const wireSetup = setupFromSession(session);
+  return { app: APP, exerciseId: exerciseIdFor(wireSetup), setup: canonicalSetup(wireSetup), responses: [] };
 }
 
 export function addResponse(collection, response) {
@@ -174,7 +196,7 @@ export function addResponse(collection, response) {
 
 export function convergeResponses(collection) {
   const responses = collection?.responses ?? [];
-  const items = collection.setup.items.map(({ id, text }) => {
+  const items = collection.setup.items.map(({ id, text, description = '' }) => {
     const placements = responses.map(({ contributionId, contributor, payload }) => ({
       contributionId,
       contributor,
@@ -189,7 +211,7 @@ export function convergeResponses(collection) {
         ));
       }
     }
-    return { id, text, placements, disagreement };
+    return { id, text, description, placements, disagreement };
   });
   return { app: APP, exerciseId: collection.exerciseId, responseCount: responses.length, items };
 }
