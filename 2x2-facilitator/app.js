@@ -69,7 +69,7 @@ const facilitatorApp = {
     compactQuadrantStorage(appStorage);
     const ids = [
       'mode-view', 'solo-mode', 'setup-mode', 'combine-mode', 'facilitator-backup-input', 'facilitator-backup-status', 'back-to-choices', 'privacy-note', 'invitation-view', 'invitation-summary', 'start-response',
-      'shared-facilitator-view', 'shared-facilitator-title', 'shared-facilitator-description', 'shared-facilitator-meta', 'shared-facilitator-x-summary', 'shared-facilitator-y-summary', 'shared-facilitator-board', 'shared-facilitator-results', 'shared-facilitator-disagreement-list', 'shared-facilitator-inspector',
+      'shared-facilitator-view', 'shared-facilitator-title', 'shared-facilitator-description', 'shared-facilitator-meta', 'shared-facilitator-x-summary', 'shared-facilitator-y-summary', 'shared-facilitator-board', 'shared-facilitator-disagreement-list', 'shared-facilitator-navigator-heading', 'shared-facilitator-navigator-meta', 'shared-facilitator-inspector',
       'facilitator-handoff-view', 'facilitator-handoff-summary', 'import-facilitator-handoff', 'discard-facilitator-handoff',
       'collection-view', 'collection-grid', 'response-import-panel', 'response-links', 'collect-responses', 'clear-responses', 'collection-status', 'response-count', 'response-list', 'disagreement-list', 'previous-disagreement', 'next-disagreement', 'undo-resolution', 'reset-all-resolutions', 'show-response-names', 'convergence-board', 'resolution-inspector', 'convergence-summary', 'include-resolution-adjustments', 'export-resolution', 'copy-resolution-export', 'resolution-export-output', 'resolution-export-status',
       'include-handoff-names', 'copy-facilitator-view', 'copy-facilitator-handoff', 'download-facilitator-backup', 'facilitator-share-output', 'facilitator-share-status',
@@ -383,25 +383,19 @@ const facilitatorApp = {
         nodes.push(group);
       });
       board.replaceChildren(...nodes);
+      const hasDisagreement = items.some(({ disagreement }) => disagreement > 0);
+      this.elements['shared-facilitator-navigator-heading'].textContent = hasDisagreement ? 'Items · most disagreement first' : 'Items · select to inspect';
+      this.elements['shared-facilitator-navigator-meta'].textContent = items.length > 6 ? `${items.length} items · scroll to see all` : `${items.length} items`;
       this.renderResultNavigator(items, {
         list: this.elements['shared-facilitator-disagreement-list'],
         focusedId: this.sharedFocusedResultId,
         onToggle: (itemId) => this.toggleSharedResultFocus(itemId),
         responseCount,
         itemDataset: 'sharedNavigatorItem',
+        secondaryText: hasDisagreement
+          ? null
+          : (item) => `${Math.round(item.resolved.x * 100)}% ${setup.xLabel} · ${Math.round(item.resolved.y * 100)}% ${setup.yLabel}`,
       });
-      this.elements['shared-facilitator-results'].replaceChildren(...items.map((item, index) => {
-        const row = document.createElement('li');
-        const heading = document.createElement('strong');
-        heading.textContent = `${index + 1}. ${item.text}`;
-        const description = document.createElement('p');
-        description.textContent = item.description;
-        description.hidden = !item.description;
-        const result = document.createElement('p');
-        result.textContent = `Final position: ${Math.round(item.resolved.x * 100)}% ${setup.xLabel}, ${Math.round(item.resolved.y * 100)}% ${setup.yLabel} · ${Math.round(item.disagreement / Math.SQRT2 * 100)}% disagreement`;
-        row.append(heading, description, result);
-        return row;
-      }));
       this.renderSharedResultFocus();
       this.show('shared-facilitator');
       return true;
@@ -1154,7 +1148,7 @@ const facilitatorApp = {
     this.focusResolution(items[next].id);
   },
 
-  renderResultNavigator(sourceItems, { list, focusedId, onToggle = null, responseCount = null, itemDataset = 'navigatorItem' }) {
+  renderResultNavigator(sourceItems, { list, focusedId, onToggle = null, responseCount = null, itemDataset = 'navigatorItem', secondaryText = null }) {
     const items = this.navigatorItems({ items: sourceItems });
     list.replaceChildren(...items.map((item) => {
       const row = document.createElement('li');
@@ -1178,7 +1172,7 @@ const facilitatorApp = {
       identity.append(number, label);
       const spread = document.createElement('span');
       spread.className = 'navigator-spread';
-      spread.textContent = `${Math.round(item.disagreement / Math.SQRT2 * 100)}% spread`;
+      spread.textContent = secondaryText ? secondaryText(item) : `${Math.round(item.disagreement / Math.SQRT2 * 100)}% spread`;
       button.append(identity, spread);
       if (onToggle) button.addEventListener('click', () => onToggle(item.id));
       row.append(button);
