@@ -30,8 +30,14 @@ function flatHistory(session) {
 }
 
 function snapshot(session) {
-  const next = clone(session);
+  const next = historyFree(session);
   next.history = [...flatHistory(session), historyFree(session)].slice(-HISTORY_LIMIT);
+  return next;
+}
+
+export function compactWorkshop(session) {
+  const next = historyFree(session);
+  next.history = flatHistory(session);
   return next;
 }
 
@@ -76,6 +82,18 @@ export function placeAt(session, { x, y }) {
   next.pending = next.pending.slice(1);
   next.candidateId = next.pending[0] ?? null;
   next.phase = next.candidateId ? 'placement' : 'review';
+  return next;
+}
+
+export function repositionItem(session, itemId, position) {
+  if (!session.positions[itemId]) return session;
+  if (![position?.x, position?.y].every((value) => Number.isFinite(value) && value >= 0 && value <= 1)) {
+    throw new Error('Place the option inside the grid.');
+  }
+  const current = session.positions[itemId];
+  if (current.x === position.x && current.y === position.y) return session;
+  const next = snapshot(session);
+  next.positions[itemId] = { x: position.x, y: position.y };
   return next;
 }
 

@@ -4,6 +4,7 @@ import {
   exportWorkshop,
   moveItem,
   placeAt,
+  repositionItem,
   undo as undoWorkshop,
 } from './core.mjs';
 import {
@@ -26,6 +27,7 @@ import {
   undoResolution,
 } from './resolution.mjs';
 import { decodeQuadrantDraftFragment, parseQuadrantDraft, quadrantAiPrompt } from './ai-draft.mjs';
+import { compactQuadrantStorage, persistWithRecovery } from './storage-recovery.mjs';
 
 const appStorage = new URLSearchParams(location.search).get('walkthrough') === '1' ? sessionStorage : localStorage;
 const clamp = (value) => Math.max(0, Math.min(1, Number(value.toFixed(2))));
@@ -50,6 +52,7 @@ const facilitatorApp = {
   elements: {},
 
   init() {
+    compactQuadrantStorage(appStorage);
     const ids = [
       'mode-view', 'solo-mode', 'setup-mode', 'combine-mode', 'back-to-choices', 'privacy-note', 'invitation-view', 'invitation-summary', 'start-response',
       'collection-view', 'collection-grid', 'response-import-panel', 'response-links', 'collect-responses', 'clear-responses', 'collection-status', 'response-count', 'response-list', 'disagreement-list', 'previous-disagreement', 'next-disagreement', 'undo-resolution', 'reset-all-resolutions', 'show-response-names', 'convergence-board', 'resolution-inspector', 'convergence-summary', 'include-resolution-adjustments', 'export-resolution', 'copy-resolution-export', 'resolution-export-output', 'resolution-export-status',
@@ -486,10 +489,7 @@ const facilitatorApp = {
           this.draftPosition = latest;
           this.commitPlacement();
         } else if (latest.x !== original.positions[itemId].x || latest.y !== original.positions[itemId].y) {
-          const next = structuredClone(this.session);
-          next.history.push(original);
-          next.positions[itemId] = latest;
-          this.session = next;
+          this.session = repositionItem(this.session, itemId, latest);
           this.selectedId = itemId;
           this.save();
           this.announce(`${this.item(itemId).text} repositioned.`);
@@ -1025,18 +1025,22 @@ const facilitatorApp = {
 
   save() {
     const status = this.elements['storage-status'];
-    try {
-      appStorage.setItem(this.activeStorageKey(), JSON.stringify(this.session));
+    const result = persistWithRecovery(appStorage, this.activeStorageKey(), this.session);
+    if (result.status === 'saved') {
       status.hidden = true;
       status.textContent = '';
       return true;
-    } catch (error) {
-      if (error?.name !== 'QuotaExceededError') throw error;
-      status.textContent = 'Browser storage is full. Your current work remains available in this tab, but it may not survive a reload.';
+    }
+    if (result.status === 'recovered') {
+      status.textContent = 'Cleaned up old saved work and saved your current work.';
       status.hidden = false;
       this.announce(status.textContent);
-      return false;
+      return true;
     }
+    status.textContent = 'Browser storage is full. Your current work remains available in this tab, but it may not survive a reload.';
+    status.hidden = false;
+    this.announce(status.textContent);
+    return false;
   },
 
   migrate(saved) {
