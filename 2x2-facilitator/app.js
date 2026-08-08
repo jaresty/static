@@ -34,6 +34,7 @@ import {
   decodeFacilitatorArtifact,
   encodeFacilitatorArtifactUrl,
   facilitatorArtifactJson,
+  formatFacilitatorViewMarkdown,
   parseFacilitatorArtifactJson,
   restoreFacilitatorHandoff,
 } from './facilitator-share.mjs';
@@ -69,7 +70,7 @@ const facilitatorApp = {
     compactQuadrantStorage(appStorage);
     const ids = [
       'mode-view', 'solo-mode', 'setup-mode', 'combine-mode', 'facilitator-backup-input', 'facilitator-backup-status', 'back-to-choices', 'privacy-note', 'invitation-view', 'invitation-summary', 'start-response',
-      'shared-facilitator-view', 'shared-facilitator-title', 'shared-facilitator-description', 'shared-facilitator-meta', 'shared-facilitator-x-summary', 'shared-facilitator-y-summary', 'shared-facilitator-board', 'shared-facilitator-disagreement-list', 'shared-facilitator-navigator-heading', 'shared-facilitator-navigator-meta', 'shared-facilitator-inspector',
+      'shared-facilitator-view', 'shared-facilitator-title', 'shared-facilitator-description', 'shared-facilitator-meta', 'shared-facilitator-x-summary', 'shared-facilitator-y-summary', 'shared-facilitator-board', 'shared-facilitator-disagreement-list', 'shared-facilitator-navigator-heading', 'shared-facilitator-navigator-meta', 'shared-facilitator-inspector', 'copy-shared-markdown', 'download-shared-markdown', 'shared-markdown-output', 'shared-markdown-status',
       'facilitator-handoff-view', 'facilitator-handoff-summary', 'import-facilitator-handoff', 'discard-facilitator-handoff',
       'collection-view', 'collection-grid', 'response-import-panel', 'response-links', 'collect-responses', 'clear-responses', 'collection-status', 'response-count', 'response-list', 'disagreement-list', 'previous-disagreement', 'next-disagreement', 'undo-resolution', 'reset-all-resolutions', 'show-response-names', 'convergence-board', 'resolution-inspector', 'convergence-summary', 'include-resolution-adjustments', 'export-resolution', 'copy-resolution-export', 'resolution-export-output', 'resolution-export-status',
       'include-handoff-names', 'copy-facilitator-view', 'copy-facilitator-handoff', 'download-facilitator-backup', 'facilitator-share-output', 'facilitator-share-status',
@@ -99,6 +100,8 @@ const facilitatorApp = {
     this.elements['copy-setup-link'].addEventListener('click', () => this.copySetup(false));
     this.elements['copy-response-slack'].addEventListener('click', () => this.copyResponse(true));
     this.elements['copy-response-link'].addEventListener('click', () => this.copyResponse(false));
+    this.elements['copy-shared-markdown'].addEventListener('click', () => this.copySharedMarkdown());
+    this.elements['download-shared-markdown'].addEventListener('click', () => this.downloadSharedMarkdown());
     this.elements['previous-disagreement'].addEventListener('click', () => this.moveResolutionFocus(-1));
     this.elements['next-disagreement'].addEventListener('click', () => this.moveResolutionFocus(1));
     this.elements['undo-resolution'].addEventListener('click', () => this.commitResolution(undoResolution(this.resolution)));
@@ -353,6 +356,10 @@ const facilitatorApp = {
       this.elements['shared-facilitator-meta'].textContent = `${responseCount} ${responseCount === 1 ? 'response' : 'responses'} · ${setup.xLabel} × ${setup.yLabel}`;
       this.elements['shared-facilitator-x-summary'].textContent = `${setup.xLabel}: ${setup.xLow} — ${setup.xHigh}`;
       this.elements['shared-facilitator-y-summary'].textContent = `${setup.yLabel}: ${setup.yLow} — ${setup.yHigh}`;
+      this.elements['shared-markdown-output'].value = formatFacilitatorViewMarkdown(artifact);
+      this.elements['shared-markdown-output'].hidden = true;
+      this.elements['shared-markdown-status'].textContent = '';
+      this.elements['copy-shared-markdown'].textContent = 'Copy Markdown';
       const board = this.elements['shared-facilitator-board'];
       const svg = (name, attributes = {}) => {
         const node = document.createElementNS('http://www.w3.org/2000/svg', name);
@@ -413,6 +420,35 @@ const facilitatorApp = {
     summary.replaceChildren(title, count, disclosure);
     this.show('facilitator-handoff');
     return true;
+  },
+
+  async copySharedMarkdown() {
+    const output = this.elements['shared-markdown-output'];
+    const status = this.elements['shared-markdown-status'];
+    status.setAttribute('role', 'status');
+    try {
+      await navigator.clipboard.writeText(output.value);
+      this.elements['copy-shared-markdown'].textContent = 'Copied!';
+      status.textContent = 'Aggregate Markdown copied.';
+    } catch {
+      output.hidden = false;
+      output.select();
+      status.setAttribute('role', 'alert');
+      status.textContent = 'Copy failed — select and copy the Markdown below.';
+    }
+  },
+
+  downloadSharedMarkdown() {
+    const artifact = this.facilitatorShareArtifact;
+    if (artifact?.kind !== 'facilitator-view') return;
+    const blob = new Blob([this.elements['shared-markdown-output'].value], { type: 'text/markdown;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `quadrant-result-${artifact.exerciseId}.md`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    this.elements['shared-markdown-status'].setAttribute('role', 'status');
+    this.elements['shared-markdown-status'].textContent = 'Aggregate Markdown downloaded.';
   },
 
   toggleSharedResultFocus(itemId) {

@@ -184,3 +184,49 @@ export function restoreFacilitatorHandoff(raw) {
 export function facilitatorArtifactJson(artifact) {
   return JSON.stringify(artifact, null, 2);
 }
+
+export function formatFacilitatorViewMarkdown(raw) {
+  const artifact = validateArtifact(raw);
+  if (artifact.kind !== 'facilitator-view') throw new Error('Choose a view-only facilitator result.');
+  const { setup, responseCount, items } = artifact.payload;
+  const percent = (value) => `${Math.round(value * 100)}%`;
+  const lines = [
+    '# Quadrant facilitator result',
+    '',
+    '## Question',
+    '',
+    setup.prompt,
+    ...(setup.activityDescription ? ['', setup.activityDescription] : []),
+    '',
+    `**Responses:** ${responseCount}`,
+    '',
+    '## Axes',
+    '',
+    `- **${setup.xLabel}:** ${setup.xLow} → ${setup.xHigh}`,
+    `- **${setup.yLabel}:** ${setup.yLow} → ${setup.yHigh}`,
+    '',
+    '## Final results',
+  ];
+  items.forEach((item, index) => {
+    lines.push(
+      '',
+      `### ${index + 1}. ${item.text}`,
+      ...(item.description ? ['', item.description] : []),
+      '',
+      `- Final position: ${percent(item.resolved.x)} ${setup.xLabel}; ${percent(item.resolved.y)} ${setup.yLabel}`,
+    );
+    const spread = Math.round(item.disagreement / Math.SQRT2 * 100);
+    if (spread > 0) lines.push(`- Disagreement: ${spread}% spread`);
+    if (Math.hypot(item.resolved.x - item.baseline.x, item.resolved.y - item.baseline.y) > .000001) {
+      lines.push(`- Facilitator adjustment: ${percent(item.baseline.x)} ${setup.xLabel}, ${percent(item.baseline.y)} ${setup.yLabel} → ${percent(item.resolved.x)} ${setup.xLabel}, ${percent(item.resolved.y)} ${setup.yLabel}`);
+    }
+  });
+  lines.push(
+    '',
+    '## Privacy',
+    '',
+    'Aggregate results only. Participant names, contribution identifiers, and individual placements are excluded.',
+    '',
+  );
+  return lines.join('\n');
+}

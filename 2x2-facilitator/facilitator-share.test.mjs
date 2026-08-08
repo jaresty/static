@@ -8,6 +8,7 @@ import {
   decodeFacilitatorArtifact,
   encodeFacilitatorArtifactUrl,
   facilitatorArtifactJson,
+  formatFacilitatorViewMarkdown,
   parseFacilitatorArtifactJson,
   restoreFacilitatorHandoff,
 } from './facilitator-share.mjs';
@@ -41,6 +42,32 @@ test('view-only facilitator artifacts contain final results but no participant e
   assert.deepEqual(artifact.payload.items[0].resolved, { x: .9, y: .7 });
   assert.ok(artifact.payload.items[0].disagreement > 0);
   assert.doesNotMatch(serialized, /Alex|Blair|response-alex|response-blair|contributionId|placements|positions/);
+});
+
+test('view-only Markdown exports aggregate context without participant evidence', () => {
+  const artifact = createFacilitatorViewArtifact(resolution);
+  const markdown = formatFacilitatorViewMarkdown(artifact);
+  assert.match(markdown, /^# Quadrant facilitator result/m);
+  assert.match(markdown, /## Question\n\nWhich launch should we pursue\?/);
+  assert.match(markdown, /Use the launch brief when interpreting unfamiliar options\./);
+  assert.match(markdown, /\*\*Responses:\*\* 2/);
+  assert.match(markdown, /\*\*Value:\*\* Lower value → Higher value/);
+  assert.match(markdown, /\*\*Confidence:\*\* Lower confidence → Higher confidence/);
+  assert.match(markdown, /### 1\. Pilot[\s\S]*A limited release to existing customers\.[\s\S]*Final position: 90% Value; 70% Confidence/);
+  assert.match(markdown, /### 2\. Launch[\s\S]*Final position: 60% Value; 65% Confidence/);
+  assert.match(markdown, /Disagreement: 60% spread/);
+  assert.match(markdown, /Facilitator adjustment: 50% Value, 50% Confidence → 90% Value, 70% Confidence/);
+  assert.doesNotMatch(markdown, /Alex|Blair|response-alex|response-blair|contributionId|individual position/i);
+});
+
+test('view-only Markdown omits absent optional and evidence fields', () => {
+  const oneResponse = structuredClone(collection);
+  oneResponse.setup.activityDescription = '';
+  oneResponse.setup.items.forEach((item) => { item.description = ''; });
+  oneResponse.responses = [oneResponse.responses[0]];
+  const markdown = formatFacilitatorViewMarkdown(createFacilitatorViewArtifact(createResolution(oneResponse)));
+  assert.doesNotMatch(markdown, /Use the launch brief|A limited release|A broad public release/);
+  assert.doesNotMatch(markdown, /Disagreement:|Facilitator adjustment:/);
 });
 
 test('editable handoffs preserve evidence while anonymizing names by default', () => {

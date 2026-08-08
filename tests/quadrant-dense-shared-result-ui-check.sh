@@ -45,6 +45,17 @@ case "$PROPERTY" in
     agent-browser --session "$session" set viewport 390 844 >/dev/null
     contract="$(agent-browser --session "$session" eval '(()=>[...document.querySelectorAll("#shared-facilitator-board [data-shared-result-item]")].every(group=>Math.min(group.getBoundingClientRect().width,group.getBoundingClientRect().height)>=42))()')"
     ;;
+  8)
+    contract="$(agent-browser --session "$session" eval 'Boolean(document.querySelector("#copy-shared-markdown")&&document.querySelector("#download-shared-markdown")&&document.querySelector("#shared-markdown-output[readonly]")&&document.querySelector("#shared-markdown-status[role=status]"))')"
+    ;;
+  9)
+    violate=false; [[ "${VIOLATE_MARKDOWN:-0}" != 1 ]] || violate=true
+    contract="$(agent-browser --session "$session" eval "(async()=>{const violate=$violate;window.__networkWrites=0;window.fetch=async()=>{window.__networkWrites+=1};navigator.sendBeacon=()=>{window.__networkWrites+=1;return true};Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.__copied=violate?'wrong':text}}});URL.createObjectURL=blob=>{window.__markdownBlob=blob;return 'blob:markdown'};URL.revokeObjectURL=()=>{};HTMLAnchorElement.prototype.click=function(){window.__markdownDownload=this.download};document.querySelector('#copy-shared-markdown').click();await new Promise(resolve=>setTimeout(resolve,0));document.querySelector('#download-shared-markdown').click();const output=document.querySelector('#shared-markdown-output').value;return window.__copied===output&&(await window.__markdownBlob.text())===output&&window.__markdownBlob.type==='text/markdown;charset=utf-8'&&/^quadrant-result-.+\\.md$/.test(window.__markdownDownload)&&document.querySelector('#copy-shared-markdown').innerText==='Copied!'&&/downloaded/i.test(document.querySelector('#shared-markdown-status').innerText)&&/Which questions must we resolve/.test(output)&&!/Alex|Blair|contributionId|response-alex|response-blair/.test(output)&&window.__networkWrites===0})()")"
+    ;;
+  10)
+    violate=false; [[ "${VIOLATE_MARKDOWN_FALLBACK:-0}" != 1 ]] || violate=true
+    contract="$(agent-browser --session "$session" eval "(async()=>{const violate=$violate;Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{if(!violate)throw new Error('denied')}}});document.querySelector('#copy-shared-markdown').click();await new Promise(resolve=>setTimeout(resolve,0));const output=document.querySelector('#shared-markdown-output');const status=document.querySelector('#shared-markdown-status');return !output.hidden&&output.selectionStart===0&&output.selectionEnd===output.value.length&&status.getAttribute('role')==='alert'&&/select and copy/i.test(status.innerText)})()")"
+    ;;
   *) echo "Unknown property: $PROPERTY"; exit 2;;
 esac
 [[ "$contract" == true ]] || { echo "FAIL dense shared result property $PROPERTY: contract=$contract"; exit 1; }
