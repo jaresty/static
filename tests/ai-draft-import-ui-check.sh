@@ -36,6 +36,11 @@ for app in 2x2-facilitator pairwise-ranker; do
   agent-browser --session "$fragment_session" open "$fragment" >/dev/null
   fragment_review="$(agent-browser --session "$fragment_session" eval "(()=>{const review=document.querySelector('#ai-draft-review');return document.querySelector('#ai-draft-dialog').open&&!review.hidden&&document.querySelector('$review_field').value.length>0&&document.querySelector('#setup-view').hidden})()")"
   [[ "$fragment_review" == true ]] || { echo "FAIL ai-draft-import: $app fragment link does not open an uncommitted editable review"; exit 1; }
+  if [[ "$app" == 2x2-facilitator ]]; then
+    agent-browser --session "$fragment_session" set viewport 390 844 >/dev/null
+    axis_groups="$(agent-browser --session "$fragment_session" eval '(()=>{const ids=group=>Array.from(group.querySelectorAll("input")).map(node=>node.id).sort().join(",");const horizontal=document.querySelector("[data-axis-group=horizontal]");const vertical=document.querySelector("[data-axis-group=vertical]");return Boolean(horizontal&&vertical&&horizontal.querySelector("legend")?.innerText.trim()==="Horizontal axis"&&vertical.querySelector("legend")?.innerText.trim()==="Vertical axis"&&ids(horizontal)==="ai-review-x-high,ai-review-x-label,ai-review-x-low"&&ids(vertical)==="ai-review-y-high,ai-review-y-label,ai-review-y-low"&&horizontal.getBoundingClientRect().width>0&&vertical.getBoundingClientRect().width>0&&document.documentElement.scrollWidth===document.documentElement.clientWidth)})()')"
+    [[ "$axis_groups" == true ]] || { echo 'FAIL ai-draft-axis-groups: criteria and endpoints are not grouped by horizontal and vertical axis'; exit 1; }
+  fi
   agent-browser --session "$fragment_session" fill "$review_field" 'Edited for solo' >/dev/null
   agent-browser --session "$fragment_session" click '#ai-use-solo' >/dev/null
   used_solo="$(agent-browser --session "$fragment_session" eval "document.body.dataset.mode==='solo'&&!document.querySelector('#setup-view').hidden&&document.querySelector('$setup_field').value==='Edited for solo'&&!location.hash")"
