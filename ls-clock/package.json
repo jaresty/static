@@ -1,0 +1,19 @@
+{
+  "name": "ls-clock",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test:core": "node --test tests/core.test.js",
+    "test:dom": "npx playwright test",
+    "test": "node --test tests/core.test.js && npx playwright test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@playwright/test": "^1.62.1",
+    "playwright": "^1.62.1"
+  }
+}

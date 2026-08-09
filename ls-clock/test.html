@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LS Clock Tests</title>
+<script src="ls-clock.js"></script>
+<style>
+  body { font-family: monospace; padding: 1rem; background: #111; color: #eee; }
+  .pass { color: #4ade80; }
+  .fail { color: #f87171; }
+  .section { margin-top: 1.5rem; font-weight: bold; color: #93c5fd; }
+  #summary { margin-top: 2rem; font-size: 1.2rem; }
+</style>
+</head>
+<body>
+<h1>LS Clock — Test Suite</h1>
+<div id="output"></div>
+<div id="summary"></div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Test harness
+// ---------------------------------------------------------------------------
+const results = [];
+function assert(condition, label) {
+  results.push({ condition, label });
+  const el = document.createElement('div');
+  el.className = condition ? 'pass' : 'fail';
+  el.textContent = (condition ? '✓ ' : '✗ ') + label;
+  document.getElementById('output').appendChild(el);
+}
+function section(name) {
+  const el = document.createElement('div');
+  el.className = 'section';
+  el.textContent = '── ' + name;
+  document.getElementById('output').appendChild(el);
+}
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+const START_MS = 1_700_000_000_000; // arbitrary fixed epoch
+
+const SESSION = {
+  id: 'test-session',
+  structure: '1-2-4-All',
+  invitation: 'What opportunity hides in our biggest challenge?',
+  startTime: START_MS / 1000,
+  participants: [
+    { name: 'Alice', id: 0 },
+    { name: 'Bob',   id: 1 },
+    { name: 'Carol', id: 2 },
+    { name: 'Dave',  id: 3 },
+  ],
+  phases: [
+    { index: 0, name: 'Individual', duration: 60,  startOffset: 0,   groupSize: 1,   instructions: 'Write silently.',      inheritLocations: false },
+    { index: 1, name: 'Pairs',      duration: 120, startOffset: 60,  groupSize: 2,   instructions: 'Share with partner.',   inheritLocations: true  },
+    { index: 2, name: 'Quartets',   duration: 300, startOffset: 180, groupSize: 4,   instructions: 'Combine ideas.',        inheritLocations: true  },
+    { index: 3, name: 'Whole Group',duration: 420, startOffset: 480, groupSize: 999, instructions: 'Share key insights.',   inheritLocations: false },
+  ],
+  groups: {
+    0: [
+      { phaseIndex: 0, groupIndex: 0, members: [{ name: 'Alice', id: 0 }], location: { type: 'physical', label: 'Seat A', override: false } },
+      { phaseIndex: 0, groupIndex: 1, members: [{ name: 'Bob',   id: 1 }], location: { type: 'physical', label: 'Seat B', override: false } },
+      { phaseIndex: 0, groupIndex: 2, members: [{ name: 'Carol', id: 2 }], location: { type: 'physical', label: 'Seat C', override: false } },
+      { phaseIndex: 0, groupIndex: 3, members: [{ name: 'Dave',  id: 3 }], location: { type: 'physical', label: 'Seat D', override: false } },
+    ],
+    1: [
+      { phaseIndex: 1, groupIndex: 0, members: [{ name: 'Alice', id: 0 }, { name: 'Bob', id: 1 }],   location: { type: 'url', label: 'Meet A', url: 'https://meet.google.com/aaa', override: false } },
+      { phaseIndex: 1, groupIndex: 1, members: [{ name: 'Carol', id: 2 }, { name: 'Dave', id: 3 }],  location: { type: 'url', label: 'Meet B', url: 'https://meet.google.com/bbb', override: false } },
+    ],
+    2: [
+      { phaseIndex: 2, groupIndex: 0, members: [{ name: 'Alice', id: 0 }, { name: 'Bob', id: 1 }, { name: 'Carol', id: 2 }, { name: 'Dave', id: 3 }], location: { type: 'url', label: 'Meet A', url: 'https://meet.google.com/aaa', override: false } },
+    ],
+    3: [
+      { phaseIndex: 3, groupIndex: 0, members: [{ name: 'Alice', id: 0 }, { name: 'Bob', id: 1 }, { name: 'Carol', id: 2 }, { name: 'Dave', id: 3 }], location: { type: 'url', label: 'Main Room', url: 'https://zoom.us/main', override: false } },
+    ],
+  },
+  plenaryLocation: { type: 'url', label: 'Main Room', url: 'https://zoom.us/main', override: false },
+  locationPool: { locations: [], strategy: 'round-robin' },
+};
+
+// ---------------------------------------------------------------------------
+// P1: getActivePhase — wall-clock derived, correct phase by time
+// ---------------------------------------------------------------------------
+section('P1: getActivePhase — wall-clock derived');
+try {
+  // 10s in → Individual (0–60s)
+  const p1a = getActivePhase(SESSION, START_MS + 10_000);
+  assert(p1a !== null, 'P1a: returns non-null at 10s');
+  assert(p1a.name === 'Individual', 'P1a: 10s → Individual');
+
+  // 90s in → Pairs (60–180s)
+  const p1b = getActivePhase(SESSION, START_MS + 90_000);
+  assert(p1b !== null, 'P1b: returns non-null at 90s');
+  assert(p1b.name === 'Pairs', 'P1b: 90s → Pairs');
+
+  // 250s in → Quartets (180–480s)
+  const p1c = getActivePhase(SESSION, START_MS + 250_000);
+  assert(p1c.name === 'Quartets', 'P1c: 250s → Quartets');
+
+  // 500s in → Whole Group (480–900s)
+  const p1d = getActivePhase(SESSION, START_MS + 500_000);
+  assert(p1d.name === 'Whole Group', 'P1d: 500s → Whole Group');
+
+  // before start → null
+  const p1e = getActivePhase(SESSION, START_MS - 1000);
+  assert(p1e === null, 'P1e: before startTime → null');
+
+  // after all phases → null
+  const p1f = getActivePhase(SESSION, START_MS + 999_000);
+  assert(p1f === null, 'P1f: after all phases → null');
+} catch(e) {
+  assert(false, 'P1: getActivePhase threw — ' + e.message);
+}
+
+// ---------------------------------------------------------------------------
+// P2: getParticipantGroup — correct group per phase per name
+// ---------------------------------------------------------------------------
+section('P2: getParticipantGroup — correct group by phase and name');
+try {
+  // Alice in phase 0 → solo group 0
+  const g0 = getParticipantGroup(SESSION, 0, 'Alice');
+  assert(g0 !== null, 'P2a: Alice found in phase 0');
+  assert(g0.members.length === 1, 'P2a: phase 0 group has 1 member');
+  assert(g0.members[0].name === 'Alice', 'P2a: that member is Alice');
+
+  // Alice in phase 1 → pair with Bob
+  const g1 = getParticipantGroup(SESSION, 1, 'Alice');
+  assert(g1 !== null, 'P2b: Alice found in phase 1');
+  assert(g1.members.some(m => m.name === 'Bob'), 'P2b: Alice paired with Bob');
+
+  // Carol in phase 1 → paired with Dave, not Alice
+  const g1c = getParticipantGroup(SESSION, 1, 'Carol');
+  assert(g1c !== null, 'P2c: Carol found in phase 1');
+  assert(!g1c.members.some(m => m.name === 'Alice'), 'P2c: Carol not in Alice group');
+
+  // Unknown name → null
+  const gUnknown = getParticipantGroup(SESSION, 0, 'Zara');
+  assert(gUnknown === null, 'P2d: unknown name → null');
+
+  // Case-insensitive match
+  const gCase = getParticipantGroup(SESSION, 0, 'alice');
+  assert(gCase !== null, 'P2e: case-insensitive match works');
+} catch(e) {
+  assert(false, 'P2: getParticipantGroup threw — ' + e.message);
+}
+
+// ---------------------------------------------------------------------------
+// P3: location DOM order — where-to-go element is first in participant view
+// ---------------------------------------------------------------------------
+section('P3: location element is first in participant view DOM');
+try {
+  const container = document.createElement('div');
+  renderParticipantView(container, SESSION, 'Alice', START_MS + 90_000); // Pairs phase
+  const children = Array.from(container.children);
+  assert(children.length > 0, 'P3a: participant view renders children');
+  const locationEl = container.querySelector('[data-role="location"]');
+  assert(locationEl !== null, 'P3b: location element exists with data-role="location"');
+  // location must be before group-members in DOM order
+  const membersEl = container.querySelector('[data-role="group-members"]');
+  assert(membersEl !== null, 'P3c: group-members element exists');
+  const locationIdx = children.indexOf(locationEl) !== -1
+    ? Array.from(container.querySelectorAll('*')).indexOf(locationEl)
+    : -1;
+  const membersIdx = Array.from(container.querySelectorAll('*')).indexOf(membersEl);
+  assert(locationIdx < membersIdx, 'P3d: location appears before group-members in DOM');
+} catch(e) {
+  assert(false, 'P3: renderParticipantView threw — ' + e.message);
+}
+
+// ---------------------------------------------------------------------------
+// P4: countdown color — amber ≤60s, red ≤15s
+// ---------------------------------------------------------------------------
+section('P4: countdown color thresholds');
+try {
+  assert(getCountdownClass(120) === 'normal', 'P4a: 120s remaining → normal');
+  assert(getCountdownClass(61)  === 'normal', 'P4b: 61s remaining → normal');
+  assert(getCountdownClass(60)  === 'amber',  'P4c: 60s remaining → amber');
+  assert(getCountdownClass(30)  === 'amber',  'P4d: 30s remaining → amber');
+  assert(getCountdownClass(16)  === 'amber',  'P4e: 16s remaining → amber');
+  assert(getCountdownClass(15)  === 'red',    'P4f: 15s remaining → red');
+  assert(getCountdownClass(1)   === 'red',    'P4g: 1s remaining → red');
+  assert(getCountdownClass(0)   === 'red',    'P4h: 0s remaining → red');
+} catch(e) {
+  assert(false, 'P4: getCountdownClass threw — ' + e.message);
+}
+
+// ---------------------------------------------------------------------------
+// P5: URL round-trip — encode then decode produces identical session
+// ---------------------------------------------------------------------------
+section('P5: URL fragment round-trip');
+try {
+  const encoded = encodeSession(SESSION);
+  assert(typeof encoded === 'string', 'P5a: encodeSession returns string');
+  assert(encoded.length > 10, 'P5b: encoded string is non-trivial');
+
+  const decoded = decodeSession(encoded);
+  assert(decoded !== null, 'P5c: decodeSession returns non-null');
+  assert(decoded.id === SESSION.id, 'P5d: id survives round-trip');
+  assert(decoded.invitation === SESSION.invitation, 'P5e: invitation survives round-trip');
+  assert(decoded.startTime === SESSION.startTime, 'P5f: startTime survives round-trip');
+  assert(decoded.participants.length === SESSION.participants.length, 'P5g: participant count survives');
+  assert(decoded.phases.length === SESSION.phases.length, 'P5h: phase count survives');
+  assert(decoded.groups[1][0].location.url === SESSION.groups[1][0].location.url, 'P5i: nested location url survives');
+} catch(e) {
+  assert(false, 'P5: encode/decode threw — ' + e.message);
+}
+
+// ---------------------------------------------------------------------------
+// P6: localStorage notes — persist and retrieve by key
+// ---------------------------------------------------------------------------
+section('P6: localStorage notes persistence');
+try {
+  const key = getNoteKey('test-session', 1, 'Alice');
+  assert(typeof key === 'string', 'P6a: getNoteKey returns string');
+  assert(key.includes('test-session'), 'P6b: key includes sessionId');
+  assert(key.includes('Alice'), 'P6c: key includes participant name');
+
+  localStorage.removeItem(key);
+  const empty = loadNote('test-session', 1, 'Alice');
+  assert(empty === '', 'P6d: loadNote returns empty string when no note saved');
+
+  saveNote('test-session', 1, 'Alice', 'My insight here');
+  const loaded = loadNote('test-session', 1, 'Alice');
+  assert(loaded === 'My insight here', 'P6e: loadNote retrieves saved content');
+
+  // different phase → different note
+  saveNote('test-session', 2, 'Alice', 'Phase 2 note');
+  const phase2 = loadNote('test-session', 2, 'Alice');
+  const phase1 = loadNote('test-session', 1, 'Alice');
+  assert(phase2 === 'Phase 2 note', 'P6f: phase 2 note stored separately');
+  assert(phase1 === 'My insight here', 'P6g: phase 1 note unchanged');
+
+  localStorage.removeItem(key);
+} catch(e) {
+  assert(false, 'P6: note persistence threw — ' + e.message);
+}
+
+// ---------------------------------------------------------------------------
+// P7: phase timeline — elapsed checked, active highlighted
+// ---------------------------------------------------------------------------
+section('P7: phase timeline rendering');
+try {
+  const container = document.createElement('div');
+  // 90s in → Pairs is active (index 1), Individual (index 0) is elapsed
+  renderPhaseTimeline(container, SESSION, START_MS + 90_000);
+  const items = container.querySelectorAll('[data-phase-index]');
+  assert(items.length === SESSION.phases.length, 'P7a: timeline has one item per phase');
+
+  const individual = container.querySelector('[data-phase-index="0"]');
+  assert(individual !== null, 'P7b: phase 0 item exists');
+  assert(individual.classList.contains('elapsed'), 'P7c: phase 0 marked elapsed');
+
+  const pairs = container.querySelector('[data-phase-index="1"]');
+  assert(pairs !== null, 'P7d: phase 1 item exists');
+  assert(pairs.classList.contains('active'), 'P7e: phase 1 marked active');
+
+  const quartets = container.querySelector('[data-phase-index="2"]');
+  assert(!quartets.classList.contains('elapsed') && !quartets.classList.contains('active'), 'P7f: phase 2 is neither elapsed nor active');
+} catch(e) {
+  assert(false, 'P7: renderPhaseTimeline threw — ' + e.message);
+}
+
+// ---------------------------------------------------------------------------
+// P8: LLM prompt — present and contains schema keywords
+// ---------------------------------------------------------------------------
+section('P8: LLM prompt contains schema and is non-empty');
+try {
+  const prompt = getLLMPrompt();
+  assert(typeof prompt === 'string', 'P8a: getLLMPrompt returns string');
+  assert(prompt.length > 200, 'P8b: prompt is non-trivial length');
+  assert(prompt.includes('startTime'), 'P8c: prompt includes startTime field');
+  assert(prompt.includes('participants'), 'P8d: prompt includes participants field');
+  assert(prompt.includes('phases'), 'P8e: prompt includes phases field');
+  assert(prompt.includes('MeetingLocation'), 'P8f: prompt includes MeetingLocation type');
+  assert(prompt.includes('JSON'), 'P8g: prompt instructs to output JSON');
+} catch(e) {
+  assert(false, 'P8: getLLMPrompt threw — ' + e.message);
+}
+
+// ---------------------------------------------------------------------------
+// Summary
+// ---------------------------------------------------------------------------
+const passed = results.filter(r => r.condition).length;
+const failed = results.filter(r => !r.condition).length;
+const summary = document.getElementById('summary');
+summary.style.color = failed === 0 ? '#4ade80' : '#f87171';
+summary.textContent = `${passed} passed, ${failed} failed`;
+</script>
+
+</body>
+</html>
