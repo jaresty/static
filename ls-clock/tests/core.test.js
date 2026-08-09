@@ -114,3 +114,42 @@ test('P8: getLLMPrompt — contains schema keywords', () => {
   assert.ok(prompt.includes('MeetingLocation'));
   assert.ok(prompt.includes('JSON'));
 });
+
+// P9: new structures present + Custom absent
+test('P9: STRUCTURES — TRIZ, Min Specs, Impromptu Networking present; Custom absent', () => {
+  const { STRUCTURES } = require('../ls-clock-core.js');
+  assert.ok('TRIZ' in STRUCTURES, 'TRIZ missing');
+  assert.ok('Min Specs' in STRUCTURES, 'Min Specs missing');
+  assert.ok('Impromptu Networking' in STRUCTURES, 'Impromptu Networking missing');
+  assert.ok(!('Custom' in STRUCTURES), 'Custom should be absent');
+  const im = STRUCTURES['Impromptu Networking'];
+  assert.equal(im.phases.length, 3);
+  assert.ok(im.phases.every(p => p.groupSize === 2));
+  const triz = STRUCTURES['TRIZ'];
+  assert.equal(triz.phases.length, 3);
+  assert.equal(triz.phases[0].groupSize, 1);
+  assert.equal(triz.phases[2].groupSize, 999);
+  const ms = STRUCTURES['Min Specs'];
+  assert.equal(ms.phases.length, 3);
+  assert.equal(ms.phases[0].groupSize, 1);
+  assert.equal(ms.phases[2].groupSize, 999);
+});
+
+// P10: JSON validateSession
+test('P10: validateSession — returns errors for missing required fields', () => {
+  const { validateSession } = require('../ls-clock-core.js');
+  const errs = validateSession({});
+  assert.ok(errs.length > 0, 'should return errors for empty object');
+  assert.ok(errs.some(e => e.includes('startTime')), 'should flag missing startTime');
+  assert.ok(errs.some(e => e.includes('participants')), 'should flag missing participants');
+  assert.ok(errs.some(e => e.includes('phases')), 'should flag missing phases');
+  const noErrors = validateSession({
+    id: 'x', structure: '1-2-4-All', invitation: 'q',
+    startTime: 1700000000,
+    participants: [{ name: 'A', id: 0 }],
+    phases: [{ index: 0, name: 'Solo', duration: 60, startOffset: 0, groupSize: 1, instructions: '', inheritLocations: false }],
+    groups: { 0: [] }, plenaryLocation: { type: 'physical', label: 'Room', url: null, instructions: null, override: false },
+    locationPool: { locations: [], strategy: 'round-robin' }
+  });
+  assert.equal(noErrors.length, 0, 'should return no errors for valid session');
+});

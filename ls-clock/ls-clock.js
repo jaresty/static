@@ -31,6 +31,33 @@ function renderParticipantView(container, session, participantName, nowMs) {
     return;
   }
 
+  // Break phase — groupSize 0 — show break block only
+  if (phase.groupSize === 0) {
+    const breakEl = document.createElement('div');
+    breakEl.setAttribute('data-role', 'break');
+    breakEl.className = 'break-block';
+    const breakTitle = document.createElement('div');
+    breakTitle.className = 'break-title';
+    breakTitle.textContent = '☕ Break';
+    const phaseEndSec = session.startTime + phase.startOffset + phase.duration;
+    const remainSec = Math.max(0, Math.round(phaseEndSec - nowMs / 1000));
+    const countdownEl = document.createElement('div');
+    countdownEl.setAttribute('data-role', 'countdown');
+    countdownEl.className = `countdown countdown-${getCountdownClass(remainSec)}`;
+    countdownEl.textContent = formatTime(remainSec);
+    const instrEl = document.createElement('div');
+    instrEl.className = 'phase-instructions';
+    instrEl.textContent = phase.instructions;
+    breakEl.appendChild(breakTitle);
+    breakEl.appendChild(countdownEl);
+    breakEl.appendChild(instrEl);
+    container.appendChild(breakEl);
+
+    // Overview panel
+    container.appendChild(buildOverviewPanel(session, phase));
+    return;
+  }
+
   const group = getParticipantGroup(session, phase.index, participantName);
 
   // 1. WHERE TO GO (most prominent, first in DOM)
@@ -107,6 +134,30 @@ function renderParticipantView(container, session, participantName, nowMs) {
   instrEl.className = 'phase-instructions';
   instrEl.textContent = phase.instructions;
   container.appendChild(instrEl);
+
+  // 5. Overview panel (expandable)
+  container.appendChild(buildOverviewPanel(session, phase));
+}
+
+function buildOverviewPanel(session, activePhase) {
+  const wrapper = document.createElement('details');
+  wrapper.setAttribute('data-role', 'overview');
+  wrapper.className = 'overview-panel';
+  const summary = document.createElement('summary');
+  summary.textContent = 'Session overview';
+  wrapper.appendChild(summary);
+  const list = document.createElement('div');
+  list.setAttribute('data-role', 'overview-phases');
+  list.className = 'overview-phases';
+  for (const p of session.phases) {
+    const row = document.createElement('div');
+    row.className = 'overview-phase-row' + (p.index === activePhase.index ? ' overview-active' : '');
+    const groupLabel = p.groupSize === 0 ? 'Break' : p.groupSize >= 999 ? 'Whole group' : p.groupSize === 1 ? 'Individual' : `Groups of ${p.groupSize}`;
+    row.textContent = `${p.name} — ${Math.round(p.duration / 60)} min — ${groupLabel}`;
+    list.appendChild(row);
+  }
+  wrapper.appendChild(list);
+  return wrapper;
 }
 
 function renderPhaseTimeline(container, session, nowMs) {
@@ -302,51 +353,8 @@ function renderSetupPage() {
   app.innerHTML = `
     <h1 class="app-title">LS Activity Clock — Setup</h1>
 
-    <section class="setup-section">
-      <h2>1. Choose a structure</h2>
-      <select id="structure-select">
-        ${Object.keys(STRUCTURES).map(k => `<option value="${k}">${k}</option>`).join('')}
-        <option value="custom">Custom</option>
-      </select>
-    </section>
-
-    <section class="setup-section">
-      <h2>2. Invitation / central question</h2>
-      <input id="invitation-input" type="text" placeholder="What opportunity is hiding in our biggest challenge?" class="wide-input">
-    </section>
-
-    <section class="setup-section">
-      <h2>3. Start time</h2>
-      <input id="start-time-input" type="datetime-local" class="wide-input">
-    </section>
-
-    <section class="setup-section">
-      <h2>4. Participants (one per line)</h2>
-      <textarea id="participants-input" rows="6" placeholder="Alice&#10;Bob&#10;Carol&#10;Dave"></textarea>
-    </section>
-
-    <section class="setup-section">
-      <h2>5. Meeting locations (one per line — paste URLs or room names)</h2>
-      <textarea id="locations-input" rows="4" placeholder="https://meet.google.com/abc-defg&#10;https://meet.google.com/hij-klmn&#10;Conference Room A"></textarea>
-    </section>
-
-    <section class="setup-section">
-      <h2>6. Plenary / whole-group location</h2>
-      <input id="plenary-input" type="text" placeholder="https://zoom.us/j/main or Main Hall" class="wide-input">
-    </section>
-
-    <button id="generate-btn" class="primary-btn">Generate session URL</button>
-
-    <section class="setup-section" id="result-section" style="display:none">
-      <h2>Session URL</h2>
-      <textarea id="session-url-output" rows="3" readonly></textarea>
-      <button id="copy-url-btn">Copy URL</button>
-      <div class="url-hint">Share this URL with participants. They enter their name to join.</div>
-      <div class="url-hint">Add <code>?role=facilitator</code> to see the full facilitator view.</div>
-    </section>
-
-    <section class="setup-section">
-      <h2>Or: Use an LLM to set up your session</h2>
+    <section class="setup-section llm-section">
+      <h2>Quick setup with an LLM</h2>
       <p class="hint">Copy this prompt, paste it into any LLM (Claude, ChatGPT, etc.), answer its questions, then paste the JSON output below.</p>
       <button id="copy-prompt-btn">Copy LLM prompt</button>
       <div id="copy-confirm" class="copy-confirm" style="display:none">Copied!</div>
@@ -354,34 +362,98 @@ function renderSetupPage() {
       <textarea id="json-input" rows="8" placeholder='{"id":"...","structure":"...","startTime":...,...}'></textarea>
       <button id="load-json-btn" class="primary-btn">Load from JSON</button>
       <div id="json-error" class="error-msg" style="display:none"></div>
+    </section>
+
+    <details class="setup-section manual-form">
+      <summary><h2 style="display:inline">Or: Set up manually</h2></summary>
+
+      <section class="setup-section">
+        <h2>1. Choose a structure</h2>
+        <select id="structure-select">
+          ${Object.keys(STRUCTURES).map(k => `<option value="${k}">${k}</option>`).join('')}
+        </select>
+      </section>
+
+      <section class="setup-section">
+        <h2>2. Invitation / central question</h2>
+        <input id="invitation-input" type="text" placeholder="What opportunity is hiding in our biggest challenge?" class="wide-input">
+      </section>
+
+      <section class="setup-section">
+        <h2>3. Start time</h2>
+        <input id="start-time-input" type="datetime-local" class="wide-input">
+      </section>
+
+      <section class="setup-section">
+        <h2>4. Participants (one per line)</h2>
+        <textarea id="participants-input" rows="6" placeholder="Alice&#10;Bob&#10;Carol&#10;Dave"></textarea>
+      </section>
+
+      <section class="setup-section">
+        <h2>5. Meeting locations (one per line — paste URLs or room names)</h2>
+        <textarea id="locations-input" rows="4" placeholder="https://meet.google.com/abc-defg&#10;https://meet.google.com/hij-klmn&#10;Conference Room A"></textarea>
+      </section>
+
+      <section class="setup-section">
+        <h2>6. Plenary / whole-group location</h2>
+        <input id="plenary-input" type="text" placeholder="https://zoom.us/j/main or Main Hall" class="wide-input">
+      </section>
+
+      <button id="generate-btn" class="primary-btn">Generate session URL</button>
+    </details>
+
+    <section class="setup-section" id="preview-section" style="display:none" data-role="preview">
+      <h2>Confirm your session</h2>
+      <div><strong>Structure:</strong> <span data-role="preview-structure"></span></div>
+      <div><strong>Start time:</strong> <span data-role="preview-starttime"></span></div>
+      <div><strong>Participants:</strong> <span data-role="preview-participants"></span></div>
+      <div><strong>Phases:</strong> <span data-role="preview-phases"></span></div>
+      <button id="confirm-url-btn" class="primary-btn">Looks good — generate URL</button>
+      <button id="cancel-preview-btn">Cancel</button>
+    </section>
+
+    <section class="setup-section" id="result-section" style="display:none">
+      <h2>Session URL</h2>
+      <textarea id="session-url-output" rows="3" readonly></textarea>
+      <button id="copy-url-btn">Copy URL</button>
+      <div class="url-hint">Share this URL with participants. They enter their name to join.</div>
+      <div class="url-hint">Add <code>?role=facilitator</code> to see the full facilitator view.</div>
     </section>`;
 
   // Prefill start time to now + 5 min
   const dt = new Date(Date.now() + 5 * 60 * 1000);
   dt.setSeconds(0, 0);
-  document.getElementById('start-time-input').value = dt.toISOString().slice(0, 16);
+  const startEl = document.getElementById('start-time-input');
+  if (startEl) startEl.value = dt.toISOString().slice(0, 16);
 
   // Prefill invitation from structure
   const structSelect = document.getElementById('structure-select');
   const invInput = document.getElementById('invitation-input');
-  structSelect.addEventListener('change', () => {
-    const s = STRUCTURES[structSelect.value];
-    if (s) invInput.value = s.invitation;
-  });
-  invInput.value = STRUCTURES[structSelect.value].invitation;
+  if (structSelect && invInput) {
+    structSelect.addEventListener('change', () => {
+      const s = STRUCTURES[structSelect.value];
+      if (s) invInput.value = s.invitation;
+    });
+    invInput.value = STRUCTURES[structSelect.value]?.invitation || '';
+  }
 
-  document.getElementById('generate-btn').addEventListener('click', generateURL);
-  document.getElementById('copy-url-btn').addEventListener('click', () => {
+  const generateBtn = document.getElementById('generate-btn');
+  if (generateBtn) generateBtn.addEventListener('click', generateURL);
+
+  document.getElementById('copy-url-btn')?.addEventListener('click', () => {
     const url = document.getElementById('session-url-output').value;
     copyText(url, document.getElementById('copy-url-btn'));
   });
   document.getElementById('copy-prompt-btn').addEventListener('click', () => {
     copyText(getLLMPrompt(), document.getElementById('copy-prompt-btn'));
-    const confirm = document.getElementById('copy-confirm');
-    confirm.style.display = 'inline';
-    setTimeout(() => confirm.style.display = 'none', 2000);
+    const confirmEl = document.getElementById('copy-confirm');
+    confirmEl.style.display = 'inline';
+    setTimeout(() => confirmEl.style.display = 'none', 2000);
   });
   document.getElementById('load-json-btn').addEventListener('click', loadFromJSON);
+  document.getElementById('cancel-preview-btn')?.addEventListener('click', () => {
+    document.getElementById('preview-section').style.display = 'none';
+  });
 }
 
 function generateURL() {
@@ -439,17 +511,40 @@ function loadFromJSON() {
   const raw = document.getElementById('json-input').value.trim();
   const errEl = document.getElementById('json-error');
   errEl.style.display = 'none';
+  let session;
   try {
-    const session = JSON.parse(raw);
-    if (!session.id || !session.startTime || !session.participants) throw new Error('Missing required fields: id, startTime, participants');
+    session = JSON.parse(raw);
+  } catch(e) {
+    errEl.textContent = 'Invalid JSON: ' + e.message;
+    errEl.style.display = '';
+    return;
+  }
+  const errors = validateSession(session);
+  if (errors.length > 0) {
+    errEl.innerHTML = errors.map(e => `<div data-role="json-error">${escHtml(e)}</div>`).join('');
+    errEl.style.display = '';
+    return;
+  }
+  // Show confirmation preview
+  const preview = document.getElementById('preview-section');
+  const startDate = new Date(session.startTime * 1000);
+  preview.querySelector('[data-role="preview-structure"]').textContent = session.structure || '(custom)';
+  preview.querySelector('[data-role="preview-starttime"]').textContent = startDate.toLocaleString();
+  preview.querySelector('[data-role="preview-participants"]').textContent = session.participants.map(p => p.name).join(', ');
+  preview.querySelector('[data-role="preview-phases"]').textContent = `${session.phases.length} phases`;
+  preview.style.display = '';
+  document.getElementById('result-section').style.display = 'none';
+
+  const confirmBtn = document.getElementById('confirm-url-btn');
+  const newConfirm = confirmBtn.cloneNode(true);
+  confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+  newConfirm.addEventListener('click', () => {
     const encoded = encodeSession(session);
     const url = `${window.location.origin}${window.location.pathname}#${encoded}`;
     document.getElementById('session-url-output').value = url;
     document.getElementById('result-section').style.display = '';
-  } catch(e) {
-    errEl.textContent = 'Invalid JSON: ' + e.message;
-    errEl.style.display = '';
-  }
+    preview.style.display = 'none';
+  });
 }
 
 function copyText(text, btn) {

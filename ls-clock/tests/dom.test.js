@@ -71,6 +71,39 @@ test('P3: location element appears before group-members in participant view', as
   await expect(joinBtn).toHaveText(/Meet A/);
 });
 
+// P2: Break phase renders data-role="break", no location, no group-members
+test('P2: break phase shows break element, no location, no group-members', async ({ page }) => {
+  const BREAK_SESSION = {
+    id: 'break-test', structure: '1-2-4-All', invitation: 'Test', startTime: 1_700_000_000,
+    participants: [{ name: 'Alice', id: 0 }],
+    phases: [{ index: 0, name: 'Break', duration: 600, startOffset: 0, groupSize: 0, instructions: 'Take a break.', inheritLocations: false }],
+    groups: { 0: [] },
+    plenaryLocation: { type: 'physical', label: 'Main', url: null, instructions: null, override: false },
+    locationPool: { locations: [], strategy: 'round-robin' },
+  };
+  const NOW_BREAK = (BREAK_SESSION.startTime + 10) * 1000;
+  await page.evaluate(({ session, nowMs }) => {
+    const container = document.getElementById('app');
+    renderParticipantView(container, session, 'Alice', nowMs);
+  }, { session: BREAK_SESSION, nowMs: NOW_BREAK });
+
+  const breakEl = page.locator('[data-role="break"]');
+  await expect(breakEl).toBeVisible();
+  await expect(page.locator('[data-role="location"]')).toHaveCount(0);
+  await expect(page.locator('[data-role="group-members"]')).toHaveCount(0);
+});
+
+// P7t: overview panel present and expandable
+test('P7t: overview panel is present in participant view', async ({ page }) => {
+  await page.evaluate(({ session, nowMs }) => {
+    const container = document.getElementById('app');
+    renderParticipantView(container, session, 'Alice', nowMs);
+  }, { session: SESSION, nowMs: NOW_PAIRS });
+
+  const overview = page.locator('[data-role="overview"]');
+  await expect(overview).toHaveCount(1);
+});
+
 // P7: phase timeline — elapsed checked, active highlighted, upcoming plain
 test('P7: phase timeline marks elapsed, active, and upcoming phases correctly', async ({ page }) => {
   await page.evaluate(({ session, nowMs }) => {

@@ -46,12 +46,14 @@ function getLLMPrompt() {
 Your job: interview the facilitator to collect everything needed, then output a complete SessionPayload JSON object.
 
 ## Interview checklist (ask in order, adapt as needed)
-1. Which Liberating Structure? (e.g. 1-2-4-All, What-So-What-Now-What, or describe a custom one)
-2. What is the invitation / central question for participants?
-3. When does the session start? (date and time, including timezone)
-4. Who are the participants? (names, one per line)
-5. What meeting locations are available? (Google Meet URLs, Zoom links, physical room names, breakout room names — one per line)
-6. Any custom phase durations or instructions? (or use defaults for the chosen structure)
+1. Which Liberating Structure? (1-2-4-All, What-So-What-Now-What, TRIZ, Min Specs, Impromptu Networking)
+2. Do you want to chain multiple structures together in one session? If so, which ones, in what order?
+3. Do you want breaks between structures or phases? If so, how long?
+4. What is the invitation / central question for participants?
+5. When does the session start? (date and time, including timezone — be precise, as this drives the clock for all participants)
+6. Who are the participants? (names, one per line)
+7. What meeting locations are available? (Google Meet URLs, Zoom links, physical room names, breakout room names — one per line)
+8. Any custom phase durations or instructions? (or use defaults for the chosen structure)
 
 ## Output format
 When you have all the information, output ONLY a JSON object matching this schema — no explanation, no markdown fences:
@@ -70,7 +72,7 @@ When you have all the information, output ONLY a JSON object matching this schem
       "name": "<phase name>",
       "duration": <seconds>,
       "startOffset": <sum of prior durations in seconds>,
-      "groupSize": <participants per group; 1=individual, 999=whole group>,
+      "groupSize": <participants per group; 0=break, 1=individual, 999=whole group>,
       "instructions": "<what participants do>",
       "inheritLocations": <true|false>
     }
@@ -124,6 +126,19 @@ Phases: Individual (60s, groupSize=1), Pairs (120s, groupSize=2), Quartets (300s
 ### What-So-What-Now-What
 Phases: What? Individual (60s, groupSize=1), What? Small Group (300s, groupSize=5), What? Whole Group (120s, groupSize=999), So What? Individual (60s, groupSize=1), So What? Small Group (300s, groupSize=5), So What? Whole Group (120s, groupSize=999), Now What? Individual (60s, groupSize=1), Now What? Small Group (300s, groupSize=5), Now What? Whole Group (120s, groupSize=999)
 
+### TRIZ
+Phases: Individual (120s, groupSize=1), Small Group (900s, groupSize=4), Whole Group (600s, groupSize=999)
+
+### Min Specs
+Phases: Individual (300s, groupSize=1), Small Group (900s, groupSize=4), Whole Group (600s, groupSize=999)
+
+### Impromptu Networking
+Phases: Round 1 (120s, groupSize=2), Round 2 (120s, groupSize=2), Round 3 (120s, groupSize=2) — pre-assign different pairs each round
+
+## Break phases
+To add a break between structures, insert a phase with groupSize=0. Example:
+{ "index": N, "name": "Break", "duration": 600, "startOffset": ..., "groupSize": 0, "instructions": "Take a 10-minute break. Reconvene at [time].", "inheritLocations": false }
+
 Start the interview now.`;
 }
 
@@ -132,6 +147,10 @@ function assignGroups(participants, phases, locationPool) {
 
   for (const phase of phases) {
     groups[phase.index] = [];
+    if (phase.groupSize === 0) {
+      // Break phase — no groups
+      continue;
+    }
     if (phase.groupSize >= 999) {
       groups[phase.index].push({
         phaseIndex: phase.index,
@@ -217,9 +236,51 @@ const STRUCTURES = {
       { index: 7, name: 'Now What? Small Group', duration: 300, startOffset: 1020, groupSize: 5,   instructions: 'Agree on actions. Who does what by when?',    inheritLocations: true  },
       { index: 8, name: 'Now What? Whole Group', duration: 120, startOffset: 1320, groupSize: 999, instructions: 'Share commitments with the whole group.',      inheritLocations: false },
     ]
-  }
+  },
+  'TRIZ': {
+    name: 'TRIZ',
+    description: 'Generate innovative solutions by imagining what would make things worse, then inverting.',
+    invitation: 'What could we do to make this problem worse? Now, how do we do the opposite?',
+    phases: [
+      { index: 0, name: 'Individual',  duration: 120, startOffset: 0,   groupSize: 1,   instructions: 'Write down all the ways you could make the problem worse.',           inheritLocations: false },
+      { index: 1, name: 'Small Group', duration: 900, startOffset: 120, groupSize: 4,   instructions: 'Share your worst ideas. Together, invert them into actionable solutions.', inheritLocations: true  },
+      { index: 2, name: 'Whole Group', duration: 600, startOffset: 1020, groupSize: 999, instructions: 'Share your top inverted solutions. What will we act on?',              inheritLocations: false },
+    ]
+  },
+  'Min Specs': {
+    name: 'Min Specs',
+    description: 'Specify only the must-do and must-not-do rules for achieving a purpose.',
+    invitation: 'What are the absolute minimum specifications needed to achieve our purpose?',
+    phases: [
+      { index: 0, name: 'Individual',  duration: 300,  startOffset: 0,    groupSize: 1,   instructions: 'Write your must-do and must-not-do rules. Aim for the minimum.',    inheritLocations: false },
+      { index: 1, name: 'Small Group', duration: 900,  startOffset: 300,  groupSize: 4,   instructions: 'Compare your specs. Can you reduce the list further? Challenge each rule.', inheritLocations: true  },
+      { index: 2, name: 'Whole Group', duration: 600,  startOffset: 1200, groupSize: 999, instructions: 'Share and agree on the fewest rules that will work.',                inheritLocations: false },
+    ]
+  },
+  'Impromptu Networking': {
+    name: 'Impromptu Networking',
+    description: 'Rapidly share challenges and expectations with new connections across three rounds.',
+    invitation: 'What big challenge are you working on, and what do you hope to get from today?',
+    phases: [
+      { index: 0, name: 'Round 1', duration: 120, startOffset: 0,   groupSize: 2, instructions: 'Share your challenge and hopes with your partner. Listen carefully.',   inheritLocations: false },
+      { index: 1, name: 'Round 2', duration: 120, startOffset: 120, groupSize: 2, instructions: 'New partner — share again. What shifts as you repeat your story?',       inheritLocations: false },
+      { index: 2, name: 'Round 3', duration: 120, startOffset: 240, groupSize: 2, instructions: 'Final partner — share once more. What have you learned from telling it?', inheritLocations: false },
+    ]
+  },
 };
 
+function validateSession(obj) {
+  const errors = [];
+  if (!obj || typeof obj !== 'object') return ['Session must be an object'];
+  if (!obj.id) errors.push('Missing required field: id');
+  if (typeof obj.startTime !== 'number') errors.push('Missing required field: startTime (must be a Unix timestamp)');
+  if (!Array.isArray(obj.participants) || obj.participants.length === 0) errors.push('Missing required field: participants (must be a non-empty array)');
+  if (!Array.isArray(obj.phases) || obj.phases.length === 0) errors.push('Missing required field: phases (must be a non-empty array)');
+  if (!obj.plenaryLocation) errors.push('Missing required field: plenaryLocation');
+  if (!obj.locationPool) errors.push('Missing required field: locationPool');
+  return errors;
+}
+
 if (typeof module !== 'undefined') {
-  module.exports = { getActivePhase, getParticipantGroup, getCountdownClass, encodeSession, decodeSession, getNoteKey, getLLMPrompt, assignGroups, STRUCTURES };
+  module.exports = { getActivePhase, getParticipantGroup, getCountdownClass, encodeSession, decodeSession, getNoteKey, getLLMPrompt, assignGroups, STRUCTURES, validateSession };
 }
