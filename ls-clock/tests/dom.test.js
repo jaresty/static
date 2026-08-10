@@ -164,6 +164,70 @@ test('P-trans-1: transition phase shows data-role="transition" and next-location
   await expect(page.locator('[data-role="break"]')).toHaveCount(0);
 });
 
+test('P-concept-1a: initial view names the product StructureFlow', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1, name: 'StructureFlow' })).toBeVisible();
+});
+
+test('P-concept-1b: initial view explains the product and its audience', async ({ page }) => {
+  await page.goto('/');
+  const copy = (await page.locator('[data-role="product-intro"]').textContent()).replace(/\s+/g, ' ').trim();
+  expect(copy).toBe("A facilitator's live guide for Liberating Structures Plan the structure. Keep every group moving.");
+});
+
+test('P-concept-visual: product introduction has clear visual hierarchy', async ({ page }) => {
+  await page.goto('/');
+  const metrics = await page.evaluate(() => {
+    const px = value => Number.parseFloat(value) || 0;
+    const title = getComputedStyle(document.querySelector('.app-title'));
+    const intro = getComputedStyle(document.querySelector('.product-intro'));
+    const tagline = getComputedStyle(document.querySelector('.product-tagline'));
+    return {
+      documentTitle: document.title,
+      titleSize: px(title.fontSize),
+      introSpacing: px(intro.marginBottom),
+      taglineSize: px(tagline.fontSize),
+    };
+  });
+  expect(metrics).toEqual({ documentTitle: 'StructureFlow — Liberating Structures session runner', titleSize: 32, introSpacing: 24, taglineSize: 18 });
+});
+
+test('P-hierarchy-2a: manual setup is open and precedes optional assistance', async ({ page }) => {
+  await page.goto('/');
+  const hierarchy = await page.evaluate(() => {
+    const manual = document.querySelector('.manual-form');
+    const assistant = document.querySelector('.llm-section');
+    return {
+      manualOpen: manual.open,
+      manualBeforeAssistant: Boolean(manual.compareDocumentPosition(assistant) & Node.DOCUMENT_POSITION_FOLLOWING),
+    };
+  });
+  expect(hierarchy).toEqual({ manualOpen: true, manualBeforeAssistant: true });
+});
+
+test('P-hierarchy-2b: LLM assistance is an optional collapsed disclosure', async ({ page }) => {
+  await page.goto('/');
+  const assistant = await page.locator('.llm-section').evaluate(element => ({
+    isDisclosure: element.tagName === 'DETAILS',
+    open: element.open,
+  }));
+  expect(assistant).toEqual({ isDisclosure: true, open: false });
+});
+
+test('P-hierarchy-option: optional assistance stays visible near the start of manual setup', async ({ page }) => {
+  await page.goto('/');
+  const placement = await page.evaluate(() => {
+    const manual = document.querySelector('.manual-form');
+    const assistant = document.querySelector('.llm-section');
+    const firstStep = document.querySelector('#structure-sequence').closest('.setup-section');
+    return {
+      insideManual: manual.contains(assistant),
+      beforeFirstStep: Boolean(assistant.compareDocumentPosition(firstStep) & Node.DOCUMENT_POSITION_FOLLOWING),
+    };
+  });
+  expect(placement).toEqual({ insideManual: true, beforeFirstStep: true });
+});
+
 // P-sample-1: sample setup action is visible
 test('P-sample-1: manual setup offers a visible sample action', async ({ page }) => {
   await page.goto('/');
@@ -242,6 +306,25 @@ test('P-plan-url-3: bookmarked quick-plan URL compiles automatically on load', a
     manualInvitation: 'How can we improve handoffs?',
     manualParticipants: 'Alice\nBob\nCarol\nDave',
     remainsBookmarkable: true,
+  });
+});
+
+test('P-preserve-3b: bookmarks and manual generation retain their outputs', async ({ page }) => {
+  await page.goto('/?structure=TRIZ&invitation=How%20can%20we%20improve%20handoffs%3F&startTime=2000000000&participant=Alice&participant=Bob&participant=Carol&participant=Dave&location=Room%20A&location=Room%20B&plenary=Main%20Hall');
+  const bookmark = {
+    structure: await page.locator('[data-role="preview-structure"]').textContent(),
+    participants: await page.locator('#participants-input').inputValue(),
+    plenary: await page.locator('#plenary-input').inputValue(),
+  };
+  await page.goto('/');
+  await page.locator('#structure-select').selectOption('TRIZ');
+  await page.getByRole('button', { name: 'Load sample setup' }).click();
+  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  const generatedURL = await page.locator('#session-url-output').inputValue();
+  const session = await page.evaluate(value => decodeSession(value), new URL(generatedURL).hash.slice(1));
+  expect({ bookmark, generated: { structure: session.structure, phases: session.phases.map(phase => phase.name) } }).toEqual({
+    bookmark: { structure: 'TRIZ', participants: 'Alice\nBob\nCarol\nDave', plenary: 'Main Hall' },
+    generated: { structure: 'TRIZ', phases: ['Individual', 'Small Group', 'Whole Group'] },
   });
 });
 

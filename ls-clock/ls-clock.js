@@ -440,21 +440,27 @@ function renderFacilitatorView(app, session) {
 function renderSetupPage() {
   const app = document.getElementById('app');
   app.innerHTML = `
-    <h1 class="app-title">LS Activity Clock — Setup</h1>
+    <h1 class="app-title">StructureFlow</h1>
+    <div class="product-intro" data-role="product-intro">
+      <p class="product-eyebrow">A facilitator's live guide for Liberating Structures</p>
+      <p class="product-tagline">Plan the structure. Keep every group moving.</p>
+    </div>
 
-    <section class="setup-section llm-section">
-      <h2>Quick setup with an LLM</h2>
-      <p class="hint">Copy the planning prompt into any LLM, answer its questions, then open the setup link it returns. The link is bookmarkable and the app fills in all activity mechanics.</p>
-      <div class="setup-actions">
-        <button id="copy-prompt-btn" class="primary-btn">Copy planning prompt</button>
-        <div id="copy-confirm" class="copy-confirm" style="display:none">Copied!</div>
-      </div>
-      <div id="plan-error" class="error-msg" style="display:none"></div>
-    </section>
-
-    <details class="setup-section manual-form">
-      <summary><h2 style="display:inline">Or: Set up manually</h2></summary>
+    <details class="setup-section manual-form" open>
+      <summary><h2 style="display:inline">Set up your session</h2></summary>
       <button type="button" id="load-sample-btn">Load sample setup</button>
+
+      <details class="setup-section llm-section">
+        <summary><h2 style="display:inline">Want help choosing? Plan with an LLM</h2></summary>
+        <div class="assistant-content">
+          <p class="hint">Copy the planning prompt into any LLM, answer its questions, then open the setup link it returns. The link is bookmarkable and the app fills in all activity mechanics.</p>
+          <div class="setup-actions">
+            <button id="copy-prompt-btn" class="primary-btn">Copy planning prompt</button>
+            <div id="copy-confirm" class="copy-confirm" style="display:none">Copied!</div>
+          </div>
+          <div id="plan-error" class="error-msg" style="display:none"></div>
+        </div>
+      </details>
 
       <section class="setup-section">
         <h2>1. Choose a structure</h2>
