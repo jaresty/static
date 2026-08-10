@@ -135,6 +135,42 @@ test('P9: STRUCTURES — TRIZ, Min Specs, Impromptu Networking present; Custom a
   assert.equal(ms.phases[2].groupSize, 999);
 });
 
+// P-seg-2: getLLMPrompt documents segments field
+test('P-seg-2: getLLMPrompt documents segments field', () => {
+  const prompt = getLLMPrompt();
+  assert.ok(prompt.includes('segments'), 'LLM prompt should document segments field');
+  assert.ok(prompt.includes('phaseIndexStart'), 'LLM prompt should document phaseIndexStart');
+});
+
+// P-url-1: all STRUCTURES entries have a url field
+test('P-url-1: all STRUCTURES entries have a url field', () => {
+  const { STRUCTURES } = require('../ls-clock-core.js');
+  for (const [key, s] of Object.entries(STRUCTURES)) {
+    assert.ok(typeof s.url === 'string' && s.url.length > 0, `STRUCTURES['${key}'] missing url`);
+    assert.ok(s.url.startsWith('https://'), `STRUCTURES['${key}'].url should start with https://`);
+  }
+});
+
+// P-role-4: getLLMPrompt documents role and roleInstructions
+test('P-role-4: getLLMPrompt includes role and roleInstructions in member schema', () => {
+  const prompt = getLLMPrompt();
+  assert.ok(prompt.includes('roleInstructions'), 'LLM prompt should mention roleInstructions field');
+});
+
+// P-role-5: validateSession accepts members with role fields
+test('P-role-5: validateSession accepts members with role fields', () => {
+  const { validateSession } = require('../ls-clock-core.js');
+  const session = {
+    id: 'x', startTime: 1700000000,
+    participants: [{ name: 'A', id: 0 }],
+    phases: [{ index: 0, name: 'Solo', duration: 60, startOffset: 0, groupSize: 1, instructions: '', inheritLocations: false }],
+    groups: { 0: [{ phaseIndex: 0, groupIndex: 0, members: [{ name: 'A', id: 0, role: 'Client', roleInstructions: 'Lead.' }], location: { type: 'physical', label: 'Room', url: null, instructions: null, override: false } }] },
+    plenaryLocation: { type: 'physical', label: 'Room', url: null, instructions: null, override: false },
+    locationPool: { locations: [], strategy: 'round-robin' }
+  };
+  assert.equal(validateSession(session).length, 0);
+});
+
 // P10: JSON validateSession
 test('P10: validateSession — returns errors for missing required fields', () => {
   const { validateSession } = require('../ls-clock-core.js');

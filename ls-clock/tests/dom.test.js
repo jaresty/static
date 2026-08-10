@@ -104,6 +104,89 @@ test('P7t: overview panel is present in participant view', async ({ page }) => {
   await expect(overview).toHaveCount(1);
 });
 
+// P-role-2: member-role element present when role provided
+const ROLE_SESSION = {
+  ...SESSION,
+  groups: {
+    ...SESSION.groups,
+    1: [
+      { phaseIndex: 1, groupIndex: 0, members: [{ name: 'Alice', id: 0, role: 'Client', roleInstructions: 'Lead the conversation.' }, { name: 'Bob', id: 1 }], location: { type: 'url', label: 'Meet A', url: 'https://meet.google.com/aaa', override: false } },
+      { phaseIndex: 1, groupIndex: 1, members: [{ name: 'Carol', id: 2 }, { name: 'Dave', id: 3 }], location: { type: 'url', label: 'Meet B', url: 'https://meet.google.com/bbb', override: false } },
+    ],
+  },
+};
+
+test('P-role-2: member-role element present when role provided', async ({ page }) => {
+  await page.evaluate(({ session, nowMs }) => {
+    const container = document.getElementById('app');
+    renderParticipantView(container, session, 'Alice', nowMs);
+  }, { session: ROLE_SESSION, nowMs: NOW_PAIRS });
+  const roleEl = page.locator('[data-role="member-role"]');
+  await expect(roleEl).toHaveCount(1);
+  await expect(roleEl).toContainText('Client');
+});
+
+// P-role-3: no member-role element when role absent
+test('P-role-3: no member-role element when role absent', async ({ page }) => {
+  await page.evaluate(({ session, nowMs }) => {
+    const container = document.getElementById('app');
+    renderParticipantView(container, session, 'Alice', nowMs);
+  }, { session: SESSION, nowMs: NOW_PAIRS });
+  await expect(page.locator('[data-role="member-role"]')).toHaveCount(0);
+});
+
+// P-seg-1: segment headers rendered in timeline when segments present
+const SEGMENTED_SESSION = {
+  ...SESSION,
+  segments: [
+    { name: '1-2-4-All', structureKey: '1-2-4-All', phaseIndexStart: 0, phaseIndexEnd: 3 },
+  ],
+};
+
+test('P-seg-1: segment header rendered in phase timeline', async ({ page }) => {
+  await page.evaluate(({ session, nowMs }) => {
+    const container = document.getElementById('app');
+    renderPhaseTimeline(container, session, nowMs);
+  }, { session: SEGMENTED_SESSION, nowMs: NOW_PAIRS });
+  const headers = page.locator('[data-role="segment-header"]');
+  await expect(headers).toHaveCount(1);
+  await expect(headers.first()).toContainText('1-2-4-All');
+});
+
+// P-url-2: learn-more link present after structure selection
+test('P-url-2: learn-more link present after structure selection', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('details.manual-form').evaluate(el => el.open = true);
+  await page.locator('#structure-select').selectOption('1-2-4-All');
+  const link = page.locator('[data-role="learn-more"]');
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute('href', /liberatingstructures\.com/);
+});
+
+// P-start-1: default start time is approx now+2min
+test('P-start-1: default start time input is approx now+2min', async ({ page }) => {
+  await page.goto('/');
+  const val = await page.locator('#start-time-input').inputValue();
+  const parsed = new Date(val).getTime();
+  const expected = Date.now() + 2 * 60 * 1000;
+  expect(Math.abs(parsed - expected)).toBeLessThan(70000);
+});
+
+// P-start-2: quick-set buttons present
+test('P-start-2: quick-set buttons present', async ({ page }) => {
+  await page.goto('/');
+  const btns = page.locator('[data-role="start-quick-set"]');
+  await expect(btns).toHaveCount(4);
+  await expect(btns.nth(0)).toContainText('Start now');
+  await expect(btns.nth(3)).toContainText('In 5 min');
+});
+
+// P-start-3: datetime picker present
+test('P-start-3: datetime picker input present', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#start-time-input')).toBeAttached();
+});
+
 // P7: phase timeline — elapsed checked, active highlighted, upcoming plain
 test('P7: phase timeline marks elapsed, active, and upcoming phases correctly', async ({ page }) => {
   await page.evaluate(({ session, nowMs }) => {

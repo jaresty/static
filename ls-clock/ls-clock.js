@@ -119,6 +119,24 @@ function renderParticipantView(container, session, participantName, nowMs) {
   }
   container.appendChild(membersEl);
 
+  // 2b. YOUR ROLE (if assigned)
+  if (group) {
+    const self = group.members.find(m => m.name.toLowerCase() === participantName.toLowerCase());
+    if (self && self.role) {
+      const roleEl = document.createElement('div');
+      roleEl.setAttribute('data-role', 'member-role');
+      roleEl.className = 'member-role';
+      roleEl.textContent = 'Your role: ' + self.role;
+      if (self.roleInstructions) {
+        const instrSpan = document.createElement('span');
+        instrSpan.className = 'role-instructions';
+        instrSpan.textContent = ' — ' + self.roleInstructions;
+        roleEl.appendChild(instrSpan);
+      }
+      container.appendChild(roleEl);
+    }
+  }
+
   // 3. Countdown
   const phaseEndSec = session.startTime + phase.startOffset + phase.duration;
   const remainSec = Math.max(0, Math.round(phaseEndSec - nowMs / 1000));
@@ -165,7 +183,16 @@ function renderPhaseTimeline(container, session, nowMs) {
   container.innerHTML = '';
   const elapsed = nowMs / 1000 - session.startTime;
 
+  const segments = session.segments || [];
   for (const phase of session.phases) {
+    const seg = segments.find(s => s.phaseIndexStart === phase.index);
+    if (seg) {
+      const header = document.createElement('div');
+      header.setAttribute('data-role', 'segment-header');
+      header.className = 'segment-header';
+      header.textContent = seg.name;
+      container.appendChild(header);
+    }
     const item = document.createElement('div');
     item.setAttribute('data-phase-index', phase.index);
     item.className = 'timeline-item';
@@ -372,6 +399,7 @@ function renderSetupPage() {
         <select id="structure-select">
           ${Object.keys(STRUCTURES).map(k => `<option value="${k}">${k}</option>`).join('')}
         </select>
+        <a id="learn-more-link" data-role="learn-more" href="#" target="_blank" rel="noopener" style="display:none">Learn more →</a>
       </section>
 
       <section class="setup-section">
@@ -381,6 +409,12 @@ function renderSetupPage() {
 
       <section class="setup-section">
         <h2>3. Start time</h2>
+        <div class="quick-set-row">
+          <button type="button" data-role="start-quick-set" data-offset-ms="0">Start now</button>
+          <button type="button" data-role="start-quick-set" data-offset-ms="60000">In 1 min</button>
+          <button type="button" data-role="start-quick-set" data-offset-ms="120000">In 2 min</button>
+          <button type="button" data-role="start-quick-set" data-offset-ms="300000">In 5 min</button>
+        </div>
         <input id="start-time-input" type="datetime-local" class="wide-input">
       </section>
 
@@ -420,21 +454,39 @@ function renderSetupPage() {
       <div class="url-hint">Add <code>?role=facilitator</code> to see the full facilitator view.</div>
     </section>`;
 
-  // Prefill start time to now + 5 min
-  const dt = new Date(Date.now() + 5 * 60 * 1000);
-  dt.setSeconds(0, 0);
-  const startEl = document.getElementById('start-time-input');
-  if (startEl) startEl.value = dt.toISOString().slice(0, 16);
+  // Prefill start time to now + 2 min
+  const setStartTime = (offsetMs) => {
+    const dt = new Date(Date.now() + offsetMs);
+    dt.setSeconds(0, 0);
+    const pad = n => String(n).padStart(2, '0');
+    const local = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+    const startEl = document.getElementById('start-time-input');
+    if (startEl) startEl.value = local;
+  };
+  setStartTime(2 * 60 * 1000);
 
-  // Prefill invitation from structure
+  // Wire quick-set buttons
+  document.querySelectorAll('[data-role="start-quick-set"]').forEach(btn => {
+    btn.addEventListener('click', () => setStartTime(Number(btn.dataset.offsetMs)));
+  });
+
+  // Prefill invitation from structure; update learn-more link
   const structSelect = document.getElementById('structure-select');
   const invInput = document.getElementById('invitation-input');
-  if (structSelect && invInput) {
-    structSelect.addEventListener('change', () => {
-      const s = STRUCTURES[structSelect.value];
-      if (s) invInput.value = s.invitation;
-    });
-    invInput.value = STRUCTURES[structSelect.value]?.invitation || '';
+  const learnMore = document.getElementById('learn-more-link');
+  const updateStructureFields = () => {
+    const s = STRUCTURES[structSelect.value];
+    if (s) {
+      if (invInput) invInput.value = s.invitation;
+      if (learnMore) {
+        learnMore.href = s.url || '#';
+        learnMore.style.display = s.url ? '' : 'none';
+      }
+    }
+  };
+  if (structSelect) {
+    structSelect.addEventListener('change', updateStructureFields);
+    updateStructureFields();
   }
 
   const generateBtn = document.getElementById('generate-btn');

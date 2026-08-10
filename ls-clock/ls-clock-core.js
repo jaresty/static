@@ -82,7 +82,7 @@ When you have all the information, output ONLY a JSON object matching this schem
       {
         "phaseIndex": <integer>,
         "groupIndex": <integer>,
-        "members": [ { "name": "<name>", "id": <integer> } ],
+        "members": [ { "name": "<name>", "id": <integer>, "role": "<optional role string — omit if not needed>", "roleInstructions": "<optional instructions for this role — omit if not needed>" } ],
         "location": {
           "type": "<url|physical|breakout>",
           "label": "<display name>",
@@ -103,8 +103,22 @@ When you have all the information, output ONLY a JSON object matching this schem
   "locationPool": {
     "locations": [],
     "strategy": "round-robin"
-  }
+  },
+  "segments": [
+    {
+      "name": "<display name for this structure/segment>",
+      "structureKey": "<key from STRUCTURES, or custom label>",
+      "phaseIndexStart": <0-based index of first phase in this segment>,
+      "phaseIndexEnd": <0-based index of last phase in this segment (inclusive)>
+    }
+  ]
 }
+
+## Segments rules
+- segments[] is optional; omit if the session contains only one structure
+- Each segment groups a contiguous range of phases[] under a named label
+- Segments are display-only — they do not change group assignment logic
+- When chaining multiple structures, create one segment per structure plus one for each break
 
 ## MeetingLocation type rules
 - type "url": online meeting link (Google Meet, Zoom, Teams, etc.) — set "url" to the link
@@ -212,6 +226,7 @@ function assignGroups(participants, phases, locationPool) {
 const STRUCTURES = {
   '1-2-4-All': {
     name: '1-2-4-All',
+    url: 'https://www.liberatingstructures.com/1-1-2-4-all/',
     description: 'Engage everyone simultaneously — individual → pairs → quartets → whole group.',
     invitation: 'What ideas or actions do you recommend?',
     phases: [
@@ -223,6 +238,7 @@ const STRUCTURES = {
   },
   'What-So-What-Now-What': {
     name: 'What-So-What-Now-What',
+    url: 'https://www.liberatingstructures.com/9-what-so-what-now-what-w/',
     description: 'Reflect on experience: observations → meaning → actions.',
     invitation: 'What happened, what does it mean, and what should we do?',
     phases: [
@@ -239,6 +255,7 @@ const STRUCTURES = {
   },
   'TRIZ': {
     name: 'TRIZ',
+    url: 'https://www.liberatingstructures.com/6-making-space-with-triz/',
     description: 'Generate innovative solutions by imagining what would make things worse, then inverting.',
     invitation: 'What could we do to make this problem worse? Now, how do we do the opposite?',
     phases: [
@@ -249,6 +266,7 @@ const STRUCTURES = {
   },
   'Min Specs': {
     name: 'Min Specs',
+    url: 'https://www.liberatingstructures.com/14-min-specs/',
     description: 'Specify only the must-do and must-not-do rules for achieving a purpose.',
     invitation: 'What are the absolute minimum specifications needed to achieve our purpose?',
     phases: [
@@ -259,6 +277,7 @@ const STRUCTURES = {
   },
   'Impromptu Networking': {
     name: 'Impromptu Networking',
+    url: 'https://www.liberatingstructures.com/2-impromptu-networking/',
     description: 'Rapidly share challenges and expectations with new connections across three rounds.',
     invitation: 'What big challenge are you working on, and what do you hope to get from today?',
     phases: [
