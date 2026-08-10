@@ -26,7 +26,13 @@ function renderParticipantView(container, session, participantName, nowMs) {
     const elapsed = nowMs / 1000 - session.startTime;
     const msg = document.createElement('div');
     msg.className = 'status-message';
-    msg.textContent = elapsed < 0 ? 'Session has not started yet.' : 'Session complete. Thank you!';
+    if (elapsed < 0) {
+      const start = new Date(session.startTime * 1000);
+      msg.dataset.role = 'waiting-guidance';
+      msg.textContent = `You’re in the right place. Session starts at ${start.toLocaleString()} · Starts in ${formatTime(Math.ceil(-elapsed))}`;
+    } else {
+      msg.textContent = 'Session complete. Thank you!';
+    }
     container.appendChild(msg);
     return;
   }
@@ -41,13 +47,23 @@ function renderParticipantView(container, session, participantName, nowMs) {
     if (isPassing) {
       // Show where to go next
       const nextPhase = session.phases.find(p => p.index === phase.index + 1);
+      const nextGroup = nextPhase ? getParticipantGroup(session, nextPhase.index, participantName) : null;
       let nextLabel = null;
       if (nextPhase) {
+        const nextStepEl = document.createElement('div');
+        nextStepEl.setAttribute('data-role', 'next-step');
+        nextStepEl.textContent = `Next: ${nextPhase.name}`;
+        breakEl.appendChild(nextStepEl);
+        if (nextGroup?.members?.length) {
+          const nextGroupEl = document.createElement('div');
+          nextGroupEl.setAttribute('data-role', 'next-group');
+          nextGroupEl.textContent = `With: ${nextGroup.members.map(member => formatMemberLabel(member)).join(', ')}`;
+          breakEl.appendChild(nextGroupEl);
+        }
         if (nextPhase.groupSize >= 999) {
           nextLabel = session.plenaryLocation?.label || 'Whole Group';
-        } else if (nextPhase.groupSize > 0) {
-          const nextGroup = getParticipantGroup(session, nextPhase.index, participantName);
-          if (nextGroup?.location) nextLabel = nextGroup.location.label;
+        } else if (nextGroup?.location) {
+          nextLabel = nextGroup.location.label;
         }
       }
       if (nextLabel) {
@@ -60,7 +76,7 @@ function renderParticipantView(container, session, participantName, nowMs) {
     }
     const breakTitle = document.createElement('div');
     breakTitle.className = 'break-title';
-    breakTitle.textContent = '☕ Break';
+    breakTitle.textContent = isPassing ? 'Passing time' : 'Short break';
     const phaseEndSec = session.startTime + phase.startOffset + phase.duration;
     const remainSec = Math.max(0, Math.round(phaseEndSec - nowMs / 1000));
     const countdownEl = document.createElement('div');
@@ -132,11 +148,13 @@ function renderParticipantView(container, session, participantName, nowMs) {
   membersEl.setAttribute('data-role', 'group-members');
   membersEl.className = 'group-members';
   if (group) {
-    const others = group.members.filter(m => m.name.toLowerCase() !== participantName.toLowerCase());
-    if (others.length === 0) {
+    const hasRoles = group.members.some(member => member.role);
+    if (group.members.length === 1 && !hasRoles) {
       membersEl.textContent = 'Working individually';
     } else {
-      membersEl.textContent = 'With: ' + others.map(m => m.name).join(', ');
+      membersEl.textContent = 'Group: ' + group.members.map(member => {
+        return formatMemberLabel(member, participantName);
+      }).join(', ');
     }
   }
   container.appendChild(membersEl);
@@ -226,7 +244,7 @@ function buildOverviewPanel(session, activePhase) {
       const row = document.createElement('div');
       row.className = 'overview-map-row';
       const locLabel = group.location?.label || '?';
-      const members = group.members.map(m => m.name + (m.role ? ` (${m.role})` : '')).join(', ');
+      const members = group.members.map(member => formatMemberLabel(member)).join(', ');
       row.textContent = `${locLabel}: ${members}`;
       mapDiv.appendChild(row);
     }
@@ -294,49 +312,131 @@ function renderJoinOrView(session) {
     return;
   }
 
-  // Name entry screen
+  // Participant landing screen
   app.innerHTML = `
-    <div class="join-screen">
-      <h1 class="app-title">LS Activity Clock</h1>
-      <div class="invitation">${escHtml(session.invitation)}</div>
-      <div class="join-form">
-        <label>Your name</label>
-        <input id="name-input" type="text" placeholder="Enter your name" value="${escHtml(prefilledName)}" autocomplete="off" list="name-suggestions">
-        <datalist id="name-suggestions" data-role="name-suggestions">
-          ${session.participants.map(p => `<option value="${escHtml(p.name)}">`).join('')}
-        </datalist>
-        <button id="join-btn">Join session</button>
+    <main class="join-screen" data-role="participant-landing">
+      <div class="join-brand">
+        <div class="product-eyebrow">Live timing and guidance for Liberating Structures.</div>
+        <h1 class="app-title">LS Clock</h1>
+        <p class="product-tagline">One shared clock. Every group in sync.</p>
       </div>
-    </div>`;
+      <section class="session-hero" aria-labelledby="session-title">
+        <div class="session-kicker">You’re joining</div>
+        <h2 id="session-title" class="session-title">${escHtml(session.structure || 'Liberating Structures session')}</h2>
+        <div class="invitation-card">
+          <div class="session-label">Invitation</div>
+          <p>${escHtml(session.invitation)}</p>
+        </div>
+        <div class="session-start-guidance" data-role="session-start-guidance"></div>
+        <details class="landing-session-details" data-role="landing-session-details">
+          <summary>View full session</summary>
+          <div class="landing-phase-list">
+            ${session.phases.map(phase => `
+              <div class="landing-phase" data-role="landing-phase">
+                <div class="landing-phase-heading">
+                  <strong>${escHtml(phase.name)}</strong>
+                  <span>${Math.round(phase.duration / 60)} min</span>
+                </div>
+                <p>${escHtml(phase.instructions || '')}</p>
+                <div class="landing-group-list">
+                  ${(session.groups[phase.index] || []).map((group, groupIndex) => `
+                    <div class="landing-group">
+                      <strong>Group ${groupIndex + 1}</strong>
+                      <span>${group.members.map(member => escHtml(formatMemberLabel(member))).join(', ')}</span>
+                      <span class="landing-group-location">${escHtml(group.location?.label || 'Location to be announced')}</span>
+                    </div>`).join('')}
+                </div>
+              </div>`).join('')}
+          </div>
+        </details>
+      </section>
+      <div class="join-form prepared-join">
+        <h2>Find your name</h2>
+        <p class="join-help">Choose your name to keep the group assignments your facilitator prepared.</p>
+        <label for="name-input">Participant name</label>
+        <select id="name-input" data-role="prepared-name" autocomplete="name">
+          <option value="">Choose your name</option>
+          ${session.participants.map(p => `<option value="${escHtml(p.name)}" ${p.name === prefilledName ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('')}
+        </select>
+        <button id="join-btn" class="primary-btn">Join session</button>
+        <div class="join-error" data-role="prepared-error" role="status" aria-live="polite"></div>
+      </div>
+      <details class="late-arrival" data-role="late-arrival">
+        <summary>Joining late or not listed?</summary>
+        <div class="late-arrival-form">
+          <p class="join-help">Enter your name and LS Clock will place you in a group on this device.</p>
+          <label for="late-name-input">Your name</label>
+          <input id="late-name-input" type="text" autocomplete="name">
+          <button id="late-join-btn">Join as late arrival</button>
+          <div class="join-error" id="late-join-error" role="status" aria-live="polite"></div>
+        </div>
+      </details>
+      <div class="facilitator-entry">
+        <span>Facilitating this session?</span>
+        <a data-role="facilitator-link" href="?role=facilitator#${escHtml(window.location.hash.slice(1))}">Open facilitator view</a>
+      </div>
+    </main>`;
 
   const input = document.getElementById('name-input');
   const btn = document.getElementById('join-btn');
+  const preparedError = document.querySelector('[data-role="prepared-error"]');
+  const lateInput = document.getElementById('late-name-input');
+  const lateBtn = document.getElementById('late-join-btn');
+  const lateError = document.getElementById('late-join-error');
+  const startGuidance = document.querySelector('[data-role="session-start-guidance"]');
+
+  const updateStartGuidance = () => {
+    const start = new Date(session.startTime * 1000);
+    const remaining = Math.ceil(session.startTime - Date.now() / 1000);
+    startGuidance.textContent = remaining > 0
+      ? `Starts at ${start.toLocaleString()} · Starts in ${formatTime(remaining)}`
+      : 'Session in progress';
+  };
+  updateStartGuidance();
+  if (session.startTime > Date.now() / 1000) setInterval(updateStartGuidance, 1000);
 
   const tryJoin = () => {
     const name = input.value.trim();
-    if (!name) { input.focus(); return; }
-    const group = getParticipantGroup(session, 0, name);
-    if (!group) {
-      // Latecomer: inject into a random existing group for each phase
-      const lateSession = JSON.parse(JSON.stringify(session));
-      const lateId = session.participants.length;
-      lateSession.participants = [...session.participants, { name, id: lateId }];
-      for (const phase of lateSession.phases) {
-        const groups = lateSession.groups[phase.index];
-        if (groups && groups.length > 0) {
-          const targetGroup = groups[Math.abs(name.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % groups.length];
-          targetGroup.members = [...targetGroup.members, { name, id: lateId }];
-        }
-      }
-      startParticipantClock(app, lateSession, name);
+    if (!name) {
+      preparedError.textContent = 'Choose your name to join.';
+      input.focus();
       return;
     }
+    preparedError.textContent = '';
     startParticipantClock(app, session, name);
   };
 
+  const joinLate = () => {
+    const name = lateInput.value.trim();
+    if (!name) {
+      lateError.textContent = 'Enter your name to join.';
+      lateInput.focus();
+      return;
+    }
+    if (session.participants.some(participant => participant.name.trim().toLowerCase() === name.toLowerCase())) {
+      lateError.textContent = 'That name is on the prepared list. Choose it above.';
+      return;
+    }
+
+    const lateSession = JSON.parse(JSON.stringify(session));
+    const lateId = session.participants.length;
+    lateSession.participants = [...session.participants, { name, id: lateId }];
+    for (const phase of lateSession.phases) {
+      const groups = lateSession.groups[phase.index];
+      if (!groups?.length) continue;
+      const smallestSize = Math.min(...groups.map(group => group.members.length));
+      const smallestGroups = groups.filter(group => group.members.length === smallestSize);
+      const targetGroup = smallestGroups[Math.floor(Math.random() * smallestGroups.length)];
+      targetGroup.members = [...targetGroup.members, { name, id: lateId }];
+    }
+    startParticipantClock(app, lateSession, name);
+  };
+
   btn.addEventListener('click', tryJoin);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') tryJoin(); });
-  if (prefilledName) tryJoin();
+  input.addEventListener('keydown', event => { if (event.key === 'Enter') tryJoin(); });
+  lateBtn.addEventListener('click', joinLate);
+  lateInput.addEventListener('keydown', event => { if (event.key === 'Enter') joinLate(); });
+  if (prefilledName && session.participants.some(participant => participant.name === prefilledName)) tryJoin();
 }
 
 function startParticipantClock(app, session, participantName) {
@@ -423,7 +523,7 @@ function renderFacilitatorView(app, session) {
       for (const group of groups) {
         const loc = group.location;
         html += `<div class="fac-group">
-          <div class="fac-members">${group.members.map(m => escHtml(m.name)).join(', ')}</div>
+          <div class="fac-members">${group.members.map(member => escHtml(formatMemberLabel(member))).join(', ')}</div>
           <div class="fac-location">${loc.url ? `<a href="${escHtml(loc.url)}" target="_blank">${escHtml(loc.label)}</a>` : escHtml(loc.label)}</div>
         </div>`;
       }
@@ -440,10 +540,10 @@ function renderFacilitatorView(app, session) {
 function renderSetupPage() {
   const app = document.getElementById('app');
   app.innerHTML = `
-    <h1 class="app-title">StructureFlow</h1>
+    <h1 class="app-title">LS Clock</h1>
     <div class="product-intro" data-role="product-intro">
-      <p class="product-eyebrow">A facilitator's live guide for Liberating Structures</p>
-      <p class="product-tagline">Plan the structure. Keep every group moving.</p>
+      <p class="product-eyebrow">Live timing and guidance for Liberating Structures.</p>
+      <p class="product-tagline">One shared clock. Every group in sync.</p>
     </div>
 
     <details class="setup-section manual-form" open>
@@ -497,6 +597,13 @@ function renderSetupPage() {
         <textarea id="participants-input" rows="6" placeholder="Alice&#10;Bob&#10;Carol&#10;Dave"></textarea>
       </section>
 
+      <section class="setup-section fishbowl-role-section" data-role="fishbowl-role-assignment" hidden>
+        <h2>4a. Choose the Fishbowl inner circle</h2>
+        <p class="hint">Select 3–7 participants with direct experience who represent the roles and functions that must coordinate for success.</p>
+        <div class="fishbowl-role-options" data-role="fishbowl-role-options"></div>
+        <p class="fishbowl-selection-count" data-role="fishbowl-selection-count" aria-live="polite">0 selected</p>
+      </section>
+
       <section class="setup-section">
         <h2>5. Meeting locations (one per line — paste URLs or room names)</h2>
         <textarea id="locations-input" rows="4" placeholder="https://meet.google.com/abc-defg&#10;https://meet.google.com/hij-klmn&#10;Conference Room A"></textarea>
@@ -507,6 +614,20 @@ function renderSetupPage() {
         <input id="plenary-input" type="text" placeholder="https://zoom.us/j/main or Main Hall" class="wide-input">
       </section>
 
+      <section class="setup-section">
+        <h2>7. Between-step timing</h2>
+        <p class="hint">Use passing time when groups reorganize or move. Use the short break when everyone stays together in the same space.</p>
+        <div class="timing-settings">
+          <label>Passing time (minutes)
+            <input id="passing-time-input" type="number" value="2" min="0" max="30" step="0.5">
+          </label>
+          <label>Short break (minutes)
+            <input id="short-break-input" type="number" value="0.5" min="0" max="10" step="0.5">
+          </label>
+        </div>
+      </section>
+
+      <div class="error-msg" data-role="setup-error" role="alert" aria-live="assertive" tabindex="-1"></div>
       <button id="generate-btn" class="primary-btn">Generate session URL</button>
     </details>
 
@@ -561,9 +682,51 @@ function renderSetupPage() {
       }
     }
   };
+  const participantsInput = document.getElementById('participants-input');
+  const fishbowlRoleSection = document.querySelector('[data-role="fishbowl-role-assignment"]');
+  const fishbowlRoleOptions = document.querySelector('[data-role="fishbowl-role-options"]');
+  const selectedFishbowlNames = new Set();
+  const participantNames = () => participantsInput.value.split('\n').map(name => name.trim()).filter(Boolean);
+  const includesFishbowl = () => [...document.querySelectorAll('.structure-select-item')]
+    .some(select => select.value === 'User Experience Fishbowl');
+  const updateFishbowlCount = () => {
+    const count = fishbowlRoleOptions.querySelectorAll('input:checked').length;
+    document.querySelector('[data-role="fishbowl-selection-count"]').textContent = `${count} selected`;
+  };
+  const renderFishbowlRoleAssignment = () => {
+    const active = includesFishbowl();
+    fishbowlRoleSection.hidden = !active;
+    if (!active) return;
+
+    fishbowlRoleOptions.querySelectorAll('input:checked').forEach(input => {
+      const name = participantNames()[Number(input.dataset.participantId)];
+      if (name) selectedFishbowlNames.add(name);
+    });
+    const names = participantNames();
+    for (const name of [...selectedFishbowlNames]) {
+      if (!names.includes(name)) selectedFishbowlNames.delete(name);
+    }
+    fishbowlRoleOptions.innerHTML = names.length
+      ? names.map((name, id) => `<label class="fishbowl-role-option"><input type="checkbox" data-participant-id="${id}" ${selectedFishbowlNames.has(name) ? 'checked' : ''}> <span>${escHtml(name)}</span></label>`).join('')
+      : '<p class="hint">Enter participants above to assign the inner circle.</p>';
+    updateFishbowlCount();
+  };
+  fishbowlRoleOptions.addEventListener('change', event => {
+    if (!event.target.matches('input[data-participant-id]')) return;
+    const name = participantNames()[Number(event.target.dataset.participantId)];
+    if (event.target.checked) selectedFishbowlNames.add(name);
+    else selectedFishbowlNames.delete(name);
+    updateFishbowlCount();
+  });
+  participantsInput.addEventListener('input', renderFishbowlRoleAssignment);
+
   if (structSelect) {
-    structSelect.addEventListener('change', updateStructureFields);
+    structSelect.addEventListener('change', () => {
+      updateStructureFields();
+      renderFishbowlRoleAssignment();
+    });
     updateStructureFields();
+    renderFishbowlRoleAssignment();
   }
 
   const loadSampleBtn = document.getElementById('load-sample-btn');
@@ -574,6 +737,7 @@ function renderSetupPage() {
       document.getElementById('participants-input').value = 'Alice\nBob\nCarol\nDave';
       document.getElementById('locations-input').value = 'Room A\nRoom B';
       document.getElementById('plenary-input').value = 'Main Hall';
+      renderFishbowlRoleAssignment();
     });
   }
 
@@ -583,14 +747,20 @@ function renderSetupPage() {
     // Insert a transition break row
     const breakRow = document.createElement('div');
     breakRow.className = 'structure-break-row';
-    breakRow.innerHTML = `<label>Transition (minutes): <input type="number" class="break-duration-input" value="2" min="0" max="30" style="width:60px"></label>`;
+    breakRow.textContent = 'Next structure · timing assigned automatically';
     seq.appendChild(breakRow);
     // Insert new structure select
     const row = document.createElement('div');
     row.className = 'structure-row';
     row.innerHTML = `<select class="structure-select-item">${Object.keys(STRUCTURES).map(k => `<option value="${k}">${k}</option>`).join('')}</select> <button type="button" class="remove-structure-btn">✕</button>`;
-    row.querySelector('.remove-structure-btn').addEventListener('click', () => { breakRow.remove(); row.remove(); });
+    row.querySelector('.structure-select-item').addEventListener('change', renderFishbowlRoleAssignment);
+    row.querySelector('.remove-structure-btn').addEventListener('click', () => {
+      breakRow.remove();
+      row.remove();
+      renderFishbowlRoleAssignment();
+    });
     seq.appendChild(row);
+    renderFishbowlRoleAssignment();
   });
 
   const generateBtn = document.getElementById('generate-btn');
@@ -633,6 +803,7 @@ function renderSetupPage() {
       document.getElementById('participants-input').value = (plan.participants || []).join('\n');
       document.getElementById('locations-input').value = (plan.locations || []).join('\n');
       document.getElementById('plenary-input').value = plan.plenaryLocation || '';
+      renderFishbowlRoleAssignment();
 
       if (typeof plan.startTime === 'number' && plan.participants?.length) {
         showSessionPreview(compileQuickPlan(plan));
@@ -651,12 +822,46 @@ function generateURL() {
   const participantLines = document.getElementById('participants-input').value.trim().split('\n').map(s => s.trim()).filter(Boolean);
   const locationLines = document.getElementById('locations-input').value.trim().split('\n').map(s => s.trim()).filter(Boolean);
   const plenaryVal = document.getElementById('plenary-input').value.trim();
+  const transitionTiming = {
+    passingSeconds: Math.max(0, Number(document.getElementById('passing-time-input').value || 0)) * 60,
+    shortBreakSeconds: Math.max(0, Number(document.getElementById('short-break-input').value || 0)) * 60,
+  };
 
   if (!participantLines.length) { alert('Please enter at least one participant.'); return; }
   if (!startTimeVal) { alert('Please set a start time.'); return; }
 
+  const setupError = document.querySelector('[data-role="setup-error"]');
+  setupError.textContent = '';
+  const normalizedNames = new Set();
+  const duplicateName = participantLines.find(name => {
+    const normalized = name.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (normalizedNames.has(normalized)) return true;
+    normalizedNames.add(normalized);
+    return false;
+  });
+  if (duplicateName) {
+    const normalized = duplicateName.replace(/\s+/g, ' ').trim().toLowerCase();
+    setupError.textContent = `Each participant needs a unique name. “${normalized}” appears more than once.`;
+    setupError.focus();
+    return;
+  }
+
   const startTime = Math.floor(new Date(startTimeVal).getTime() / 1000);
   const participants = participantLines.map((name, id) => ({ name, id }));
+  const fishbowlRoleOptions = {};
+  const hasFishbowl = [...document.querySelectorAll('.structure-select-item')]
+    .some(select => select.value === 'User Experience Fishbowl');
+  if (hasFishbowl) {
+    const selectedUserIds = [...document.querySelectorAll('[data-role="fishbowl-role-options"] input:checked')]
+      .map(input => Number(input.dataset.participantId));
+    try {
+      fishbowlRoleOptions.fishbowlUserIds = validateFishbowlUserIds(selectedUserIds);
+    } catch (error) {
+      setupError.textContent = error.message;
+      setupError.focus();
+      return;
+    }
+  }
 
   // Build chained phases from sequencer
   const seqEl = document.getElementById('structure-sequence');
@@ -680,18 +885,12 @@ function generateURL() {
       }
       segments.push({ name: structKey, structureKey: structKey, phaseIndexStart: segStart, phaseIndexEnd: globalPhaseIndex - 1 });
     } else if (child.classList.contains('structure-break-row')) {
-      const durInput = child.querySelector('.break-duration-input');
-      const dur = Math.max(0, Number(durInput?.value || 2)) * 60;
-      if (dur > 0) {
-        structPhases.push({ index: globalPhaseIndex, name: 'Transition', duration: dur, startOffset: phaseOffset, groupSize: 0, transitionType: 'passing', instructions: 'Move to your next location.', inheritLocations: false });
-        phaseOffset += dur;
-        globalPhaseIndex++;
-      }
+      continue;
     }
   }
 
   const structKey = document.getElementById('structure-select').value;
-  const phases = structPhases.length > 0 ? structPhases : (STRUCTURES[structKey] || STRUCTURES['1-2-4-All']).phases.map(p => ({ ...p }));
+  let phases = structPhases.length > 0 ? structPhases : (STRUCTURES[structKey] || STRUCTURES['1-2-4-All']).phases.map(p => ({ ...p }));
 
   const locationPool = {
     locations: locationLines.map(l => {
@@ -707,7 +906,15 @@ function generateURL() {
         : { type: 'physical', label: plenaryVal, url: null, instructions: null, override: false })
     : { type: 'physical', label: 'Whole Group', url: null, instructions: null, override: false };
 
-  const groups = assignGroups(participants, phases, locationPool);
+  let groups = assignGroups(participants, phases, locationPool);
+  assignCanonicalRoles(phases, groups, segments, fishbowlRoleOptions);
+  ({ phases, groups } = insertConsistentTransitions(
+    phases,
+    groups,
+    segments,
+    transitionTiming,
+    { includePassing: true, includeShortBreak: true }
+  ));
 
   const session = {
     id: crypto.randomUUID().slice(0, 8),
@@ -719,6 +926,7 @@ function generateURL() {
     groups,
     plenaryLocation,
     locationPool,
+    transitionTiming,
     ...(segments.length > 1 ? { segments } : {})
   };
 
@@ -742,7 +950,7 @@ function showSessionPreview(session) {
     groupsDiv.innerHTML = session.phases.map(phase => {
       const groups = session.groups[phase.index] || [];
       const groupRows = groups.map(g =>
-        `<div class="preview-group-row"><strong>${g.location?.label || '?'}</strong>: ${g.members.map(m => escHtml(m.name) + (m.role ? ` (${escHtml(m.role)})` : '')).join(', ')}</div>`
+        `<div class="preview-group-row"><strong>${g.location?.label || '?'}</strong>: ${g.members.map(member => escHtml(formatMemberLabel(member))).join(', ')}</div>`
       ).join('');
       return `<div class="preview-phase-block"><div class="preview-phase-name">${escHtml(phase.name)}</div>${groupRows || '<em>No groups</em>'}</div>`;
     }).join('');
@@ -785,6 +993,12 @@ function fallbackCopy(text) {
   ta.select();
   document.execCommand('copy');
   document.body.removeChild(ta);
+}
+
+function formatMemberLabel(member, participantName = '') {
+  const role = member.role ? ` — ${member.role}` : '';
+  const isYou = participantName && member.name.toLowerCase() === participantName.toLowerCase();
+  return `${member.name}${role}${isYou ? ' (you)' : ''}`;
 }
 
 function escHtml(str) {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>StructureFlow — Liberating Structures session runner</title>
+<title>LS Clock — Liberating Structures session runner</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -81,6 +81,15 @@
   #load-sample-btn { margin-bottom: 1.25rem; }
   #add-structure-btn { margin-top: .75rem; }
   #generate-btn { width: 100%; margin-top: 1.25rem; }
+  .fishbowl-role-options { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .fishbowl-role-option {
+    align-items: center; background: rgba(15,17,23,.4); border: 1px solid var(--border);
+    border-radius: var(--radius); cursor: pointer; display: flex; gap: .65rem; min-height: 44px;
+    padding: .65rem .75rem;
+  }
+  .fishbowl-role-option:has(input:checked) { border-color: var(--accent); background: rgba(108,142,245,.12); }
+  .fishbowl-role-option input { height: 20px; width: 20px; }
+  .fishbowl-selection-count { color: var(--muted); font-size: .82rem; margin-top: .6rem; }
   select, input[type="text"], input[type="datetime-local"], textarea {
     width: 100%; background: var(--surface); border: 1px solid var(--border);
     color: var(--text); padding: .5rem .75rem; border-radius: var(--radius);
@@ -103,17 +112,84 @@
   .copy-confirm { color: var(--green); font-size: .85rem; margin-left: .5rem; }
   .error-msg { color: var(--red); font-size: .85rem; margin-top: .4rem; }
 
-  /* ---- Join screen ---- */
-  .join-screen { text-align: center; padding: 3rem 1rem; }
+  /* ---- Participant landing ---- */
+  .join-screen { padding: 2.5rem 0 4rem; }
+  .join-brand { margin-bottom: 1.5rem; }
+  .join-brand .app-title { font-size: 2.25rem; }
+  .session-hero {
+    background: linear-gradient(145deg, #202536, var(--surface));
+    border: 1px solid #3a4262;
+    border-radius: 20px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.28);
+    padding: 32px;
+  }
+  .session-kicker, .session-label {
+    color: #aab2dc; font-size: .75rem; font-weight: 700;
+    letter-spacing: .09em; text-transform: uppercase;
+  }
+  .session-title {
+    color: var(--text); font-size: 28px; font-weight: 760;
+    letter-spacing: -.02em; margin: .3rem 0 1.25rem;
+  }
   .invitation {
     font-size: 1.2rem; font-style: italic; color: var(--muted);
     margin: 1rem 0 2rem; line-height: 1.5;
   }
-  .join-form { display: flex; flex-direction: column; gap: .75rem; max-width: 360px; margin: 0 auto; }
-  .join-form label { text-align: left; font-size: .9rem; color: var(--muted); }
-  #join-btn { background: var(--accent); color: #fff; font-size: 1rem; padding: .75rem; }
+  .invitation-card {
+    background: rgba(15,17,23,.55); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1rem 1.1rem;
+  }
+  .invitation-card p { font-size: 1.1rem; line-height: 1.5; margin-top: .35rem; }
+  .session-start-guidance {
+    color: #dbe2ff; background: rgba(108,142,245,.14);
+    border: 1px solid rgba(108,142,245,.35); border-radius: 999px;
+    display: inline-flex; margin-top: 1rem; padding: .55rem .85rem;
+    font-size: .88rem; font-variant-numeric: tabular-nums;
+  }
+  .landing-session-details { margin-top: 1.25rem; }
+  .landing-session-details summary, .late-arrival summary { cursor: pointer; font-weight: 650; }
+  .landing-phase-list { display: grid; gap: .65rem; margin-top: .9rem; }
+  .landing-phase {
+    background: rgba(15,17,23,.4); border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: .75rem .85rem;
+  }
+  .landing-phase-heading { display: flex; justify-content: space-between; gap: 1rem; }
+  .landing-phase-heading span, .landing-phase p { color: var(--muted); font-size: .85rem; }
+  .landing-phase p { line-height: 1.4; margin-top: .25rem; }
+  .landing-group-list { display: grid; gap: .4rem; margin-top: .65rem; }
+  .landing-group {
+    align-items: baseline; display: grid; gap: .2rem .65rem;
+    grid-template-columns: auto 1fr auto; padding-top: .4rem;
+    border-top: 1px solid rgba(123,130,176,.22); font-size: .78rem;
+  }
+  .landing-group-location { color: #aeb9e8; }
+  .join-form, .late-arrival {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; margin-top: 1rem; padding: 1.5rem;
+  }
+  .join-form { display: flex; flex-direction: column; gap: .75rem; }
+  .join-form h2 { color: var(--text); font-size: 1.15rem; margin-bottom: 0; }
+  .join-form label, .late-arrival label { font-size: .9rem; color: #b5bcdf; }
+  .join-help { color: var(--muted); font-size: .88rem; line-height: 1.45; }
+  .join-screen button, .join-screen select { min-height: 44px; }
+  #join-btn { background: var(--accent); color: #fff; font-size: 1rem; padding: .75rem; margin-top: .15rem; }
   #join-btn:hover { background: #5a7ce6; }
-  .join-error { color: var(--red); font-size: .85rem; text-align: left; }
+  .late-arrival-form { display: grid; gap: .75rem; margin-top: 1rem; }
+  .join-error { color: #ff7777; font-size: .85rem; text-align: left; min-height: 1.2em; }
+  .facilitator-entry {
+    color: var(--muted); display: flex; justify-content: center; flex-wrap: wrap;
+    gap: .4rem; margin-top: 1.5rem; font-size: .88rem;
+  }
+  .facilitator-entry a { color: #b9c8ff; font-weight: 650; }
+
+  @media (max-width: 600px) {
+    .join-screen { padding: 1rem 0 2rem; }
+    .join-brand .app-title { font-size: 2rem; }
+    .session-hero { padding: 24px; }
+    .join-form, .late-arrival { padding: 1.25rem; }
+    .session-start-guidance { border-radius: 12px; line-height: 1.4; }
+    .landing-group { grid-template-columns: 1fr; }
+  }
 
   /* ---- Participant view ---- */
   .participant-view { margin-bottom: 1.5rem; }

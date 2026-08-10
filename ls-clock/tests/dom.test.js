@@ -71,6 +71,15 @@ test('P3: location element appears before group-members in participant view', as
   await expect(joinBtn).toHaveText(/Meet A/);
 });
 
+test('P-entry-9a: joined early participants see start guidance', async ({ page }) => {
+  const futureSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) + 600 };
+  await page.evaluate(({ session, nowMs }) => {
+    renderParticipantView(document.getElementById('app'), session, 'Alice', nowMs);
+  }, { session: futureSession, nowMs: Date.now() });
+  const message = await page.evaluate(() => document.querySelector('[data-role="waiting-guidance"]')?.textContent || '');
+  expect({ startsAt: /starts at/i.test(message), startsIn: /starts in/i.test(message) }).toEqual({ startsAt: true, startsIn: true });
+});
+
 // P2: Break phase renders data-role="break", no location, no group-members
 test('P2: break phase shows break element, no location, no group-members', async ({ page }) => {
   const BREAK_SESSION = {
@@ -116,6 +125,108 @@ const ROLE_SESSION = {
   },
 };
 
+test('P-role-names: every role-bearing group presentation keeps all member names visible', async ({ page }) => {
+  const baseSession = await page.evaluate(() => compileQuickPlan({
+    structures: [{ key: 'Troika Consulting' }],
+    participants: ['Alice', 'Bob', 'Carol'],
+    locations: ['Room A'],
+    plenaryLocation: 'Main Hall',
+  }));
+  const names = ['Alice', 'Bob', 'Carol'];
+  const hasAllNames = text => names.every(name => text.includes(name));
+  const openSession = async (session, query) => {
+    const encoded = await page.evaluate(value => encodeSession(value), session);
+    await page.goto(`/?${query}#${encoded}`);
+  };
+
+  await openSession({ ...baseSession, startTime: Math.floor(Date.now() / 1000) + 300 }, 'roles=landing');
+  await page.locator('[data-role="landing-session-details"] summary').click();
+  const landing = await page.locator('[data-role="landing-session-details"]').textContent();
+
+  await openSession({ ...baseSession, startTime: Math.floor(Date.now() / 1000) - 450 }, 'roles=current');
+  await page.locator('[data-role="prepared-name"]').selectOption('Alice');
+  await page.getByRole('button', { name: 'Join session' }).click();
+  const current = await page.locator('[data-role="group-members"]').textContent();
+  const overview = await page.locator('[data-role="overview"]').textContent();
+
+  await openSession({ ...baseSession, startTime: Math.floor(Date.now() / 1000) - 350 }, 'roles=passing');
+  await page.locator('[data-role="prepared-name"]').selectOption('Alice');
+  await page.getByRole('button', { name: 'Join session' }).click();
+  const passing = await page.locator('[data-role="next-group"]').textContent();
+
+  await openSession({ ...baseSession, startTime: Math.floor(Date.now() / 1000) - 450 }, 'role=facilitator&roles=live');
+  const facilitator = await page.locator('.fac-members').allTextContents();
+
+  await page.goto('/?roles=preview');
+  await page.evaluate(session => showSessionPreview(session), { ...baseSession, startTime: Math.floor(Date.now() / 1000) + 300 });
+  const preview = await page.locator('[data-role="preview-groups"]').textContent();
+
+  expect({
+    landing: hasAllNames(landing),
+    current: hasAllNames(current),
+    overview: hasAllNames(overview),
+    passing: hasAllNames(passing),
+    facilitator: facilitator.some(hasAllNames),
+    preview: hasAllNames(preview),
+  }).toEqual({ landing: true, current: true, overview: true, passing: true, facilitator: true, preview: true });
+});
+
+test('P-role-transparency: every group presentation shows each member role', async ({ page }) => {
+  const baseSession = await page.evaluate(() => compileQuickPlan({
+    structures: [{ key: 'Troika Consulting' }],
+    participants: ['Alice', 'Bob', 'Carol'],
+    locations: ['Room A'],
+    plenaryLocation: 'Main Hall',
+  }));
+  const labels = ['Alice — Client', 'Bob — Consultant', 'Carol — Consultant'];
+  const hasAllRoles = text => labels.every(label => text.includes(label));
+  const openSession = async (session, query) => {
+    const encoded = await page.evaluate(value => encodeSession(value), session);
+    await page.goto(`/?${query}#${encoded}`);
+  };
+
+  await openSession({ ...baseSession, startTime: Math.floor(Date.now() / 1000) + 300 }, 'rolemap=landing');
+  await page.locator('[data-role="landing-session-details"] summary').click();
+  const landing = await page.locator('[data-role="landing-session-details"]').textContent();
+
+  await openSession({ ...baseSession, startTime: Math.floor(Date.now() / 1000) - 450 }, 'rolemap=current');
+  await page.locator('[data-role="prepared-name"]').selectOption('Alice');
+  await page.getByRole('button', { name: 'Join session' }).click();
+  const current = await page.locator('#app').textContent();
+  const overview = await page.locator('[data-role="overview"]').textContent();
+
+  await openSession({ ...baseSession, startTime: Math.floor(Date.now() / 1000) - 350 }, 'rolemap=passing');
+  await page.locator('[data-role="prepared-name"]').selectOption('Alice');
+  await page.getByRole('button', { name: 'Join session' }).click();
+  const passing = await page.locator('[data-role="next-group"]').textContent();
+
+  await openSession({ ...baseSession, startTime: Math.floor(Date.now() / 1000) - 450 }, 'role=facilitator&rolemap=live');
+  const facilitator = await page.locator('.fac-members').allTextContents();
+
+  await page.goto('/?rolemap=preview');
+  await page.evaluate(session => showSessionPreview(session), { ...baseSession, startTime: Math.floor(Date.now() / 1000) + 300 });
+  const preview = await page.locator('[data-role="preview-groups"]').textContent();
+
+  await page.goto('/?rolemap=manual');
+  await page.locator('#structure-select').selectOption('Troika Consulting');
+  await page.getByRole('button', { name: 'Load sample setup' }).click();
+  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  const manualSession = await page.evaluate(value => decodeSession(new URL(value).hash.slice(1)), await page.locator('#session-url-output').inputValue());
+  const manualRound = manualSession.phases.find(phase => phase.name === 'Round 1 — Client speaks');
+  const manualLabels = (manualSession.groups[manualRound.index] || []).flatMap(group =>
+    group.members.map(member => `${member.name} — ${member.role || ''}`)).join(', ');
+
+  expect({
+    landing: hasAllRoles(landing),
+    current: hasAllRoles(current),
+    overview: hasAllRoles(overview),
+    passing: hasAllRoles(passing),
+    facilitator: facilitator.some(hasAllRoles),
+    preview: hasAllRoles(preview),
+    manual: hasAllRoles(manualLabels),
+  }).toEqual({ landing: true, current: true, overview: true, passing: true, facilitator: true, preview: true, manual: true });
+});
+
 test('P-role-2: member-role element present when role provided', async ({ page }) => {
   await page.evaluate(({ session, nowMs }) => {
     const container = document.getElementById('app');
@@ -154,6 +265,38 @@ const TRANSITION_SESSION = {
 };
 const NOW_TRANSITION = (TRANSITION_SESSION.startTime + 130) * 1000;
 
+test('P-short-break-guidance: short breaks say the group and location stay the same', async ({ page }) => {
+  const session = await page.evaluate(() => compileQuickPlan({
+    structures: [{ key: 'Troika Consulting' }],
+    startTime: Math.floor(Date.now() / 1000) - 490,
+    participants: ['Alice', 'Bob', 'Carol'],
+    locations: ['Room A'],
+    plenaryLocation: 'Main Hall',
+  }));
+  const encoded = await page.evaluate(value => encodeSession(value), session);
+  await page.goto(`/#${encoded}`);
+  await page.locator('[data-role="prepared-name"]').selectOption('Alice');
+  await page.getByRole('button', { name: 'Join session' }).click();
+  const text = await page.locator('[data-role="break"]').textContent();
+  expect({ shortBreak: text.includes('Short break'), stayGuidance: text.includes('Your group and location stay the same.') }).toEqual({ shortBreak: true, stayGuidance: true });
+});
+
+test('P-passing-guidance: passing time shows the next step, room, and upcoming group', async ({ page }) => {
+  const session = await page.evaluate(() => compileQuickPlan({
+    structures: [{ key: '1-2-4-All' }],
+    startTime: Math.floor(Date.now() / 1000) - 70,
+    participants: ['Alice', 'Bob', 'Carol', 'Dave'],
+    locations: ['Room A', 'Room B'],
+    plenaryLocation: 'Main Hall',
+  }));
+  const encoded = await page.evaluate(value => encodeSession(value), session);
+  await page.goto(`/#${encoded}`);
+  await page.locator('[data-role="prepared-name"]').selectOption('Alice');
+  await page.getByRole('button', { name: 'Join session' }).click();
+  const text = await page.locator('[data-role="transition"]').textContent();
+  expect({ nextStep: text.includes('Individual'), destination: text.includes('Room A'), upcomingGroup: text.includes('Alice') }).toEqual({ nextStep: true, destination: true, upcomingGroup: true });
+});
+
 test('P-trans-1: transition phase shows data-role="transition" and next-location', async ({ page }) => {
   await page.evaluate(({ session, nowMs }) => {
     const container = document.getElementById('app');
@@ -164,15 +307,39 @@ test('P-trans-1: transition phase shows data-role="transition" and next-location
   await expect(page.locator('[data-role="break"]')).toHaveCount(0);
 });
 
-test('P-concept-1a: initial view names the product StructureFlow', async ({ page }) => {
+test('P-brand-clock: primary entry surfaces use the LS Clock identity', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1, name: 'StructureFlow' })).toBeVisible();
+  const setup = await page.evaluate(() => ({
+    title: document.title,
+    heading: document.querySelector('h1')?.textContent || '',
+    positioning: document.querySelector('[data-role="product-intro"]')?.textContent || '',
+  }));
+  const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: SESSION });
+  await page.goto(`/?view=participant#${encoded}`);
+  const participant = await page.evaluate(() => ({
+    heading: document.querySelector('h1')?.textContent || '',
+    positioning: document.querySelector('[data-role="participant-landing"]')?.textContent || '',
+  }));
+  expect({
+    setupTitle: setup.title === 'LS Clock — Liberating Structures session runner',
+    setupName: setup.heading === 'LS Clock',
+    setupPurpose: setup.positioning.includes('Live timing and guidance for Liberating Structures.'),
+    setupPromise: setup.positioning.includes('One shared clock. Every group in sync.'),
+    participantName: participant.heading === 'LS Clock',
+    participantPurpose: participant.positioning.includes('Live timing and guidance for Liberating Structures.'),
+    participantPromise: participant.positioning.includes('One shared clock. Every group in sync.'),
+  }).toEqual({ setupTitle: true, setupName: true, setupPurpose: true, setupPromise: true, participantName: true, participantPurpose: true, participantPromise: true });
 });
 
-test('P-concept-1b: initial view explains the product and its audience', async ({ page }) => {
+test('P-concept-1a: initial view names the product LS Clock', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1, name: 'LS Clock' })).toBeVisible();
+});
+
+test('P-concept-1b: initial view explains the product and its clock model', async ({ page }) => {
   await page.goto('/');
   const copy = (await page.locator('[data-role="product-intro"]').textContent()).replace(/\s+/g, ' ').trim();
-  expect(copy).toBe("A facilitator's live guide for Liberating Structures Plan the structure. Keep every group moving.");
+  expect(copy).toBe('Live timing and guidance for Liberating Structures. One shared clock. Every group in sync.');
 });
 
 test('P-concept-visual: product introduction has clear visual hierarchy', async ({ page }) => {
@@ -189,7 +356,7 @@ test('P-concept-visual: product introduction has clear visual hierarchy', async 
       taglineSize: px(tagline.fontSize),
     };
   });
-  expect(metrics).toEqual({ documentTitle: 'StructureFlow — Liberating Structures session runner', titleSize: 32, introSpacing: 24, taglineSize: 18 });
+  expect(metrics).toEqual({ documentTitle: 'LS Clock — Liberating Structures session runner', titleSize: 32, introSpacing: 24, taglineSize: 18 });
 });
 
 test('P-hierarchy-2a: manual setup is open and precedes optional assistance', async ({ page }) => {
@@ -275,9 +442,37 @@ test('P-plan-6a: manual generation preserves its session output', async ({ page 
   }).toEqual({
     structure: 'TRIZ',
     participants: ['Alice', 'Bob', 'Carol', 'Dave'],
-    phases: ['Individual', 'Small Group', 'Whole Group'],
+    phases: ['Individual', 'Passing time', 'Small Group', 'Passing time', 'Whole Group'],
     plenaryLocation: 'Main Hall',
   });
+});
+
+test('P-short-break-manual: manual Troika sessions classify unchanged boundaries', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#structure-select').selectOption('Troika Consulting');
+  await page.getByRole('button', { name: 'Load sample setup' }).click();
+  await page.getByRole('button', { name: '+ Add another structure' }).click();
+  await page.locator('.structure-select-item').nth(1).selectOption('Troika Consulting');
+  await page.locator('#short-break-input').fill('1');
+  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  const session = await page.evaluate(value => decodeSession(new URL(value).hash.slice(1)), await page.locator('#session-url-output').inputValue());
+  const shortBreaks = session.phases.filter(phase => phase.transitionType === 'short-break');
+  expect({ count: shortBreaks.length, durations: [...new Set(shortBreaks.map(phase => phase.duration))] }).toEqual({ count: 17, durations: [60] });
+});
+
+test('P-passing-manual: manual sessions apply configured transition timing consistently', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Load sample setup' }).click();
+  await page.locator('#passing-time-input').fill('3');
+  await page.locator('#short-break-input').fill('1');
+  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  const session = await page.evaluate(value => decodeSession(new URL(value).hash.slice(1)), await page.locator('#session-url-output').inputValue());
+  const passing = session.phases.filter(phase => phase.transitionType === 'passing');
+  expect({
+    transitionTiming: session.transitionTiming,
+    passingCount: passing.length,
+    passingDurations: [...new Set(passing.map(phase => phase.duration))],
+  }).toEqual({ transitionTiming: { passingSeconds: 180, shortBreakSeconds: 60 }, passingCount: 4, passingDurations: [180] });
 });
 
 test('P-plan-6b: manual setup preserves its functional controls', async ({ page }) => {
@@ -300,7 +495,7 @@ test('P-plan-url-3: bookmarked quick-plan URL compiles automatically on load', a
   }).toEqual({
     previewVisible: true,
     structure: 'TRIZ',
-    phaseCount: '3 phases',
+    phaseCount: '5 phases',
     pasteFieldCount: 0,
     manualOpen: true,
     manualInvitation: 'How can we improve handoffs?',
@@ -324,7 +519,7 @@ test('P-preserve-3b: bookmarks and manual generation retain their outputs', asyn
   const session = await page.evaluate(value => decodeSession(value), new URL(generatedURL).hash.slice(1));
   expect({ bookmark, generated: { structure: session.structure, phases: session.phases.map(phase => phase.name) } }).toEqual({
     bookmark: { structure: 'TRIZ', participants: 'Alice\nBob\nCarol\nDave', plenary: 'Main Hall' },
-    generated: { structure: 'TRIZ', phases: ['Individual', 'Small Group', 'Whole Group'] },
+    generated: { structure: 'TRIZ', phases: ['Individual', 'Passing time', 'Small Group', 'Passing time', 'Whole Group'] },
   });
 });
 
@@ -382,14 +577,152 @@ test('P-preview-1: facilitator preview shows group details', async ({ page }) =>
   await expect(preview.locator('[data-role="preview-groups"]')).toHaveCount(1);
 });
 
-// P-name-1: name input has datalist with participant names
-test('P-name-1: name entry has datalist populated with participant names', async ({ page }) => {
+test('P-entry-1: pre-start landing orients participants', async ({ page }) => {
+  const futureSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) + 10 * 60 };
+  const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: futureSession });
+  await page.goto(`/#${encoded}`);
+  const observed = await page.evaluate(() => {
+    const landing = document.querySelector('[data-role="participant-landing"]');
+    const start = document.querySelector('[data-role="session-start-guidance"]');
+    return { landing: landing?.textContent || '', start: start?.textContent || '' };
+  });
+  expect({
+    brand: observed.landing.includes('LS Clock'),
+    structure: observed.landing.includes('1-2-4-All'),
+    invitation: observed.landing.includes('Test invitation'),
+    startsAt: /starts at/i.test(observed.start),
+    startsIn: /starts in/i.test(observed.start),
+  }).toEqual({ brand: true, structure: true, invitation: true, startsAt: true, startsIn: true });
+});
+
+test('P-entry-2: full session information is available before joining', async ({ page }) => {
   const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: SESSION });
   await page.goto(`/#${encoded}`);
-  const datalist = page.locator('[data-role="name-suggestions"]');
-  await expect(datalist).toHaveCount(1);
-  const options = datalist.locator('option');
-  await expect(options).toHaveCount(SESSION.participants.length);
+  const observed = await page.evaluate(() => {
+    const details = document.querySelector('[data-role="landing-session-details"]');
+    return {
+      hasDisclosure: details?.querySelectorAll('summary').length === 1,
+      phaseCount: details?.querySelectorAll('[data-role="landing-phase"]').length || 0,
+      text: details?.textContent || '',
+    };
+  });
+  expect({
+    hasDisclosure: observed.hasDisclosure,
+    phaseCount: observed.phaseCount,
+    hasNames: SESSION.phases.every(phase => observed.text.includes(phase.name)),
+    hasDurations: SESSION.phases.every(phase => observed.text.includes(`${Math.round(phase.duration / 60)} min`)),
+    hasInstructions: SESSION.phases.every(phase => observed.text.includes(phase.instructions)),
+    hasMembers: Object.values(SESSION.groups).flat().flatMap(group => group.members).every(member => observed.text.includes(member.name)),
+    hasLocations: Object.values(SESSION.groups).flat().every(group => observed.text.includes(group.location.label)),
+  }).toEqual({ hasDisclosure: true, phaseCount: SESSION.phases.length, hasNames: true, hasDurations: true, hasInstructions: true, hasMembers: true, hasLocations: true });
+});
+
+test('P-entry-3: prepared participants select their roster identity', async ({ page }) => {
+  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 90 };
+  const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: liveSession });
+  await page.goto(`/#${encoded}`);
+  const before = await page.evaluate(() => {
+    const select = document.querySelector('[data-role="prepared-name"]');
+    return { tag: select?.tagName || '', options: select?.querySelectorAll('option').length || 0 };
+  });
+  if (before.tag === 'SELECT') {
+    await page.locator('[data-role="prepared-name"]').selectOption('Alice');
+    await page.getByRole('button', { name: 'Join session' }).click();
+  }
+  const after = await page.evaluate(() => document.querySelector('[data-role="group-members"]')?.textContent || '');
+  expect({ before, preparedGroup: after }).toEqual({ before: { tag: 'SELECT', options: SESSION.participants.length + 1 }, preparedGroup: 'Group: Alice (you), Bob' });
+});
+
+test('P-entry-4: late arrivals use a distinct local assignment path', async ({ page }) => {
+  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 90 };
+  const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: liveSession });
+  await page.addInitScript(() => { Math.random = () => 0.99; });
+  await page.goto(`/#${encoded}`);
+  const before = await page.evaluate(() => ({
+    lateDisclosure: Boolean(document.querySelector('[data-role="late-arrival"]')),
+    rosterCount: decodeSession(location.hash.slice(1)).participants.length,
+  }));
+  if (before.lateDisclosure) {
+    await page.locator('[data-role="late-arrival"] summary').click();
+    await page.locator('#late-name-input').fill('Zara');
+    await page.getByRole('button', { name: 'Join as late arrival' }).click();
+  }
+  const after = await page.evaluate(() => ({
+    group: document.querySelector('[data-role="group-members"]')?.textContent || '',
+    rosterCount: decodeSession(location.hash.slice(1)).participants.length,
+  }));
+  expect({ before, after }).toEqual({ before: { lateDisclosure: true, rosterCount: 4 }, after: { group: 'Group: Carol, Dave, Zara (you)', rosterCount: 4 } });
+});
+
+test('P-entry-6: facilitator view is discoverable from the landing page', async ({ page }) => {
+  const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: SESSION });
+  await page.goto(`/#${encoded}`);
+  const before = await page.evaluate(() => {
+    const link = document.querySelector('[data-role="facilitator-link"]');
+    return { text: link?.textContent || '', href: link?.getAttribute('href') || '' };
+  });
+  if (before.href) await page.locator('[data-role="facilitator-link"]').click();
+  const after = await page.evaluate(() => document.querySelector('h1')?.textContent || '');
+  expect({ before, after }).toEqual({ before: { text: 'Open facilitator view', href: `?role=facilitator#${encoded}` }, after: 'Facilitator View' });
+});
+
+test('P-entry-7: participant landing is polished and responsive', async ({ page }) => {
+  const futureSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) + 600 };
+  const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: futureSession });
+  const observations = [];
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(`/#${encoded}`);
+    observations.push(await page.evaluate(() => {
+      const hero = getComputedStyle(document.querySelector('.session-hero'));
+      const title = getComputedStyle(document.querySelector('.session-title'));
+      const controls = Array.from(document.querySelectorAll('.join-screen button, .join-screen select'));
+      return {
+        overflow: document.documentElement.scrollWidth <= innerWidth,
+        cardPadding: Number.parseFloat(hero.padding),
+        cardRadius: Number.parseFloat(hero.borderRadius),
+        titleSize: Number.parseFloat(title.fontSize),
+        controlsTall: controls.every(control => control.getBoundingClientRect().height >= 44),
+      };
+    }));
+  }
+  expect(observations).toEqual([
+    { overflow: true, cardPadding: 24, cardRadius: 20, titleSize: 28, controlsTall: true },
+    { overflow: true, cardPadding: 32, cardRadius: 20, titleSize: 28, controlsTall: true },
+  ]);
+});
+
+test('P-entry-8: landing controls and errors are accessible', async ({ page }) => {
+  const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: SESSION });
+  await page.goto(`/#${encoded}`);
+  await page.getByRole('button', { name: 'Join session' }).click();
+  await page.locator('[data-role="late-arrival"] summary').click();
+  await page.getByRole('button', { name: 'Join as late arrival' }).click();
+  const observed = await page.evaluate(() => {
+    const prepared = document.querySelector('[data-role="prepared-name"]');
+    const late = document.querySelector('#late-name-input');
+    const error = document.querySelector('[data-role="prepared-error"]');
+    const lateError = document.querySelector('#late-join-error');
+    return {
+      preparedLabel: prepared?.labels?.[0]?.textContent || '',
+      lateLabel: late?.labels?.[0]?.textContent || '',
+      errorText: error?.textContent || '',
+      errorRole: error?.getAttribute('role') || '',
+      errorLive: error?.getAttribute('aria-live') || '',
+      lateErrorText: lateError?.textContent || '',
+      lateErrorRole: lateError?.getAttribute('role') || '',
+      lateErrorLive: lateError?.getAttribute('aria-live') || '',
+    };
+  });
+  expect(observed).toEqual({ preparedLabel: 'Participant name', lateLabel: 'Your name', errorText: 'Choose your name to join.', errorRole: 'status', errorLive: 'polite', lateErrorText: 'Enter your name to join.', lateErrorRole: 'status', lateErrorLive: 'polite' });
+});
+
+// P-name-1: prepared name selector contains the session roster
+test('P-name-1: prepared name selector contains every participant', async ({ page }) => {
+  const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: SESSION });
+  await page.goto(`/#${encoded}`);
+  const options = page.locator('[data-role="prepared-name"] option');
+  await expect(options).toHaveText(['Choose your name', ...SESSION.participants.map(participant => participant.name)]);
 });
 
 // P-copy-1: copy-notes button present in participant view
@@ -454,6 +787,17 @@ test('P-url-2: learn-more link present after structure selection', async ({ page
   await expect(link).toHaveAttribute('href', /liberatingstructures\.com/);
 });
 
+test('P-entry-5: prepared participant names must be unique', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#participants-input').fill('Alice\n alice  ');
+  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  const observed = await page.evaluate(() => ({
+    error: document.querySelector('[data-role="setup-error"]')?.textContent || '',
+    generated: getComputedStyle(document.querySelector('#result-section')).display !== 'none',
+  }));
+  expect(observed).toEqual({ error: 'Each participant needs a unique name. “alice” appears more than once.', generated: false });
+});
+
 // P-start-1: default start time is approx now+2min
 test('P-start-1: default start time input is approx now+2min', async ({ page }) => {
   await page.goto('/');
@@ -478,7 +822,62 @@ test('P-start-3: datetime picker input present', async ({ page }) => {
   await expect(page.locator('#start-time-input')).toBeAttached();
 });
 
+test('P-fishbowl-2: facilitator intentionally assigns three to seven Fishbowl users', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#structure-select').selectOption('User Experience Fishbowl');
+  await page.locator('#participants-input').fill('A\nB\nC\nD\nE\nF\nG\nH');
+
+  const selector = page.locator('[data-role="fishbowl-role-assignment"]');
+  const present = await selector.count() === 1;
+  if (present) {
+    for (const id of [1, 3, 5]) await selector.locator(`input[data-participant-id="${id}"]`).check();
+    await page.locator('#locations-input').fill('Room A\nRoom B');
+    await page.locator('#plenary-input').fill('Main Hall');
+    await page.getByRole('button', { name: 'Generate session URL' }).click();
+  }
+
+  const observed = await page.evaluate(() => {
+    const assignment = document.querySelector('[data-role="fishbowl-role-assignment"]');
+    const output = document.querySelector('#session-url-output')?.value || '';
+    const session = output ? decodeSession(new URL(output).hash.slice(1)) : null;
+    const rolePhase = session?.phases.find(phase => (session.groups[phase.index] || []).some(group => group.members.some(member => member.role)));
+    const roles = rolePhase
+      ? session.groups[rolePhase.index].flatMap(group => group.members).sort((a, b) => a.id - b.id).map(member => `${member.name} — ${member.role}`)
+      : [];
+    return {
+      visible: Boolean(assignment && assignment.offsetParent !== null),
+      guidance: assignment?.textContent.replace(/\s+/g, ' ').trim() || '',
+      selected: [...(assignment?.querySelectorAll('input:checked') || [])].map(input => Number(input.dataset.participantId)),
+      roles,
+      error: document.querySelector('[data-role="setup-error"]')?.textContent || '',
+    };
+  });
+
+  expect(observed).toEqual({
+    visible: true,
+    guidance: expect.stringMatching(/select 3–7.*direct experience/i),
+    selected: [1, 3, 5],
+    roles: ['A — Observer', 'B — User', 'C — Observer', 'D — User', 'E — Observer', 'F — User', 'G — Observer', 'H — Observer'],
+    error: '',
+  });
+});
+
 // P7: phase timeline — elapsed checked, active highlighted, upcoming plain
+test('P-passing-config: setup exposes one session-wide passing time and short break', async ({ page }) => {
+  await page.goto('/');
+  const observed = await page.evaluate(() => {
+    const passing = [...document.querySelectorAll('#passing-time-input')];
+    const shortBreak = [...document.querySelectorAll('#short-break-input')];
+    return {
+      passing: passing.map(input => input.value),
+      shortBreak: shortBreak.map(input => input.value),
+      labels: [...document.querySelectorAll('.timing-settings label')].map(label => label.textContent.replace(/\s+/g, ' ').trim()),
+      visible: [...passing, ...shortBreak].every(input => input.offsetParent !== null),
+    };
+  });
+  expect(observed).toEqual({ passing: ['2'], shortBreak: ['0.5'], labels: ['Passing time (minutes)', 'Short break (minutes)'], visible: true });
+});
+
 test('P7: phase timeline marks elapsed, active, and upcoming phases correctly', async ({ page }) => {
   await page.evaluate(({ session, nowMs }) => {
     const container = document.getElementById('app');

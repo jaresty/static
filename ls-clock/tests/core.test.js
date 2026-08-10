@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { getActivePhase, getParticipantGroup, getCountdownClass, encodeSession, decodeSession, getNoteKey, getLLMPrompt } = require('../ls-clock-core.js');
+const { getActivePhase, getParticipantGroup, getCountdownClass, encodeSession, decodeSession, getNoteKey, getLLMPrompt, compileQuickPlan } = require('../ls-clock-core.js');
 
 const START_MS = 1_700_000_000_000;
 const SESSION = {
@@ -131,6 +131,14 @@ test('P-plan-1b: quick plan accepts only registered structure keys', () => {
   assert.throws(() => compileQuickPlan({ structures: [{ key: 'Unknown Structure' }] }), /unknown structure/i);
 });
 
+test('P-plan-1c: quick plan rejects duplicate prepared participant names', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  assert.throws(
+    () => compileQuickPlan({ structures: [{ key: '1-2-4-All' }], participants: ['Alice Smith', ' alice   smith '] }),
+    error => error.code === 'DUPLICATE_PARTICIPANT_NAME' && /unique name/i.test(error.message)
+  );
+});
+
 test('P-plan-2a: LLM prompt excludes compiled activity collections', () => {
   const prompt = getLLMPrompt();
   assert.equal(['"phases"', '"groups"', '"segments"'].some(field => prompt.includes(field)), false);
@@ -150,16 +158,15 @@ test('P-plan-3a: compiler expands an ordered structure sequence canonically', ()
     locations: ['Room A', 'Room B'],
     plenaryLocation: 'Main Hall',
   });
-  assert.deepEqual(session.phases.map(({ index, name, duration, startOffset, groupSize, transitionType }) => ({ index, name, duration, startOffset, groupSize, ...(transitionType ? { transitionType } : {}) })), [
-    { index: 0, name: 'Individual', duration: 120, startOffset: 0, groupSize: 1 },
-    { index: 1, name: 'Small Group', duration: 900, startOffset: 120, groupSize: 4 },
-    { index: 2, name: 'Whole Group', duration: 600, startOffset: 1020, groupSize: 999 },
-    { index: 3, name: 'Transition', duration: 120, startOffset: 1620, groupSize: 0, transitionType: 'passing' },
-    { index: 4, name: 'Introduction', duration: 60, startOffset: 1740, groupSize: 999 },
-    { index: 5, name: 'Individual', duration: 60, startOffset: 1800, groupSize: 1 },
-    { index: 6, name: 'Pairs', duration: 120, startOffset: 1860, groupSize: 2 },
-    { index: 7, name: 'Quartets', duration: 300, startOffset: 1980, groupSize: 4 },
-    { index: 8, name: 'Whole Group', duration: 420, startOffset: 2280, groupSize: 999 },
+  assert.deepEqual(session.phases.filter(phase => phase.groupSize > 0).map(({ name, duration, groupSize }) => ({ name, duration, groupSize })), [
+    { name: 'Individual', duration: 120, groupSize: 1 },
+    { name: 'Small Group', duration: 900, groupSize: 4 },
+    { name: 'Whole Group', duration: 600, groupSize: 999 },
+    { name: 'Introduction', duration: 60, groupSize: 999 },
+    { name: 'Individual', duration: 60, groupSize: 1 },
+    { name: 'Pairs', duration: 120, groupSize: 2 },
+    { name: 'Quartets', duration: 300, groupSize: 4 },
+    { name: 'Whole Group', duration: 420, groupSize: 999 },
   ]);
 });
 
@@ -167,9 +174,12 @@ test('P-plan-3d: compiler assigns canonical roles for role-based structures', ()
   const { compileQuickPlan } = require('../ls-clock-core.js');
   const troika = compileQuickPlan({ structures: [{ key: 'Troika Consulting' }], participants: ['Alice', 'Bob', 'Carol'] });
   const fishbowl = compileQuickPlan({ structures: [{ key: 'User Experience Fishbowl' }], participants: ['A', 'B', 'C', 'D', 'E', 'F'] });
+  const troikaRounds = ['Round 1 — Client speaks', 'Round 2 — Client speaks', 'Round 3 — Client speaks']
+    .map(name => troika.phases.find(phase => phase.name === name).index);
+  const fishbowlPhase = fishbowl.phases.find(phase => phase.groupSize > 0);
   assert.deepEqual({
-    troikaRounds: [1, 4, 7].map(index => troika.groups[index][0].members.map(member => member.role)),
-    fishbowlRoles: fishbowl.groups[0].flatMap(group => group.members.map(member => member.role)),
+    troikaRounds: troikaRounds.map(index => troika.groups[index][0].members.map(member => member.role)),
+    fishbowlRoles: fishbowl.groups[fishbowlPhase.index].flatMap(group => group.members.map(member => member.role)),
   }, {
     troikaRounds: [
       ['Client', 'Consultant', 'Consultant'],
@@ -180,6 +190,24 @@ test('P-plan-3d: compiler assigns canonical roles for role-based structures', ()
   });
 });
 
+test('P-fishbowl-source: Fishbowl links to the current authoritative guidance', () => {
+  const { STRUCTURES } = require('../ls-clock-core.js');
+  assert.equal(STRUCTURES['User Experience Fishbowl'].url, 'https://www.liberatingstructures.com/user-experience-fishbowl');
+});
+
+test('P-fishbowl-1: Fishbowl accepts three to seven intentionally selected users', () => {
+  const { validateFishbowlUserIds } = require('../ls-clock-core.js');
+  const outcomes = [3, 7, 2, 8].map(count => {
+    try {
+      validateFishbowlUserIds(Array.from({ length: count }, (_, id) => id));
+      return 'accepted';
+    } catch (error) {
+      return error.code;
+    }
+  });
+  assert.deepEqual(outcomes, ['accepted', 'accepted', 'FISHBOWL_USER_COUNT', 'FISHBOWL_USER_COUNT']);
+});
+
 test('P-plan-3c: compiler creates segments for structures and transitions', () => {
   const { compileQuickPlan } = require('../ls-clock-core.js');
   const session = compileQuickPlan({
@@ -187,9 +215,8 @@ test('P-plan-3c: compiler creates segments for structures and transitions', () =
     participants: ['Alice'],
   });
   assert.deepEqual(session.segments, [
-    { name: 'TRIZ', structureKey: 'TRIZ', phaseIndexStart: 0, phaseIndexEnd: 2 },
-    { name: 'Transition', structureKey: null, phaseIndexStart: 3, phaseIndexEnd: 3 },
-    { name: '1-2-4-All', structureKey: '1-2-4-All', phaseIndexStart: 4, phaseIndexEnd: 8 },
+    { name: 'TRIZ', structureKey: 'TRIZ', phaseIndexStart: 0, phaseIndexEnd: 4 },
+    { name: '1-2-4-All', structureKey: '1-2-4-All', phaseIndexStart: 6, phaseIndexEnd: 14 },
   ]);
 });
 
@@ -202,12 +229,15 @@ test('P-plan-3b: compiler assigns participants, groups, and locations', () => {
     locations: ['Room A', 'Room B'],
     plenaryLocation: 'Main Hall',
   });
+  const activityPhases = session.phases.filter(phase => phase.groupSize > 0);
+  const smallGroupIndex = session.phases.find(phase => phase.name === 'Small Group').index;
+  const wholeGroupIndex = session.phases.find(phase => phase.name === 'Whole Group').index;
   assert.deepEqual({
     participants: session.participants,
-    phaseGroupCounts: Object.values(session.groups).map(groups => groups.length),
-    smallGroupMembers: session.groups[1][0].members.map(member => member.name),
-    smallGroupLocation: session.groups[1][0].location.label,
-    wholeGroupLocation: session.groups[2][0].location.label,
+    phaseGroupCounts: activityPhases.map(phase => session.groups[phase.index].length),
+    smallGroupMembers: session.groups[smallGroupIndex][0].members.map(member => member.name),
+    smallGroupLocation: session.groups[smallGroupIndex][0].location.label,
+    wholeGroupLocation: session.groups[wholeGroupIndex][0].location.label,
   }, {
     participants: [{ name: 'Alice', id: 0 }, { name: 'Bob', id: 1 }, { name: 'Carol', id: 2 }, { name: 'Dave', id: 3 }],
     phaseGroupCounts: [4, 1, 1],
@@ -248,6 +278,17 @@ test('P-plan-5b: activity-mechanics errors have a stable code', () => {
   let code;
   try {
     compileQuickPlan({ structures: [{ key: 'TRIZ' }], phases: [] });
+  } catch (error) {
+    code = error.code;
+  }
+  assert.equal(code, 'ACTIVITY_MECHANICS_NOT_ALLOWED');
+});
+
+test('P-fishbowl-3: quick plans reject caller-authored Fishbowl roles', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  let code;
+  try {
+    compileQuickPlan({ structures: [{ key: 'User Experience Fishbowl' }], participants: ['A', 'B', 'C'], roles: { User: ['A', 'B', 'C'] } });
   } catch (error) {
     code = error.code;
   }
@@ -334,7 +375,7 @@ test('P-loc-1: validateSession warns when locationPool has fewer locations than 
 test('P-trans-3: quick-plan compiler creates passing transitions', () => {
   const { compileQuickPlan } = require('../ls-clock-core.js');
   const session = compileQuickPlan({ structures: [{ key: 'TRIZ' }, { key: 'Min Specs' }], participants: ['A'] });
-  assert.equal(session.phases.find(phase => phase.name === 'Transition').transitionType, 'passing');
+  assert.equal(session.phases.find(phase => phase.transitionType === 'passing').transitionType, 'passing');
 });
 
 // P-struct-1: new structures present with url fields
@@ -367,7 +408,7 @@ test('P-struct-2: Troika Consulting has phases with groupSize 3', () => {
 test('P-seg-2: quick-plan compiler calculates segment boundaries', () => {
   const { compileQuickPlan } = require('../ls-clock-core.js');
   const session = compileQuickPlan({ structures: [{ key: 'TRIZ' }], participants: ['A'] });
-  assert.deepEqual(session.segments, [{ name: 'TRIZ', structureKey: 'TRIZ', phaseIndexStart: 0, phaseIndexEnd: 2 }]);
+  assert.deepEqual(session.segments, [{ name: 'TRIZ', structureKey: 'TRIZ', phaseIndexStart: 0, phaseIndexEnd: 4 }]);
 });
 
 // P-url-1: all STRUCTURES entries have a url field
@@ -400,6 +441,103 @@ test('P-role-5: validateSession accepts members with role fields', () => {
 });
 
 // P10: JSON validateSession
+test('P-passing-authority: quick plans use defaults and reject transition mechanics', () => {
+  const basePlan = { structures: [{ key: '1-2-4-All' }], participants: ['Alice', 'Bob'] };
+  const session = compileQuickPlan(basePlan);
+  const fields = ['transitionTiming', 'passingSeconds', 'shortBreakSeconds', 'passingMinutes', 'shortBreakMinutes'];
+  const rejected = fields.map(field => {
+    try {
+      compileQuickPlan({ ...basePlan, [field]: 5 });
+      return false;
+    } catch (error) {
+      return error.code === 'ACTIVITY_MECHANICS_NOT_ALLOWED';
+    }
+  });
+  assert.deepEqual({ defaults: session.transitionTiming, rejected }, {
+    defaults: { passingSeconds: 120, shortBreakSeconds: 30 },
+    rejected: [true, true, true, true, true],
+  });
+});
+
+test('P-passing-classification: changed 1-2-4-All groups or rooms receive passing time', () => {
+  const session = compileQuickPlan({
+    structures: [{ key: '1-2-4-All' }],
+    participants: ['Alice', 'Bob', 'Carol', 'Dave'],
+    locations: ['Room A', 'Room B'],
+    plenaryLocation: 'Main Hall',
+  });
+  const fingerprint = phase => JSON.stringify((session.groups[phase.index] || []).map(group => ({
+    members: group.members.map(member => member.id).sort((a, b) => a - b),
+    location: group.location.label,
+  })));
+  const passing = session.phases.filter(phase => phase.transitionType === 'passing');
+  const crossStructure = compileQuickPlan({
+    structures: [{ key: 'TRIZ' }, { key: 'Impromptu Networking' }],
+    participants: ['Alice', 'Bob', 'Carol', 'Dave'],
+    locations: ['Room A', 'Room B'],
+    plenaryLocation: 'Main Hall',
+  });
+  const roundOnePosition = crossStructure.phases.findIndex(phase => phase.name === 'Round 1');
+  assert.deepEqual({
+    count: passing.length,
+    allChangeGroupOrRoom: passing.every(transition => {
+      const position = session.phases.indexOf(transition);
+      return fingerprint(session.phases[position - 1]) !== fingerprint(session.phases[position + 1]);
+    }),
+    crossStructureType: crossStructure.phases[roundOnePosition - 1].transitionType,
+  }, { count: 4, allChangeGroupOrRoom: true, crossStructureType: 'passing' });
+});
+
+test('P-short-break-classification: unchanged Troika groups and rooms receive short breaks', () => {
+  const session = compileQuickPlan({
+    structures: [{ key: 'Troika Consulting' }],
+    participants: ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank'],
+    locations: ['Room A', 'Room B'],
+    plenaryLocation: 'Main Hall',
+  });
+  const fingerprint = phase => JSON.stringify((session.groups[phase.index] || []).map(group => ({
+    members: group.members.map(member => member.id).sort((a, b) => a - b),
+    location: group.location.label,
+  })));
+  const shortBreaks = session.phases.filter(phase => phase.transitionType === 'short-break');
+  const crossStructure = compileQuickPlan({
+    structures: [{ key: 'TRIZ' }, { key: '1-2-4-All' }],
+    participants: ['Alice', 'Bob', 'Carol', 'Dave'],
+    locations: ['Room A', 'Room B'],
+    plenaryLocation: 'Main Hall',
+  });
+  const introductionPosition = crossStructure.phases.findIndex(phase => phase.name === 'Introduction');
+  assert.deepEqual({
+    count: shortBreaks.length,
+    allPreserveGroupAndRoom: shortBreaks.every(transition => {
+      const position = session.phases.indexOf(transition);
+      return fingerprint(session.phases[position - 1]) === fingerprint(session.phases[position + 1]);
+    }),
+    crossStructureType: crossStructure.phases[introductionPosition - 1].transitionType,
+  }, { count: 8, allPreserveGroupAndRoom: true, crossStructureType: 'short-break' });
+});
+
+test('P-passing-duration: compiled transitions consistently use session-wide class durations', () => {
+  const session = compileQuickPlan({
+    structures: [{ key: '1-2-4-All' }, { key: 'Troika Consulting' }],
+    invitation: 'What should we try?',
+    participants: ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank'],
+    locations: ['Room A', 'Room B', 'Room C'],
+    plenaryLocation: 'Main Hall',
+  });
+  const passing = session.phases.filter(phase => phase.transitionType === 'passing');
+  const shortBreaks = session.phases.filter(phase => phase.transitionType === 'short-break');
+  assert.deepEqual({
+    transitionTiming: session.transitionTiming,
+    passingDurations: [...new Set(passing.map(phase => phase.duration))],
+    shortBreakDurations: [...new Set(shortBreaks.map(phase => phase.duration))],
+  }, {
+    transitionTiming: { passingSeconds: 120, shortBreakSeconds: 30 },
+    passingDurations: [120],
+    shortBreakDurations: [30],
+  });
+});
+
 test('P10: validateSession — returns errors for missing required fields', () => {
   const { validateSession } = require('../ls-clock-core.js');
   const errs = validateSession({});

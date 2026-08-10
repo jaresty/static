@@ -286,7 +286,7 @@ const STRUCTURES = {
   },
   'User Experience Fishbowl': {
     name: 'User Experience Fishbowl',
-    url: 'https://www.liberatingstructures.com/18-users-experience-fishbowl/',
+    url: 'https://www.liberatingstructures.com/user-experience-fishbowl',
     description: 'Hear from a small inner circle of users while the larger group observes and learns.',
     invitation: 'What has your experience been? What matters most to you about this?',
     hasRoles: true,
@@ -327,8 +327,119 @@ function quickPlanFromURL(input) {
   return plan;
 }
 
+const DEFAULT_TRANSITION_TIMING = Object.freeze({ passingSeconds: 120, shortBreakSeconds: 30 });
+
+function insertConsistentTransitions(phases, groups, segments, transitionTiming, options = {}) {
+  const includePassing = options.includePassing !== false;
+  const includeShortBreak = options.includeShortBreak !== false;
+  const groupFingerprint = phaseIndex => JSON.stringify((groups[phaseIndex] || []).map(group => ({
+    members: group.members.map(member => member.id).sort((a, b) => a - b),
+    location: `${group.location?.url || ''}|${group.location?.label || ''}`,
+  })));
+  const reindexedPhases = [];
+  const reindexedGroups = {};
+  const oldToNewIndex = new Map();
+  let reindexedOffset = 0;
+  phases.forEach((phase, position) => {
+    const reindexedPhase = { ...phase, index: reindexedPhases.length, startOffset: reindexedOffset };
+    oldToNewIndex.set(phase.index, reindexedPhase.index);
+    reindexedPhases.push(reindexedPhase);
+    reindexedGroups[reindexedPhase.index] = (groups[phase.index] || []).map(group => ({ ...group, phaseIndex: reindexedPhase.index }));
+    reindexedOffset += reindexedPhase.duration;
+
+    const nextPhase = phases[position + 1];
+    const isActivityBoundary = nextPhase && !phase.transitionType && !nextPhase.transitionType;
+    const unchanged = isActivityBoundary
+      && groupFingerprint(phase.index) === groupFingerprint(nextPhase.index);
+    const transitionType = unchanged
+      ? (includeShortBreak ? 'short-break' : null)
+      : (isActivityBoundary && includePassing ? 'passing' : null);
+    const transitionDuration = transitionType === 'short-break'
+      ? transitionTiming.shortBreakSeconds
+      : transitionTiming.passingSeconds;
+    if (transitionType && transitionDuration > 0) {
+      const transitionIndex = reindexedPhases.length;
+      reindexedPhases.push({
+        index: transitionIndex,
+        name: transitionType === 'passing' ? 'Passing time' : 'Short break',
+        duration: transitionDuration,
+        startOffset: reindexedOffset,
+        groupSize: 0,
+        transitionType,
+        instructions: transitionType === 'passing'
+          ? 'Move to your next activity and location.'
+          : 'Take a short break. Your group and location stay the same.',
+        inheritLocations: transitionType === 'short-break',
+      });
+      reindexedGroups[transitionIndex] = [];
+      reindexedOffset += transitionDuration;
+    }
+  });
+  for (const segment of segments) {
+    segment.phaseIndexStart = oldToNewIndex.get(segment.phaseIndexStart);
+    segment.phaseIndexEnd = oldToNewIndex.get(segment.phaseIndexEnd);
+  }
+  return { phases: reindexedPhases, groups: reindexedGroups, segments };
+}
+
+function validateFishbowlUserIds(userIds) {
+  const normalizedIds = [...new Set(Array.from(userIds || [], Number))];
+  if (normalizedIds.length < 3 || normalizedIds.length > 7) {
+    const error = new Error('Choose between 3 and 7 participants for the Fishbowl inner circle.');
+    error.code = 'FISHBOWL_USER_COUNT';
+    throw error;
+  }
+  return new Set(normalizedIds);
+}
+
+function assignCanonicalRoles(phases, groups, segments, options = {}) {
+  for (const segment of segments) {
+    if (segment.structureKey === 'Troika Consulting') {
+      for (let phaseIndex = segment.phaseIndexStart; phaseIndex <= segment.phaseIndexEnd; phaseIndex++) {
+        const round = phases[phaseIndex].name.match(/^Round (\d+)/)?.[1];
+        if (!round) continue;
+        for (const group of groups[phaseIndex] || []) {
+          const clientIndex = (Number(round) - 1) % group.members.length;
+          group.members = group.members.map((member, index) => ({
+            ...member,
+            role: index === clientIndex ? 'Client' : 'Consultant',
+            roleInstructions: index === clientIndex
+              ? 'Share your challenge, then listen while the consultants confer.'
+              : 'Listen, then confer with the other consultant while the client turns away.',
+          }));
+        }
+      }
+    }
+    if (segment.structureKey === 'User Experience Fishbowl') {
+      const participantIds = [...new Set(
+        Array.from({ length: segment.phaseIndexEnd - segment.phaseIndexStart + 1 }, (_, offset) => segment.phaseIndexStart + offset)
+          .flatMap(phaseIndex => (groups[phaseIndex] || []).flatMap(group => group.members.map(member => member.id)))
+      )].sort((a, b) => a - b);
+      const fishbowlUserIds = options.fishbowlUserIds == null
+        ? new Set(participantIds.slice(0, Math.min(5, participantIds.length)))
+        : validateFishbowlUserIds(options.fishbowlUserIds);
+      for (let phaseIndex = segment.phaseIndexStart; phaseIndex <= segment.phaseIndexEnd; phaseIndex++) {
+        for (const group of groups[phaseIndex] || []) {
+          group.members = group.members.map(member => ({
+            ...member,
+            role: fishbowlUserIds.has(member.id) ? 'User' : 'Observer',
+            roleInstructions: fishbowlUserIds.has(member.id)
+              ? 'Share your experience from the inner circle.'
+              : 'Listen from the outer circle and note what surprises you.',
+          }));
+        }
+      }
+    }
+  }
+  return groups;
+}
+
 function compileQuickPlan(plan) {
-  const mechanicalFields = ['phases', 'groups', 'segments', 'startOffset', 'groupSize', 'instructions', 'roles'];
+  const transitionTiming = { ...DEFAULT_TRANSITION_TIMING };
+  const mechanicalFields = [
+    'phases', 'groups', 'segments', 'startOffset', 'groupSize', 'instructions', 'roles',
+    'transitionTiming', 'passingSeconds', 'shortBreakSeconds', 'passingMinutes', 'shortBreakMinutes',
+  ];
   const suppliedMechanicalField = plan && mechanicalFields.find(field => Object.hasOwn(plan, field));
   if (suppliedMechanicalField) {
     const error = new Error(`Activity mechanics are not allowed in a quick plan: ${suppliedMechanicalField}`);
@@ -345,25 +456,22 @@ function compileQuickPlan(plan) {
     throw error;
   }
 
-  const phases = [];
+  const normalizedParticipantNames = new Set();
+  for (const participant of plan.participants || []) {
+    const name = typeof participant === 'string' ? participant : participant?.name || '';
+    const normalized = name.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (normalizedParticipantNames.has(normalized)) {
+      const error = new Error(`Each participant needs a unique name: ${normalized}`);
+      error.code = 'DUPLICATE_PARTICIPANT_NAME';
+      throw error;
+    }
+    normalizedParticipantNames.add(normalized);
+  }
+
+  let phases = [];
   const segments = [];
   let startOffset = 0;
-  plan.structures.forEach((item, structureIndex) => {
-    if (structureIndex > 0) {
-      const transitionIndex = phases.length;
-      phases.push({
-        index: phases.length,
-        name: 'Transition',
-        duration: 120,
-        startOffset,
-        groupSize: 0,
-        transitionType: 'passing',
-        instructions: 'Move to the next activity.',
-        inheritLocations: false,
-      });
-      startOffset += 120;
-      segments.push({ name: 'Transition', structureKey: null, phaseIndexStart: transitionIndex, phaseIndexEnd: transitionIndex });
-    }
+  plan.structures.forEach(item => {
     const phaseIndexStart = phases.length;
     for (const templatePhase of STRUCTURES[item.key].phases) {
       phases.push({ ...templatePhase, index: phases.length, startOffset });
@@ -387,44 +495,16 @@ function compileQuickPlan(plan) {
     strategy: 'round-robin',
   };
   const plenaryLocation = toMeetingLocation(plan.plenaryLocation || 'Whole Group');
-  const groups = assignGroups(participants, phases, locationPool);
+  let groups = assignGroups(participants, phases, locationPool);
   for (const phase of phases) {
     if (phase.groupSize >= 999 && groups[phase.index]?.[0]) {
       groups[phase.index][0].location = { ...plenaryLocation };
     }
   }
 
-  for (const segment of segments) {
-    if (segment.structureKey === 'Troika Consulting') {
-      for (let phaseIndex = segment.phaseIndexStart; phaseIndex <= segment.phaseIndexEnd; phaseIndex++) {
-        const round = phases[phaseIndex].name.match(/^Round (\d+)/)?.[1];
-        if (!round) continue;
-        for (const group of groups[phaseIndex] || []) {
-          const clientIndex = (Number(round) - 1) % group.members.length;
-          group.members = group.members.map((member, index) => ({
-            ...member,
-            role: index === clientIndex ? 'Client' : 'Consultant',
-            roleInstructions: index === clientIndex
-              ? 'Share your challenge, then listen while the consultants confer.'
-              : 'Listen, then confer with the other consultant while the client turns away.',
-          }));
-        }
-      }
-    }
-    if (segment.structureKey === 'User Experience Fishbowl') {
-      for (let phaseIndex = segment.phaseIndexStart; phaseIndex <= segment.phaseIndexEnd; phaseIndex++) {
-        for (const group of groups[phaseIndex] || []) {
-          group.members = group.members.map(member => ({
-            ...member,
-            role: member.id < 5 ? 'User' : 'Observer',
-            roleInstructions: member.id < 5
-              ? 'Share your experience from the inner circle.'
-              : 'Listen from the outer circle and note what surprises you.',
-          }));
-        }
-      }
-    }
-  }
+  assignCanonicalRoles(phases, groups, segments);
+
+  ({ phases, groups } = insertConsistentTransitions(phases, groups, segments, transitionTiming));
 
   return {
     id: plan.id || Math.random().toString(16).slice(2, 10).padEnd(8, '0'),
@@ -437,6 +517,7 @@ function compileQuickPlan(plan) {
     segments,
     plenaryLocation,
     locationPool,
+    transitionTiming,
   };
 }
 
@@ -465,5 +546,5 @@ function validateSession(obj) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { getActivePhase, getParticipantGroup, getCountdownClass, encodeSession, decodeSession, getNoteKey, getLLMPrompt, assignGroups, STRUCTURES, quickPlanToURL, quickPlanFromURL, compileQuickPlan, validateSession };
+  module.exports = { getActivePhase, getParticipantGroup, getCountdownClass, encodeSession, decodeSession, getNoteKey, getLLMPrompt, assignGroups, insertConsistentTransitions, validateFishbowlUserIds, assignCanonicalRoles, STRUCTURES, quickPlanToURL, quickPlanFromURL, compileQuickPlan, validateSession };
 }
