@@ -46,7 +46,7 @@ function getLLMPrompt() {
 Your job: interview the facilitator to collect everything needed, then output a complete SessionPayload JSON object.
 
 ## Interview checklist (ask in order, adapt as needed)
-1. Which Liberating Structure? (1-2-4-All, What-So-What-Now-What, TRIZ, Min Specs, Impromptu Networking)
+1. Which Liberating Structure? (1-2-4-All, What-So-What-Now-What, TRIZ, Min Specs, Impromptu Networking, Troika Consulting, 15% Solutions, Nine Whys, Wicked Questions, Appreciative Interviews, Purpose-to-Practice, User Experience Fishbowl)
 2. Do you want to chain multiple structures together in one session? If so, which ones, in what order?
 3. Do you want breaks between structures or phases? If so, how long?
 4. What is the invitation / central question for participants?
@@ -149,9 +149,37 @@ Phases: Individual (300s, groupSize=1), Small Group (900s, groupSize=4), Whole G
 ### Impromptu Networking
 Phases: Round 1 (120s, groupSize=2), Round 2 (120s, groupSize=2), Round 3 (120s, groupSize=2) — pre-assign different pairs each round
 
-## Break phases
-To add a break between structures, insert a phase with groupSize=0. Example:
-{ "index": N, "name": "Break", "duration": 600, "startOffset": ..., "groupSize": 0, "instructions": "Take a 10-minute break. Reconvene at [time].", "inheritLocations": false }
+### Troika Consulting
+Phases: Introduction (300s, groupSize=999), then 3 rounds × [Client speaks (60s, groupSize=3), Consultants confer (240s, groupSize=3), Debrief (60s, groupSize=3)], Whole Group Share-out (300s, groupSize=999)
+Role assignment: in each group of 3, assign role="Client" to one member and role="Consultant" to the other two; rotate the client role each round
+
+### 15% Solutions
+Phases: Individual (300s, groupSize=1), Small Group (900s, groupSize=4), Whole Group (600s, groupSize=999)
+
+### Nine Whys
+Phases: Pairs — Nine Whys (600s, groupSize=2), Whole Group (600s, groupSize=999)
+
+### Wicked Questions
+Phases: Individual (300s, groupSize=1), Small Group (900s, groupSize=4), Whole Group (600s, groupSize=999)
+
+### Appreciative Interviews
+Phases: Pairs — Interview (600s, groupSize=2), Small Group — Themes (600s, groupSize=4), Whole Group (300s, groupSize=999)
+
+### Purpose-to-Practice
+Phases: Individual (300s, groupSize=1), Small Group (1200s, groupSize=5), Whole Group (600s, groupSize=999)
+
+### User Experience Fishbowl
+Phases: Inner Circle Discussion (1200s, groupSize=5), Outer Circle Reflection (600s, groupSize=999), Whole Group Synthesis (300s, groupSize=999)
+Role assignment: assign role="User" to inner circle members and role="Observer" to outer circle participants
+
+## Break and transition phases
+Both use groupSize=0. Distinguish with the optional transitionType field:
+- transitionType: "passing" — room change; participant view shows the NEXT phase's location early so people can move. Use when groups physically or virtually change rooms.
+- transitionType: "breath" — everyone stays in the same space; short pause to reset attention. No location shown.
+- omit transitionType (or set to "break") — standard break with no location context.
+
+Example passing transition: { "index": N, "name": "Move to breakout rooms", "duration": 120, "startOffset": ..., "groupSize": 0, "transitionType": "passing", "instructions": "Head to your next room now.", "inheritLocations": false }
+Example breath: { "index": N, "name": "Take a breath", "duration": 30, "startOffset": ..., "groupSize": 0, "transitionType": "breath", "instructions": "Pause. Settle. We begin again in 30 seconds.", "inheritLocations": false }
 
 Start the interview now.`;
 }
@@ -286,6 +314,91 @@ const STRUCTURES = {
       { index: 2, name: 'Round 3', duration: 120, startOffset: 240, groupSize: 2, instructions: 'Final partner — share once more. What have you learned from telling it?', inheritLocations: false },
     ]
   },
+  'Troika Consulting': {
+    name: 'Troika Consulting',
+    url: 'https://www.liberatingstructures.com/8-troika-consulting/',
+    description: 'Groups of three take turns as client and consultants — rapid peer coaching in rotating rounds.',
+    invitation: 'What is your challenge? What advice or questions do your consultants have?',
+    phases: [
+      { index: 0, name: 'Introduction',    duration: 300,  startOffset: 0,    groupSize: 999, instructions: 'Explain the Troika process. Each round: the client shares a challenge (1 min), then turns away while consultants confer (4 min).', inheritLocations: false },
+      { index: 1, name: 'Round 1 — Client speaks',       duration: 60,   startOffset: 300,  groupSize: 3, instructions: 'Client: share your challenge or question. Consultants: listen only.', inheritLocations: false },
+      { index: 2, name: 'Round 1 — Consultants confer',  duration: 240,  startOffset: 360,  groupSize: 3, instructions: 'Client turns away or mutes. Consultants: offer advice, questions, and ideas freely.', inheritLocations: true },
+      { index: 3, name: 'Round 1 — Debrief',             duration: 60,   startOffset: 600,  groupSize: 3, instructions: 'Client rejoins. Share what was useful. Rotate roles.', inheritLocations: true },
+      { index: 4, name: 'Round 2 — Client speaks',       duration: 60,   startOffset: 660,  groupSize: 3, instructions: 'New client: share your challenge. Consultants: listen only.', inheritLocations: true },
+      { index: 5, name: 'Round 2 — Consultants confer',  duration: 240,  startOffset: 720,  groupSize: 3, instructions: 'Client turns away. Consultants confer freely.', inheritLocations: true },
+      { index: 6, name: 'Round 2 — Debrief',             duration: 60,   startOffset: 960,  groupSize: 3, instructions: 'Client rejoins. Share what was useful. Rotate roles.', inheritLocations: true },
+      { index: 7, name: 'Round 3 — Client speaks',       duration: 60,   startOffset: 1020, groupSize: 3, instructions: 'Third client: share your challenge.', inheritLocations: true },
+      { index: 8, name: 'Round 3 — Consultants confer',  duration: 240,  startOffset: 1080, groupSize: 3, instructions: 'Client turns away. Consultants confer freely.', inheritLocations: true },
+      { index: 9, name: 'Round 3 — Debrief',             duration: 60,   startOffset: 1320, groupSize: 3, instructions: 'Client rejoins. Share what was useful.', inheritLocations: true },
+      { index: 10, name: 'Whole Group Share-out',        duration: 300,  startOffset: 1380, groupSize: 999, instructions: 'What patterns emerged? What will you take forward?', inheritLocations: false },
+    ]
+  },
+  '15% Solutions': {
+    name: '15% Solutions',
+    url: 'https://www.liberatingstructures.com/15-15-solutions/',
+    description: 'Discover and act on what you already have the freedom and resources to do right now.',
+    invitation: 'What is your 15% solution — the actions within your authority that you could take today?',
+    phases: [
+      { index: 0, name: 'Individual',  duration: 300,  startOffset: 0,   groupSize: 1,   instructions: 'Write your 15% solution: what can you do with the resources, authority, and relationships you already have?', inheritLocations: false },
+      { index: 1, name: 'Small Group', duration: 900,  startOffset: 300, groupSize: 4,   instructions: 'Share your 15% solutions. Offer advice and help. What support do you need from others?', inheritLocations: true },
+      { index: 2, name: 'Whole Group', duration: 600,  startOffset: 1200, groupSize: 999, instructions: 'Share key insights and commitments. Who needs what support?', inheritLocations: false },
+    ]
+  },
+  'Nine Whys': {
+    name: 'Nine Whys',
+    url: 'https://www.liberatingstructures.com/3-nine-whys/',
+    description: 'Rapidly reveal the deeper purpose behind the work by asking "Why?" up to nine times.',
+    invitation: 'Why is your work important? Keep asking why to find the deeper purpose.',
+    phases: [
+      { index: 0, name: 'Pairs — Nine Whys', duration: 600,  startOffset: 0,   groupSize: 2,   instructions: 'Partner A: explain what you do. Partner B: ask "Why is that important?" up to nine times. Then switch.', inheritLocations: false },
+      { index: 1, name: 'Whole Group',       duration: 600,  startOffset: 600, groupSize: 999, instructions: 'Share the deepest purpose you uncovered. What patterns do you notice?', inheritLocations: false },
+    ]
+  },
+  'Wicked Questions': {
+    name: 'Wicked Questions',
+    url: 'https://www.liberatingstructures.com/4-wicked-questions/',
+    description: 'Articulate the contradictory forces at play to open space for innovation.',
+    invitation: 'What bold and outrageous question, if pursued, would fundamentally change our approach?',
+    phases: [
+      { index: 0, name: 'Individual',  duration: 300,  startOffset: 0,    groupSize: 1,   instructions: 'Draft your wicked question: "How is it that we [x] and [opposite of x] at the same time?"', inheritLocations: false },
+      { index: 1, name: 'Small Group', duration: 900,  startOffset: 300,  groupSize: 4,   instructions: 'Share your questions. Select the most provocative and important ones.', inheritLocations: true },
+      { index: 2, name: 'Whole Group', duration: 600,  startOffset: 1200, groupSize: 999, instructions: 'Each group shares their top question. Discuss: which contradictions are most generative?', inheritLocations: false },
+    ]
+  },
+  'Appreciative Interviews': {
+    name: 'Appreciative Interviews',
+    url: 'https://www.liberatingstructures.com/5-appreciative-interviews-ai/',
+    description: 'Discover and build on what works by sharing stories of success.',
+    invitation: 'Tell me about a time when you did your best work together. What made it possible?',
+    phases: [
+      { index: 0, name: 'Pairs — Interview',   duration: 600,  startOffset: 0,    groupSize: 2,   instructions: 'Interview your partner using the invitation. Listen for what made success possible. Then switch.', inheritLocations: false },
+      { index: 1, name: 'Small Group — Themes', duration: 600,  startOffset: 600,  groupSize: 4,   instructions: 'Share your partner\'s story. Identify common themes and enabling conditions.', inheritLocations: false },
+      { index: 2, name: 'Whole Group',          duration: 300,  startOffset: 1200, groupSize: 999, instructions: 'Share the most inspiring stories and recurring themes.', inheritLocations: false },
+    ]
+  },
+  'Purpose-to-Practice': {
+    name: 'Purpose-to-Practice',
+    url: 'https://www.liberatingstructures.com/33-purpose-to-practice-p2p/',
+    description: 'Define the five essential elements of a self-organizing initiative: purpose, principles, participants, structure, and practices.',
+    invitation: 'What is the purpose, principles, participants, structure, and practices of our initiative?',
+    phases: [
+      { index: 0, name: 'Individual',  duration: 300,  startOffset: 0,    groupSize: 1,   instructions: 'Reflect on the initiative. Write your thoughts on: purpose, principles, participants, structure, practices.', inheritLocations: false },
+      { index: 1, name: 'Small Group', duration: 1200, startOffset: 300,  groupSize: 5,   instructions: 'Share and align on each element in turn. Produce a draft for your group.', inheritLocations: true },
+      { index: 2, name: 'Whole Group', duration: 600,  startOffset: 1500, groupSize: 999, instructions: 'Each group shares their draft. Identify convergence and open questions.', inheritLocations: false },
+    ]
+  },
+  'User Experience Fishbowl': {
+    name: 'User Experience Fishbowl',
+    url: 'https://www.liberatingstructures.com/18-users-experience-fishbowl/',
+    description: 'Hear from a small inner circle of users while the larger group observes and learns.',
+    invitation: 'What has your experience been? What matters most to you about this?',
+    hasRoles: true,
+    phases: [
+      { index: 0, name: 'Inner Circle Discussion', duration: 1200, startOffset: 0,    groupSize: 5,   instructions: 'Inner circle (role: User): share your experience freely. Outer circle (role: Observer): listen without interrupting. Note what surprises you.', inheritLocations: false },
+      { index: 1, name: 'Outer Circle Reflection',  duration: 600,  startOffset: 1200, groupSize: 999, instructions: 'Outer circle shares observations. Inner circle listens. What did you learn?', inheritLocations: false },
+      { index: 2, name: 'Whole Group Synthesis',    duration: 300,  startOffset: 1800, groupSize: 999, instructions: 'Together: what insights will shape how we move forward?', inheritLocations: false },
+    ]
+  },
 };
 
 function validateSession(obj) {
@@ -297,6 +410,18 @@ function validateSession(obj) {
   if (!Array.isArray(obj.phases) || obj.phases.length === 0) errors.push('Missing required field: phases (must be a non-empty array)');
   if (!obj.plenaryLocation) errors.push('Missing required field: plenaryLocation');
   if (!obj.locationPool) errors.push('Missing required field: locationPool');
+  if (obj.locationPool && Array.isArray(obj.locationPool.locations) && obj.locationPool.locations.length > 0 &&
+      Array.isArray(obj.participants) && Array.isArray(obj.phases)) {
+    const locCount = obj.locationPool.locations.length;
+    for (const phase of obj.phases) {
+      if (phase.groupSize > 0 && phase.groupSize < 999) {
+        const groupsNeeded = Math.ceil(obj.participants.length / phase.groupSize);
+        if (groupsNeeded > locCount) {
+          errors.push(`Warning: phase "${phase.name}" needs ${groupsNeeded} locations but locationPool only has ${locCount}. Add more locations or they will be reused round-robin.`);
+        }
+      }
+    }
+  }
   return errors;
 }
 

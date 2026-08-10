@@ -31,11 +31,33 @@ function renderParticipantView(container, session, participantName, nowMs) {
     return;
   }
 
-  // Break phase — groupSize 0 — show break block only
+  // Transition or break phase — groupSize 0
   if (phase.groupSize === 0) {
+    const isPassing = phase.transitionType === 'passing';
     const breakEl = document.createElement('div');
-    breakEl.setAttribute('data-role', 'break');
-    breakEl.className = 'break-block';
+    breakEl.setAttribute('data-role', isPassing ? 'transition' : 'break');
+    breakEl.className = isPassing ? 'transition-block' : 'break-block';
+
+    if (isPassing) {
+      // Show where to go next
+      const nextPhase = session.phases.find(p => p.index === phase.index + 1);
+      let nextLabel = null;
+      if (nextPhase) {
+        if (nextPhase.groupSize >= 999) {
+          nextLabel = session.plenaryLocation?.label || 'Whole Group';
+        } else if (nextPhase.groupSize > 0) {
+          const nextGroup = getParticipantGroup(session, nextPhase.index, participantName);
+          if (nextGroup?.location) nextLabel = nextGroup.location.label;
+        }
+      }
+      if (nextLabel) {
+        const nextLocEl = document.createElement('div');
+        nextLocEl.setAttribute('data-role', 'next-location');
+        nextLocEl.className = 'next-location';
+        nextLocEl.textContent = 'Head to: ' + nextLabel;
+        breakEl.appendChild(nextLocEl);
+      }
+    }
     const breakTitle = document.createElement('div');
     breakTitle.className = 'break-title';
     breakTitle.textContent = '☕ Break';
@@ -155,6 +177,21 @@ function renderParticipantView(container, session, participantName, nowMs) {
 
   // 5. Overview panel (expandable)
   container.appendChild(buildOverviewPanel(session, phase));
+
+  // 6. Copy notes button
+  const copyBtn = document.createElement('button');
+  copyBtn.setAttribute('data-role', 'copy-notes');
+  copyBtn.className = 'copy-notes-btn';
+  copyBtn.textContent = 'Copy my notes';
+  copyBtn.addEventListener('click', () => {
+    const lines = session.phases.map(p => {
+      const key = getNoteKey(session.id, p.index, participantName);
+      const note = localStorage.getItem(key) || '';
+      return note ? `${p.name}:\n${note}` : null;
+    }).filter(Boolean);
+    navigator.clipboard.writeText(lines.join('\n\n')).catch(() => {});
+  });
+  container.appendChild(copyBtn);
 }
 
 function buildOverviewPanel(session, activePhase) {
@@ -175,6 +212,27 @@ function buildOverviewPanel(session, activePhase) {
     list.appendChild(row);
   }
   wrapper.appendChild(list);
+
+  // Full group map for active phase
+  if (session.groups && session.groups[activePhase.index]) {
+    const mapDiv = document.createElement('div');
+    mapDiv.setAttribute('data-role', 'overview-map');
+    mapDiv.className = 'overview-map';
+    const mapTitle = document.createElement('div');
+    mapTitle.className = 'overview-map-title';
+    mapTitle.textContent = 'Where everyone is now:';
+    mapDiv.appendChild(mapTitle);
+    for (const group of session.groups[activePhase.index]) {
+      const row = document.createElement('div');
+      row.className = 'overview-map-row';
+      const locLabel = group.location?.label || '?';
+      const members = group.members.map(m => m.name + (m.role ? ` (${m.role})` : '')).join(', ');
+      row.textContent = `${locLabel}: ${members}`;
+      mapDiv.appendChild(row);
+    }
+    wrapper.appendChild(mapDiv);
+  }
+
   return wrapper;
 }
 
@@ -244,7 +302,7 @@ function renderJoinOrView(session) {
       <div class="join-form">
         <label>Your name</label>
         <input id="name-input" type="text" placeholder="Enter your name" value="${escHtml(prefilledName)}" autocomplete="off" list="name-suggestions">
-        <datalist id="name-suggestions">
+        <datalist id="name-suggestions" data-role="name-suggestions">
           ${session.participants.map(p => `<option value="${escHtml(p.name)}">`).join('')}
         </datalist>
         <button id="join-btn">Join session</button>
@@ -259,14 +317,18 @@ function renderJoinOrView(session) {
     if (!name) { input.focus(); return; }
     const group = getParticipantGroup(session, 0, name);
     if (!group) {
-      const err = document.getElementById('join-error') || (() => {
-        const e = document.createElement('div');
-        e.id = 'join-error';
-        e.className = 'join-error';
-        btn.after(e);
-        return e;
-      })();
-      err.textContent = `"${name}" not found. Participants: ${session.participants.map(p => p.name).join(', ')}`;
+      // Latecomer: inject into a random existing group for each phase
+      const lateSession = JSON.parse(JSON.stringify(session));
+      const lateId = session.participants.length;
+      lateSession.participants = [...session.participants, { name, id: lateId }];
+      for (const phase of lateSession.phases) {
+        const groups = lateSession.groups[phase.index];
+        if (groups && groups.length > 0) {
+          const targetGroup = groups[Math.abs(name.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % groups.length];
+          targetGroup.members = [...targetGroup.members, { name, id: lateId }];
+        }
+      }
+      startParticipantClock(app, lateSession, name);
       return;
     }
     startParticipantClock(app, session, name);
@@ -396,10 +458,15 @@ function renderSetupPage() {
 
       <section class="setup-section">
         <h2>1. Choose a structure</h2>
-        <select id="structure-select">
-          ${Object.keys(STRUCTURES).map(k => `<option value="${k}">${k}</option>`).join('')}
-        </select>
-        <a id="learn-more-link" data-role="learn-more" href="#" target="_blank" rel="noopener" style="display:none">Learn more →</a>
+        <div id="structure-sequence">
+          <div class="structure-row">
+            <select id="structure-select" class="structure-select-item">
+              ${Object.keys(STRUCTURES).map(k => `<option value="${k}">${k}</option>`).join('')}
+            </select>
+            <a id="learn-more-link" data-role="learn-more" href="#" target="_blank" rel="noopener" style="display:none">Learn more →</a>
+          </div>
+        </div>
+        <button type="button" data-role="add-structure-btn" id="add-structure-btn">+ Add another structure</button>
       </section>
 
       <section class="setup-section">
@@ -442,6 +509,7 @@ function renderSetupPage() {
       <div><strong>Start time:</strong> <span data-role="preview-starttime"></span></div>
       <div><strong>Participants:</strong> <span data-role="preview-participants"></span></div>
       <div><strong>Phases:</strong> <span data-role="preview-phases"></span></div>
+      <div data-role="preview-groups"></div>
       <button id="confirm-url-btn" class="primary-btn">Looks good — generate URL</button>
       <button id="cancel-preview-btn">Cancel</button>
     </section>
@@ -489,6 +557,22 @@ function renderSetupPage() {
     updateStructureFields();
   }
 
+  // Wire add-structure button
+  document.getElementById('add-structure-btn')?.addEventListener('click', () => {
+    const seq = document.getElementById('structure-sequence');
+    // Insert a transition break row
+    const breakRow = document.createElement('div');
+    breakRow.className = 'structure-break-row';
+    breakRow.innerHTML = `<label>Transition (minutes): <input type="number" class="break-duration-input" value="2" min="0" max="30" style="width:60px"></label>`;
+    seq.appendChild(breakRow);
+    // Insert new structure select
+    const row = document.createElement('div');
+    row.className = 'structure-row';
+    row.innerHTML = `<select class="structure-select-item">${Object.keys(STRUCTURES).map(k => `<option value="${k}">${k}</option>`).join('')}</select> <button type="button" class="remove-structure-btn">✕</button>`;
+    row.querySelector('.remove-structure-btn').addEventListener('click', () => { breakRow.remove(); row.remove(); });
+    seq.appendChild(row);
+  });
+
   const generateBtn = document.getElementById('generate-btn');
   if (generateBtn) generateBtn.addEventListener('click', generateURL);
 
@@ -509,7 +593,6 @@ function renderSetupPage() {
 }
 
 function generateURL() {
-  const structKey = document.getElementById('structure-select').value;
   const invitation = document.getElementById('invitation-input').value.trim() || 'What ideas do you recommend?';
   const startTimeVal = document.getElementById('start-time-input').value;
   const participantLines = document.getElementById('participants-input').value.trim().split('\n').map(s => s.trim()).filter(Boolean);
@@ -522,8 +605,40 @@ function generateURL() {
   const startTime = Math.floor(new Date(startTimeVal).getTime() / 1000);
   const participants = participantLines.map((name, id) => ({ name, id }));
 
-  const template = STRUCTURES[structKey] || STRUCTURES['1-2-4-All'];
-  const phases = template.phases.map(p => ({ ...p }));
+  // Build chained phases from sequencer
+  const seqEl = document.getElementById('structure-sequence');
+  const structPhases = [];
+  const segments = [];
+  let phaseOffset = 0;
+  let globalPhaseIndex = 0;
+
+  const children = Array.from(seqEl.children);
+  for (let ci = 0; ci < children.length; ci++) {
+    const child = children[ci];
+    if (child.classList.contains('structure-row')) {
+      const sel = child.querySelector('.structure-select-item');
+      const structKey = sel ? sel.value : 'Unknown';
+      const template = STRUCTURES[structKey] || STRUCTURES['1-2-4-All'];
+      const segStart = globalPhaseIndex;
+      for (const p of template.phases) {
+        structPhases.push({ ...p, index: globalPhaseIndex, startOffset: phaseOffset });
+        phaseOffset += p.duration;
+        globalPhaseIndex++;
+      }
+      segments.push({ name: structKey, structureKey: structKey, phaseIndexStart: segStart, phaseIndexEnd: globalPhaseIndex - 1 });
+    } else if (child.classList.contains('structure-break-row')) {
+      const durInput = child.querySelector('.break-duration-input');
+      const dur = Math.max(0, Number(durInput?.value || 2)) * 60;
+      if (dur > 0) {
+        structPhases.push({ index: globalPhaseIndex, name: 'Transition', duration: dur, startOffset: phaseOffset, groupSize: 0, transitionType: 'passing', instructions: 'Move to your next location.', inheritLocations: false });
+        phaseOffset += dur;
+        globalPhaseIndex++;
+      }
+    }
+  }
+
+  const structKey = document.getElementById('structure-select').value;
+  const phases = structPhases.length > 0 ? structPhases : (STRUCTURES[structKey] || STRUCTURES['1-2-4-All']).phases.map(p => ({ ...p }));
 
   const locationPool = {
     locations: locationLines.map(l => {
@@ -550,7 +665,8 @@ function generateURL() {
     phases,
     groups,
     plenaryLocation,
-    locationPool
+    locationPool,
+    ...(segments.length > 1 ? { segments } : {})
   };
 
   const encoded = encodeSession(session);
@@ -584,6 +700,19 @@ function loadFromJSON() {
   preview.querySelector('[data-role="preview-starttime"]').textContent = startDate.toLocaleString();
   preview.querySelector('[data-role="preview-participants"]').textContent = session.participants.map(p => p.name).join(', ');
   preview.querySelector('[data-role="preview-phases"]').textContent = `${session.phases.length} phases`;
+
+  // Full group/location detail per phase
+  const groupsDiv = preview.querySelector('[data-role="preview-groups"]');
+  if (groupsDiv && session.groups) {
+    groupsDiv.innerHTML = session.phases.map(phase => {
+      const groups = session.groups[phase.index] || [];
+      const groupRows = groups.map(g =>
+        `<div class="preview-group-row"><strong>${g.location?.label || '?'}</strong>: ${g.members.map(m => escHtml(m.name) + (m.role ? ` (${escHtml(m.role)})` : '')).join(', ')}</div>`
+      ).join('');
+      return `<div class="preview-phase-block"><div class="preview-phase-name">${escHtml(phase.name)}</div>${groupRows || '<em>No groups</em>'}</div>`;
+    }).join('');
+  }
+
   preview.style.display = '';
   document.getElementById('result-section').style.display = 'none';
 

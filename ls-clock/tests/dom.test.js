@@ -135,6 +135,86 @@ test('P-role-3: no member-role element when role absent', async ({ page }) => {
   await expect(page.locator('[data-role="member-role"]')).toHaveCount(0);
 });
 
+// P-trans-1: transition phase renders data-role="transition" with next-location
+const TRANSITION_SESSION = {
+  id: 'trans-test', structure: '1-2-4-All', invitation: 'Test', startTime: 1_700_000_000,
+  participants: [{ name: 'Alice', id: 0 }, { name: 'Bob', id: 1 }],
+  phases: [
+    { index: 0, name: 'Pairs',       duration: 120, startOffset: 0,   groupSize: 2,   instructions: 'Work in pairs.', inheritLocations: false },
+    { index: 1, name: 'Passing',     duration: 60,  startOffset: 120, groupSize: 0,   transitionType: 'passing', instructions: 'Move to your next room.', inheritLocations: false },
+    { index: 2, name: 'Whole Group', duration: 300, startOffset: 180, groupSize: 999, instructions: 'Join the whole group.', inheritLocations: false },
+  ],
+  groups: {
+    0: [{ phaseIndex: 0, groupIndex: 0, members: [{ name: 'Alice', id: 0 }, { name: 'Bob', id: 1 }], location: { type: 'url', label: 'Meet A', url: 'https://meet.google.com/aaa', override: false } }],
+    1: [],
+    2: [{ phaseIndex: 2, groupIndex: 0, members: [{ name: 'Alice', id: 0 }, { name: 'Bob', id: 1 }], location: { type: 'url', label: 'Main', url: 'https://zoom.us/main', override: false } }],
+  },
+  plenaryLocation: { type: 'url', label: 'Main', url: 'https://zoom.us/main', override: false },
+  locationPool: { locations: [], strategy: 'round-robin' },
+};
+const NOW_TRANSITION = (TRANSITION_SESSION.startTime + 130) * 1000;
+
+test('P-trans-1: transition phase shows data-role="transition" and next-location', async ({ page }) => {
+  await page.evaluate(({ session, nowMs }) => {
+    const container = document.getElementById('app');
+    renderParticipantView(container, session, 'Alice', nowMs);
+  }, { session: TRANSITION_SESSION, nowMs: NOW_TRANSITION });
+  await expect(page.locator('[data-role="transition"]')).toHaveCount(1);
+  await expect(page.locator('[data-role="next-location"]')).toHaveCount(1);
+  await expect(page.locator('[data-role="break"]')).toHaveCount(0);
+});
+
+// P-seq-1: add-structure button present in setup
+test('P-seq-1: add-structure button present in setup page', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('[data-role="add-structure-btn"]')).toHaveCount(1);
+});
+
+// P-map-1: overview map shows all groups for active phase
+test('P-map-1: overview panel contains map of all groups for active phase', async ({ page }) => {
+  await page.evaluate(({ session, nowMs }) => {
+    const container = document.getElementById('app');
+    renderParticipantView(container, session, 'Alice', nowMs);
+  }, { session: SESSION, nowMs: NOW_PAIRS });
+  const map = page.locator('[data-role="overview-map"]');
+  await expect(map).toHaveCount(1);
+  // Should contain both groups from Pairs phase
+  await expect(map).toContainText('Alice');
+  await expect(map).toContainText('Carol');
+});
+
+// P-preview-1: facilitator preview shows phase groups detail
+test('P-preview-1: facilitator preview shows group details', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(({ session }) => {
+    const previewSection = document.getElementById('preview-section');
+    previewSection.style.display = '';
+    loadFromJSON(JSON.stringify(session));
+  }, { session: SESSION });
+  const preview = page.locator('[data-role="preview"]');
+  await expect(preview).toBeVisible();
+  await expect(preview.locator('[data-role="preview-groups"]')).toHaveCount(1);
+});
+
+// P-name-1: name input has datalist with participant names
+test('P-name-1: name entry has datalist populated with participant names', async ({ page }) => {
+  const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: SESSION });
+  await page.goto(`/#${encoded}`);
+  const datalist = page.locator('[data-role="name-suggestions"]');
+  await expect(datalist).toHaveCount(1);
+  const options = datalist.locator('option');
+  await expect(options).toHaveCount(SESSION.participants.length);
+});
+
+// P-copy-1: copy-notes button present in participant view
+test('P-copy-1: copy-notes button present in participant view', async ({ page }) => {
+  await page.evaluate(({ session, nowMs }) => {
+    const container = document.getElementById('app');
+    renderParticipantView(container, session, 'Alice', nowMs);
+  }, { session: SESSION, nowMs: NOW_PAIRS });
+  await expect(page.locator('[data-role="copy-notes"]')).toHaveCount(1);
+});
+
 // P-seg-1: segment headers rendered in timeline when segments present
 const SEGMENTED_SESSION = {
   ...SESSION,

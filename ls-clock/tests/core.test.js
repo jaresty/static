@@ -135,6 +135,56 @@ test('P9: STRUCTURES — TRIZ, Min Specs, Impromptu Networking present; Custom a
   assert.equal(ms.phases[2].groupSize, 999);
 });
 
+// P-loc-1: validateSession warns when location count < groups needed
+test('P-loc-1: validateSession warns when locationPool has fewer locations than groups needed', () => {
+  const { validateSession } = require('../ls-clock-core.js');
+  // 4 participants, groupSize 2 → needs 2 locations; only 1 provided
+  const session = {
+    id: 'x', startTime: 1700000000,
+    participants: [{ name: 'A', id: 0 }, { name: 'B', id: 1 }, { name: 'C', id: 2 }, { name: 'D', id: 3 }],
+    phases: [
+      { index: 0, name: 'Pairs', duration: 120, startOffset: 0, groupSize: 2, instructions: '', inheritLocations: false }
+    ],
+    groups: { 0: [] },
+    plenaryLocation: { type: 'physical', label: 'Room', url: null, instructions: null, override: false },
+    locationPool: { locations: [{ type: 'url', label: 'Meet A', url: 'https://meet.google.com/aaa' }], strategy: 'round-robin' }
+  };
+  const errs = validateSession(session);
+  assert.ok(errs.some(e => e.includes('location')), 'should warn about insufficient locations');
+});
+
+// P-trans-3: getLLMPrompt documents transitionType
+test('P-trans-3: getLLMPrompt documents transitionType field', () => {
+  const prompt = getLLMPrompt();
+  assert.ok(prompt.includes('transitionType'), 'LLM prompt should document transitionType');
+});
+
+// P-struct-1: new structures present with url fields
+test('P-struct-1: Troika, 15% Solutions, Nine Whys, Wicked Questions, Appreciative Interviews, P2P, Fishbowl present with urls', () => {
+  const { STRUCTURES } = require('../ls-clock-core.js');
+  const expected = [
+    'Troika Consulting',
+    '15% Solutions',
+    'Nine Whys',
+    'Wicked Questions',
+    'Appreciative Interviews',
+    'Purpose-to-Practice',
+    'User Experience Fishbowl',
+  ];
+  for (const name of expected) {
+    assert.ok(name in STRUCTURES, `Missing structure: ${name}`);
+    assert.ok(typeof STRUCTURES[name].url === 'string' && STRUCTURES[name].url.startsWith('https://'), `${name} missing valid url`);
+    assert.ok(Array.isArray(STRUCTURES[name].phases) && STRUCTURES[name].phases.length > 0, `${name} missing phases`);
+  }
+});
+
+// P-struct-2: Troika has groupSize 3 phases
+test('P-struct-2: Troika Consulting has phases with groupSize 3', () => {
+  const { STRUCTURES } = require('../ls-clock-core.js');
+  const troika = STRUCTURES['Troika Consulting'];
+  assert.ok(troika.phases.some(p => p.groupSize === 3), 'Troika should have groupSize 3 phases');
+});
+
 // P-seg-2: getLLMPrompt documents segments field
 test('P-seg-2: getLLMPrompt documents segments field', () => {
   const prompt = getLLMPrompt();
