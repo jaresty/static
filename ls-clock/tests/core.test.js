@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { getActivePhase, getParticipantGroup, getCountdownClass, encodeSession, decodeSession, getNoteKey, getLLMPrompt, compileQuickPlan } = require('../ls-clock-core.js');
+const { getActivePhase, getParticipantGroup, getCountdownClass, encodeSession, decodeSession, getNoteKey, getLLMPrompt, compileQuickPlan, STRUCTURES } = require('../ls-clock-core.js');
 
 const START_MS = 1_700_000_000_000;
 const SESSION = {
@@ -119,6 +119,18 @@ test('P-ls-prompt-1: LLM prompt lists every canonical structure by name', () => 
   const { STRUCTURES } = require('../ls-clock-core.js');
   const prompt = getLLMPrompt();
   assert.ok(Object.keys(STRUCTURES).every(key => prompt.includes(key)));
+});
+
+test('P-ls-prompt-2: LLM prompt explains and justifies every structure choice', () => {
+  const prompt = getLLMPrompt();
+  const missingDescriptions = Object.entries(STRUCTURES)
+    .filter(([, structure]) => !prompt.includes(structure.description))
+    .map(([key]) => key);
+  assert.deepEqual({
+    missingDescriptions,
+    intentBased: /justify.*(purpose|intent|outcome)/i.test(prompt),
+    ownsMechanics: /app owns.*(mechanics|timing|grouping)/i.test(prompt),
+  }, { missingDescriptions: [], intentBased: true, ownsMechanics: true });
 });
 
 test('P-plan-1a: quick plan requires at least one structure', () => {
@@ -351,6 +363,33 @@ test('P9: STRUCTURES — TRIZ, Min Specs, Impromptu Networking present; Custom a
   assert.equal(ms.phases.length, 3);
   assert.equal(ms.phases[0].groupSize, 1);
   assert.equal(ms.phases[2].groupSize, 999);
+});
+
+test('P-space-capacity-1: required spaces equal peak simultaneous non-solo breakout groups', () => {
+  const { getRequiredMeetingSpaceCount } = require('../ls-clock-core.js');
+  const phases = [
+    { groupSize: 1 },
+    { groupSize: 2 },
+    { groupSize: 4 },
+    { groupSize: 999 },
+  ];
+  const observed = typeof getRequiredMeetingSpaceCount === 'function'
+    ? getRequiredMeetingSpaceCount(8, phases)
+    : null;
+  assert.equal(observed, 4);
+});
+
+test('P-space-capacity-2: solo groups do not consume meeting spaces', () => {
+  const { assignGroups } = require('../ls-clock-core.js');
+  const groups = assignGroups(
+    [{ name: 'A', id: 0 }, { name: 'B', id: 1 }],
+    [{ index: 0, groupSize: 1, inheritLocations: false }],
+    { locations: [{ type: 'physical', label: 'Room A' }], strategy: 'round-robin' }
+  );
+  assert.deepEqual(groups[0].map(group => group.location), [
+    { type: 'solo', label: 'No meeting space needed', url: null, instructions: null, override: false },
+    { type: 'solo', label: 'No meeting space needed', url: null, instructions: null, override: false },
+  ]);
 });
 
 // P-loc-1: validateSession warns when location count < groups needed

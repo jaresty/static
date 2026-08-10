@@ -294,7 +294,7 @@ test('P-passing-guidance: passing time shows the next step, room, and upcoming g
   await page.locator('[data-role="prepared-name"]').selectOption('Alice');
   await page.getByRole('button', { name: 'Join session' }).click();
   const text = await page.locator('[data-role="transition"]').textContent();
-  expect({ nextStep: text.includes('Individual'), destination: text.includes('Room A'), upcomingGroup: text.includes('Alice') }).toEqual({ nextStep: true, destination: true, upcomingGroup: true });
+  expect({ nextStep: text.includes('Individual'), destination: text.includes('No meeting space needed'), upcomingGroup: text.includes('Alice') }).toEqual({ nextStep: true, destination: true, upcomingGroup: true });
 });
 
 test('P-trans-1: transition phase shows data-role="transition" and next-location', async ({ page }) => {
@@ -305,6 +305,50 @@ test('P-trans-1: transition phase shows data-role="transition" and next-location
   await expect(page.locator('[data-role="transition"]')).toHaveCount(1);
   await expect(page.locator('[data-role="next-location"]')).toHaveCount(1);
   await expect(page.locator('[data-role="break"]')).toHaveCount(0);
+});
+
+test('P-navigation-global: primary views expose Home and Start new session', async ({ page }) => {
+  const futureSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) + 300 };
+  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 90 };
+  const encodedFuture = await page.evaluate(session => encodeSession(session), futureSession);
+  const encodedLive = await page.evaluate(session => encodeSession(session), liveSession);
+  const states = [];
+  const observeNav = async state => {
+    states.push(await page.evaluate(name => {
+      const nav = document.querySelector('[data-role="global-navigation"]');
+      const actions = [...(nav?.querySelectorAll('a') || [])];
+      return {
+        state: name,
+        labels: actions.map(action => action.textContent.trim()),
+        cleanTargets: actions.every(action => !new URL(action.href).search && !new URL(action.href).hash),
+        accessibleSize: actions.every(action => action.getBoundingClientRect().height >= 44),
+      };
+    }, state));
+  };
+
+  await page.goto('/');
+  await observeNav('setup');
+  await page.goto(`/#${encodedFuture}`);
+  await observeNav('landing');
+  await page.goto(`/?role=facilitator#${encodedLive}`);
+  await observeNav('facilitator');
+  await page.goto(`/#${encodedLive}`);
+  await page.locator('[data-role="prepared-name"]').selectOption('Alice');
+  await page.getByRole('button', { name: 'Join session' }).click();
+  await observeNav('live');
+  await page.goto('/');
+  await page.evaluate(session => showSessionPreview(session), futureSession);
+  await observeNav('preview');
+
+  await page.goto(`/?role=facilitator#${encodedLive}`);
+  const startNew = page.getByRole('link', { name: 'Start new session' });
+  if (await startNew.count()) await startNew.click();
+  const destination = await page.evaluate(() => ({ search: location.search, hash: location.hash, setup: Boolean(document.querySelector('#structure-select')) }));
+
+  expect({ states, destination }).toEqual({
+    states: ['setup', 'landing', 'facilitator', 'live', 'preview'].map(state => ({ state, labels: ['Home', 'Start new session'], cleanTargets: true, accessibleSize: true })),
+    destination: { search: '', hash: '', setup: true },
+  });
 });
 
 test('P-brand-clock: primary entry surfaces use the LS Clock identity', async ({ page }) => {
@@ -339,7 +383,42 @@ test('P-concept-1a: initial view names the product LS Clock', async ({ page }) =
 test('P-concept-1b: initial view explains the product and its clock model', async ({ page }) => {
   await page.goto('/');
   const copy = (await page.locator('[data-role="product-intro"]').textContent()).replace(/\s+/g, ' ').trim();
-  expect(copy).toBe('Live timing and guidance for Liberating Structures. One shared clock. Every group in sync.');
+  expect(copy).toContain('Live timing and guidance for Liberating Structures. One shared clock. Every group in sync.');
+});
+
+test('P-clock-explanation: landing explains serverless synchronization through ordinary clocks', async ({ page }) => {
+  await page.goto('/');
+  const explanation = await page.evaluate(() => document.querySelector('[data-role="clock-explanation"]')?.textContent || '');
+  expect({
+    why: /why a clock/i.test(explanation),
+    serverless: /no coordination server/i.test(explanation),
+    start: /same session start time/i.test(explanation),
+    device: /each device['’]?s ordinary clock/i.test(explanation),
+    derivesState: /calculate the current step/i.test(explanation),
+  }).toEqual({ why: true, serverless: true, start: true, device: true, derivesState: true });
+});
+
+test('P-walkthrough: in-product Driver.js tour covers the primary setup journey', async ({ page }) => {
+  await page.goto('/');
+  const available = await page.evaluate(() => ({
+    button: Boolean(document.querySelector('[data-role="start-walkthrough"]')),
+    driver: typeof window.driver?.js?.driver === 'function',
+  }));
+  const titles = [];
+  if (available.button && available.driver) {
+    await page.getByRole('button', { name: 'Take a walkthrough' }).click();
+    for (let index = 0; index < 7; index++) {
+      titles.push((await page.locator('.driver-popover-title').textContent()).trim());
+      if (index < 6) await page.locator('.driver-popover-next-btn').click();
+    }
+    await page.keyboard.press('Escape');
+  }
+  const dismissed = await page.locator('.driver-popover').count() === 0;
+  expect({ available, titles, dismissed }).toEqual({
+    available: { button: true, driver: true },
+    titles: ['One shared clock', 'Choose a structure', 'Add participants', 'Add meeting spaces', 'Set shared timing', 'Generate and share', 'Navigate anytime'],
+    dismissed: true,
+  });
 });
 
 test('P-concept-visual: product introduction has clear visual hierarchy', async ({ page }) => {
@@ -545,6 +624,26 @@ test('P-setup-space-1: setup cards and control groups have breathing room', asyn
     };
   });
   expect(metrics).toEqual({ manualPadding: 20, quickSetGap: 8, structureRowGap: 12, descriptionMargin: 12, transitionMargin: 12, buttonHeight: 42 });
+});
+
+test('P-sequence-descriptions: every selected activity shows its canonical description', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#structure-select').selectOption('1-2-4-All');
+  await page.locator('#add-structure-btn').click();
+  const secondSelect = page.locator('.structure-select-item').nth(1);
+  await secondSelect.selectOption('TRIZ');
+  const before = await page.locator('.structure-row [data-role="structure-description"]').allTextContents();
+  await secondSelect.selectOption('Min Specs');
+  const after = await page.locator('.structure-row [data-role="structure-description"]').allTextContents();
+  const expected = await page.evaluate(() => ({
+    first: STRUCTURES['1-2-4-All'].description,
+    triz: STRUCTURES.TRIZ.description,
+    minSpecs: STRUCTURES['Min Specs'].description,
+  }));
+  expect({ before, after }).toEqual({
+    before: [expected.first, expected.triz],
+    after: [expected.first, expected.minSpecs],
+  });
 });
 
 // P-seq-1: add-structure button present in setup
@@ -785,6 +884,30 @@ test('P-url-2: learn-more link present after structure selection', async ({ page
   const link = page.locator('[data-role="learn-more"]');
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute('href', /liberatingstructures\.com/);
+});
+
+test('P-space-capacity-3: manual generation blocks insufficient non-solo meeting spaces', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#structure-select').selectOption('1-2-4-All');
+  await page.locator('#participants-input').fill('Alice\nBob\nCarol\nDave');
+  await page.locator('#locations-input').fill('Room A');
+  await page.locator('#plenary-input').fill('Main Hall');
+  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  const blocked = await page.evaluate(() => ({
+    error: document.querySelector('[data-role="setup-error"]')?.textContent || '',
+    generated: Boolean(document.querySelector('#session-url-output')?.value),
+  }));
+
+  await page.locator('#locations-input').fill('Room A\nRoom B');
+  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  const recovered = Boolean(await page.locator('#session-url-output').inputValue());
+
+  expect({
+    namesDemand: /needs 2 meeting spaces at the same time/i.test(blocked.error),
+    explainsSolo: /solo activities do not need meeting spaces/i.test(blocked.error),
+    blocked: !blocked.generated,
+    recovered,
+  }).toEqual({ namesDemand: true, explainsSolo: true, blocked: true, recovered: true });
 });
 
 test('P-entry-5: prepared participant names must be unique', async ({ page }) => {

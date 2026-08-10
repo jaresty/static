@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LS Clock — Liberating Structures session runner</title>
+<link rel="stylesheet" href="vendor/driver.css">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -28,6 +29,17 @@
     padding: 1rem;
   }
 
+  .global-navigation {
+    align-items: center; display: flex; justify-content: space-between; gap: .75rem;
+    max-width: 700px; margin: 0 auto 1rem;
+  }
+  .global-navigation a {
+    align-items: center; border-radius: var(--radius); color: #c6d2ff; display: inline-flex;
+    font-size: .9rem; font-weight: 650; min-height: 44px; padding: .55rem .75rem;
+    text-decoration: none;
+  }
+  .global-navigation a:hover, .global-navigation a:focus-visible { background: var(--surface); color: #fff; }
+  .global-navigation .start-new-session { background: var(--border); color: var(--text); }
   #app { max-width: 700px; margin: 0 auto; }
 
   /* ---- Typography ---- */
@@ -35,6 +47,18 @@
   .product-intro { margin-bottom: 1.5rem; }
   .product-eyebrow { color: var(--muted); font-size: .8rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
   .product-tagline { color: var(--text); font-size: 1.125rem; line-height: 1.4; margin-top: .35rem; }
+  .clock-explanation {
+    background: rgba(108,142,245,.09); border: 1px solid rgba(108,142,245,.28);
+    border-radius: var(--radius); margin-top: 1rem; padding: 1rem;
+  }
+  .clock-explanation h2 { color: #c6d2ff; margin-bottom: .35rem; }
+  .clock-explanation p { color: var(--muted); font-size: .9rem; line-height: 1.5; }
+  #start-walkthrough-btn { margin-top: .85rem; }
+  .driver-popover.ls-clock-tour { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+  .driver-popover.ls-clock-tour .driver-popover-title { color: #c6d2ff; }
+  .driver-popover.ls-clock-tour .driver-popover-description { color: var(--muted); line-height: 1.45; }
+  .driver-popover.ls-clock-tour button { background: var(--border); color: var(--text); text-shadow: none; }
+  .driver-popover.ls-clock-tour .driver-popover-next-btn { background: var(--accent); }
   h2 { font-size: 1rem; font-weight: 600; color: var(--muted); margin-bottom: .5rem; }
   h3 { font-size: .9rem; font-weight: 600; color: var(--muted); margin: .8rem 0 .4rem; }
   .hint { font-size: .85rem; color: var(--muted); margin-bottom: .5rem; }
@@ -67,6 +91,7 @@
   .structure-row a { white-space: nowrap; }
   [data-role="structure-description"] {
     color: var(--muted);
+    flex: 1 0 100%;
     line-height: 1.4;
     margin: .5rem 0 .75rem;
   }
@@ -303,7 +328,12 @@
 </style>
 </head>
 <body>
+<nav class="global-navigation" data-role="global-navigation" aria-label="Application navigation">
+  <a href="./">Home</a>
+  <a href="./" class="start-new-session">Start new session</a>
+</nav>
 <div id="app"></div>
+<script src="vendor/driver.js.iife.js"></script>
 <script src="ls-clock-core.js"></script>
 <script src="ls-clock.js"></script>
 </body>

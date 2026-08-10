@@ -537,6 +537,61 @@ function renderFacilitatorView(app, session) {
   setInterval(tick, 1000);
 }
 
+function startSetupWalkthrough() {
+  const createDriver = window.driver?.js?.driver;
+  if (typeof createDriver !== 'function') return;
+
+  const steps = [
+    {
+      element: '[data-role="clock-explanation"]',
+      popover: { title: 'One shared clock', description: 'See how a shared start time and each device’s clock keep the whole session on the same step—without a coordination server.' },
+    },
+    {
+      element: '#structure-sequence',
+      popover: { title: 'Choose a structure', description: 'Build an intentional sequence. Every selected activity shows what it is for, how long it takes, and how participation changes.' },
+    },
+    {
+      element: '[data-role="participants-setup"]',
+      popover: { title: 'Add participants', description: 'Enter the prepared roster. LS Clock uses it to create groups and keep role assignments transparent.' },
+    },
+    {
+      element: '[data-role="meeting-spaces"]',
+      popover: { title: 'Add meeting spaces', description: 'Provide enough rooms or links for the largest number of simultaneous breakout groups. Solo work needs no space.' },
+    },
+    {
+      element: '[data-role="timing-settings"]',
+      popover: { title: 'Set shared timing', description: 'Passing time and short breaks are session-wide, so every device stays on one timeline.' },
+    },
+    {
+      element: '#generate-btn',
+      popover: { title: 'Generate and share', description: 'Create one bookmarkable session URL, review the assignments, and share it with participants.' },
+    },
+    {
+      element: '[data-role="global-navigation"]',
+      popover: { title: 'Navigate anytime', description: 'Return Home or start a clean session from any primary view.' },
+    },
+  ];
+  const roleAssignment = document.querySelector('[data-role="fishbowl-role-assignment"]');
+  if (roleAssignment && !roleAssignment.hidden) {
+    steps.splice(3, 0, {
+      element: '[data-role="fishbowl-role-assignment"]',
+      popover: { title: 'Assign roles intentionally', description: 'For User Experience Fishbowl, choose the 3–7 experienced participants who belong in the inner circle.' },
+    });
+  }
+
+  createDriver({
+    steps,
+    showProgress: true,
+    allowClose: true,
+    allowKeyboardControl: true,
+    overlayClickBehavior: 'close',
+    nextBtnText: 'Next',
+    prevBtnText: 'Back',
+    doneBtnText: 'Done',
+    popoverClass: 'ls-clock-tour',
+  }).drive();
+}
+
 function renderSetupPage() {
   const app = document.getElementById('app');
   app.innerHTML = `
@@ -544,6 +599,11 @@ function renderSetupPage() {
     <div class="product-intro" data-role="product-intro">
       <p class="product-eyebrow">Live timing and guidance for Liberating Structures.</p>
       <p class="product-tagline">One shared clock. Every group in sync.</p>
+      <aside class="clock-explanation" data-role="clock-explanation">
+        <h2>Why a clock?</h2>
+        <p>LS Clock needs no coordination server. Everyone receives the same session start time, and each device’s ordinary clock uses it to calculate the current step. We already rely on clocks to meet at the same time in the real world—LS Clock simply uses what is already there.</p>
+        <button type="button" id="start-walkthrough-btn" data-role="start-walkthrough">Take a walkthrough</button>
+      </aside>
     </div>
 
     <details class="setup-section manual-form" open>
@@ -570,8 +630,8 @@ function renderSetupPage() {
               ${Object.keys(STRUCTURES).map(k => `<option value="${k}">${k}</option>`).join('')}
             </select>
             <a id="learn-more-link" data-role="learn-more" href="#" target="_blank" rel="noopener" style="display:none">Learn more →</a>
+            <p data-role="structure-description"></p>
           </div>
-          <p data-role="structure-description"></p>
         </div>
         <button type="button" data-role="add-structure-btn" id="add-structure-btn">+ Add another structure</button>
       </section>
@@ -592,7 +652,7 @@ function renderSetupPage() {
         <input id="start-time-input" type="datetime-local" class="wide-input">
       </section>
 
-      <section class="setup-section">
+      <section class="setup-section" data-role="participants-setup">
         <h2>4. Participants (one per line)</h2>
         <textarea id="participants-input" rows="6" placeholder="Alice&#10;Bob&#10;Carol&#10;Dave"></textarea>
       </section>
@@ -604,7 +664,7 @@ function renderSetupPage() {
         <p class="fishbowl-selection-count" data-role="fishbowl-selection-count" aria-live="polite">0 selected</p>
       </section>
 
-      <section class="setup-section">
+      <section class="setup-section" data-role="meeting-spaces">
         <h2>5. Meeting locations (one per line — paste URLs or room names)</h2>
         <textarea id="locations-input" rows="4" placeholder="https://meet.google.com/abc-defg&#10;https://meet.google.com/hij-klmn&#10;Conference Room A"></textarea>
       </section>
@@ -614,7 +674,7 @@ function renderSetupPage() {
         <input id="plenary-input" type="text" placeholder="https://zoom.us/j/main or Main Hall" class="wide-input">
       </section>
 
-      <section class="setup-section">
+      <section class="setup-section" data-role="timing-settings">
         <h2>7. Between-step timing</h2>
         <p class="hint">Use passing time when groups reorganize or move. Use the short break when everyone stays together in the same space.</p>
         <div class="timing-settings">
@@ -649,6 +709,8 @@ function renderSetupPage() {
       <div class="url-hint">Share this URL with participants. They enter their name to join.</div>
       <div class="url-hint">Add <code>?role=facilitator</code> to see the full facilitator view.</div>
     </section>`;
+
+  document.getElementById('start-walkthrough-btn')?.addEventListener('click', startSetupWalkthrough);
 
   // Prefill start time to now + 2 min
   const setStartTime = (offsetMs) => {
@@ -752,15 +814,20 @@ function renderSetupPage() {
     // Insert new structure select
     const row = document.createElement('div');
     row.className = 'structure-row';
-    row.innerHTML = `<select class="structure-select-item">${Object.keys(STRUCTURES).map(k => `<option value="${k}">${k}</option>`).join('')}</select> <button type="button" class="remove-structure-btn">✕</button>`;
-    row.querySelector('.structure-select-item').addEventListener('change', renderFishbowlRoleAssignment);
+    row.innerHTML = `<select class="structure-select-item">${Object.keys(STRUCTURES).map(k => `<option value="${k}">${k}</option>`).join('')}</select> <button type="button" class="remove-structure-btn" aria-label="Remove structure">✕</button><p data-role="structure-description"></p>`;
+    const addedSelect = row.querySelector('.structure-select-item');
+    const updateAddedDescription = () => {
+      row.querySelector('[data-role="structure-description"]').textContent = STRUCTURES[addedSelect.value]?.description || '';
+      renderFishbowlRoleAssignment();
+    };
+    addedSelect.addEventListener('change', updateAddedDescription);
     row.querySelector('.remove-structure-btn').addEventListener('click', () => {
       breakRow.remove();
       row.remove();
       renderFishbowlRoleAssignment();
     });
     seq.appendChild(row);
-    renderFishbowlRoleAssignment();
+    updateAddedDescription();
   });
 
   const generateBtn = document.getElementById('generate-btn');
@@ -793,6 +860,7 @@ function renderSetupPage() {
         document.getElementById('add-structure-btn').click();
         const selects = document.querySelectorAll('.structure-select-item');
         selects[selects.length - 1].value = structure.key;
+        selects[selects.length - 1].dispatchEvent(new Event('change'));
       }
       if (plan.invitation) invInput.value = plan.invitation;
       if (typeof plan.startTime === 'number') {
@@ -891,6 +959,15 @@ function generateURL() {
 
   const structKey = document.getElementById('structure-select').value;
   let phases = structPhases.length > 0 ? structPhases : (STRUCTURES[structKey] || STRUCTURES['1-2-4-All']).phases.map(p => ({ ...p }));
+  const requiredMeetingSpaces = getRequiredMeetingSpaceCount(participants.length, phases);
+  if (locationLines.length < requiredMeetingSpaces) {
+    const missingSpaces = requiredMeetingSpaces - locationLines.length;
+    setupError.textContent = `This session needs ${requiredMeetingSpaces} meeting spaces at the same time, but only ${locationLines.length} ${locationLines.length === 1 ? 'was' : 'were'} provided. Add ${missingSpaces} more ${missingSpaces === 1 ? 'space' : 'spaces'}. Solo activities do not need meeting spaces.`;
+    document.getElementById('session-url-output').value = '';
+    document.getElementById('result-section').style.display = 'none';
+    setupError.focus();
+    return;
+  }
 
   const locationPool = {
     locations: locationLines.map(l => {

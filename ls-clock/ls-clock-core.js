@@ -41,15 +41,17 @@ function getNoteKey(sessionId, phaseIndex, participantName) {
 }
 
 function getLLMPrompt(appURL = 'APP_URL') {
-  const structureKeys = Object.keys(STRUCTURES).join(', ');
+  const structureGuide = Object.entries(STRUCTURES)
+    .map(([key, structure]) => `- ${key}: ${structure.description}`)
+    .join('\n');
   return `You are helping a facilitator plan a Liberating Structures session for the LS Activity Clock app.
 
 Your job: interview the facilitator, recommend the most suitable registered structure or ordered sequence of structures, and return a setup URL representing that plan. The app—not you—will expand each structure into its canonical phases, timing, groups, roles, transitions, and instructions.
 
-## Registered structure keys
-${structureKeys}
+## When to choose each registered structure
+${structureGuide}
 
-Use these names exactly. Do not invent structure names. You may recommend one structure or an ordered sequence based on the facilitator's purpose.
+Use these names exactly. Do not invent structure names. Compare the descriptions against the facilitator's purpose, participants, desired outcome, and interaction pattern. Recommend only structures that fit those needs; do not assemble an arbitrary sequence. Briefly justify each recommendation in terms of the facilitator's purpose or intent, then ask the facilitator to confirm the sequence before producing the final URL.
 
 ## Interview checklist
 1. What outcome does the facilitator want from the session?
@@ -75,9 +77,17 @@ Build its query string using these parameters:
 
 URL-encode every parameter value. The result must begin with the exact base URL above and remain bookmarkable.
 
-Do not add compiled activity collections or choose activity mechanics, timing details, grouping rules, instructions, or role assignments; the app owns those details.
+Do not add compiled activity collections or choose activity mechanics, timing details, grouping rules, instructions, or role assignments; the app owns activity mechanics, timing, grouping, roles, transitions, and instructions.
 
 Start the interview now.`;
+}
+
+function getRequiredMeetingSpaceCount(participantCount, phases) {
+  return (phases || []).reduce((required, phase) => {
+    const groupSize = Number(phase.groupSize);
+    if (groupSize <= 1 || groupSize >= 999) return required;
+    return Math.max(required, Math.ceil(participantCount / groupSize));
+  }, 0);
 }
 
 function assignGroups(participants, phases, locationPool) {
@@ -101,14 +111,11 @@ function assignGroups(participants, phases, locationPool) {
 
     if (phase.groupSize === 1) {
       participants.forEach((p, i) => {
-        const loc = locationPool.locations.length > 0
-          ? locationPool.locations[i % locationPool.locations.length]
-          : { type: 'physical', label: `Seat ${i + 1}`, url: null, instructions: null, override: false };
         groups[phase.index].push({
           phaseIndex: phase.index,
           groupIndex: i,
           members: [p],
-          location: { ...loc, override: false }
+          location: { type: 'solo', label: 'No meeting space needed', url: null, instructions: null, override: false }
         });
       });
       continue;
@@ -120,7 +127,11 @@ function assignGroups(participants, phases, locationPool) {
     }
 
     chunks.forEach((members, gi) => {
-      let location;
+      const locs = locationPool.locations;
+      const pooledLocation = locs.length > 0
+        ? { ...locs[gi % locs.length], override: false }
+        : { type: 'physical', label: `Group ${gi + 1}`, url: null, instructions: null, override: false };
+      let location = pooledLocation;
       if (phase.inheritLocations && phase.index > 0) {
         const priorGroups = groups[phase.index - 1] || [];
         let bestGroup = null, bestOverlap = -1;
@@ -131,14 +142,9 @@ function assignGroups(participants, phases, locationPool) {
             bestGroup = pg;
           }
         }
-        location = bestGroup
-          ? { ...bestGroup.location, override: false }
-          : { type: 'physical', label: `Group ${gi + 1}`, url: null, instructions: null, override: false };
-      } else {
-        const locs = locationPool.locations;
-        location = locs.length > 0
-          ? { ...locs[gi % locs.length], override: false }
-          : { type: 'physical', label: `Group ${gi + 1}`, url: null, instructions: null, override: false };
+        if (bestGroup && bestGroup.location?.type !== 'solo') {
+          location = { ...bestGroup.location, override: false };
+        }
       }
       groups[phase.index].push({ phaseIndex: phase.index, groupIndex: gi, members, location });
     });
@@ -530,21 +536,17 @@ function validateSession(obj) {
   if (!Array.isArray(obj.phases) || obj.phases.length === 0) errors.push('Missing required field: phases (must be a non-empty array)');
   if (!obj.plenaryLocation) errors.push('Missing required field: plenaryLocation');
   if (!obj.locationPool) errors.push('Missing required field: locationPool');
-  if (obj.locationPool && Array.isArray(obj.locationPool.locations) && obj.locationPool.locations.length > 0 &&
+  if (obj.locationPool && Array.isArray(obj.locationPool.locations) &&
       Array.isArray(obj.participants) && Array.isArray(obj.phases)) {
     const locCount = obj.locationPool.locations.length;
-    for (const phase of obj.phases) {
-      if (phase.groupSize > 0 && phase.groupSize < 999) {
-        const groupsNeeded = Math.ceil(obj.participants.length / phase.groupSize);
-        if (groupsNeeded > locCount) {
-          errors.push(`Warning: phase "${phase.name}" needs ${groupsNeeded} locations but locationPool only has ${locCount}. Add more locations or they will be reused round-robin.`);
-        }
-      }
+    const requiredMeetingSpaces = getRequiredMeetingSpaceCount(obj.participants.length, obj.phases);
+    if (requiredMeetingSpaces > locCount) {
+      errors.push(`Session needs ${requiredMeetingSpaces} meeting spaces at the same time but locationPool only has ${locCount}. Solo activities do not need meeting spaces.`);
     }
   }
   return errors;
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { getActivePhase, getParticipantGroup, getCountdownClass, encodeSession, decodeSession, getNoteKey, getLLMPrompt, assignGroups, insertConsistentTransitions, validateFishbowlUserIds, assignCanonicalRoles, STRUCTURES, quickPlanToURL, quickPlanFromURL, compileQuickPlan, validateSession };
+  module.exports = { getActivePhase, getParticipantGroup, getCountdownClass, encodeSession, decodeSession, getNoteKey, getLLMPrompt, getRequiredMeetingSpaceCount, assignGroups, insertConsistentTransitions, validateFishbowlUserIds, assignCanonicalRoles, STRUCTURES, quickPlanToURL, quickPlanFromURL, compileQuickPlan, validateSession };
 }
