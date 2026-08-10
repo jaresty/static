@@ -516,17 +516,18 @@ test('P-llm-toggle: LLM planning uses an accessible button-controlled panel', as
   });
 });
 
-test('P-hierarchy-2a: manual setup is open and precedes optional assistance', async ({ page }) => {
+test('P-hierarchy-2a: manual setup is permanently open and precedes optional assistance', async ({ page }) => {
   await page.goto('/');
   const hierarchy = await page.evaluate(() => {
     const manual = document.querySelector('.manual-form');
     const assistant = document.querySelector('.llm-section');
     return {
-      manualOpen: manual.open,
+      manualIsSection: manual.tagName === 'SECTION',
+      manualVisible: Boolean(manual.offsetParent),
       manualBeforeAssistant: Boolean(manual.compareDocumentPosition(assistant) & Node.DOCUMENT_POSITION_FOLLOWING),
     };
   });
-  expect(hierarchy).toEqual({ manualOpen: true, manualBeforeAssistant: true });
+  expect(hierarchy).toEqual({ manualIsSection: true, manualVisible: true, manualBeforeAssistant: true });
 });
 
 test('P-hierarchy-2b: LLM assistance begins behind a normal closed button', async ({ page }) => {
@@ -556,13 +557,11 @@ test('P-hierarchy-option: optional assistance stays visible near the start of ma
 // P-sample-1: sample setup action is visible
 test('P-sample-1: manual setup offers a visible sample action', async ({ page }) => {
   await page.goto('/');
-  await page.locator('details.manual-form').evaluate(el => el.open = true);
   await expect(page.getByRole('button', { name: 'Load sample setup' })).toBeVisible();
 });
 
 test('P-sample-2: sample action fills every field using the selected structure defaults', async ({ page }) => {
   await page.goto('/');
-  await page.locator('details.manual-form').evaluate(el => el.open = true);
   await page.locator('#structure-select').selectOption('TRIZ');
   await page.getByRole('button', { name: 'Load sample setup' }).click();
   const startTime = await page.locator('#start-time-input').inputValue();
@@ -585,7 +584,6 @@ test('P-sample-2: sample action fills every field using the selected structure d
 
 test('P-plan-6a: manual generation preserves its session output', async ({ page }) => {
   await page.goto('/');
-  await page.locator('details.manual-form').evaluate(el => el.open = true);
   await page.locator('#structure-select').selectOption('TRIZ');
   await page.getByRole('button', { name: 'Load sample setup' }).click();
   await page.getByRole('button', { name: 'Generate session URL' }).click();
@@ -635,7 +633,6 @@ test('P-passing-manual: manual sessions apply configured transition timing consi
 
 test('P-plan-6b: manual setup preserves its functional controls', async ({ page }) => {
   await page.goto('/');
-  await page.locator('details.manual-form').evaluate(el => el.open = true);
   expect(await page.locator('#load-sample-btn, #structure-select, #invitation-input, #start-time-input, #participants-input, #locations-input, #plenary-input, #add-structure-btn, #generate-btn, #copy-url-btn').count()).toBe(10);
 });
 
@@ -646,7 +643,7 @@ test('P-plan-url-3: bookmarked quick-plan URL compiles automatically on load', a
     structure: await page.locator('[data-role="preview-structure"]').textContent(),
     phaseCount: await page.locator('[data-role="preview-phases"]').textContent(),
     pasteFieldCount: await page.locator('#json-input').count(),
-    manualOpen: await page.locator('details.manual-form').evaluate(element => element.open),
+    manualVisible: await page.locator('.manual-form').isVisible(),
     manualInvitation: await page.locator('#invitation-input').inputValue(),
     manualParticipants: await page.locator('#participants-input').inputValue(),
     remainsBookmarkable: page.url().includes('structure=TRIZ'),
@@ -655,7 +652,7 @@ test('P-plan-url-3: bookmarked quick-plan URL compiles automatically on load', a
     structure: 'TRIZ',
     phaseCount: '5 phases',
     pasteFieldCount: 0,
-    manualOpen: true,
+    manualVisible: true,
     manualInvitation: 'How can we improve handoffs?',
     manualParticipants: 'Alice\nBob\nCarol\nDave',
     remainsBookmarkable: true,
@@ -683,7 +680,6 @@ test('P-preserve-3b: bookmarks and manual generation retain their outputs', asyn
 
 test('P-setup-space-1: setup cards and control groups have breathing room', async ({ page }) => {
   await page.goto('/');
-  await page.locator('details.manual-form').evaluate(el => el.open = true);
   await page.locator('#add-structure-btn').click();
   const metrics = await page.evaluate(() => {
     const px = value => Number.parseFloat(value) || 0;
@@ -933,7 +929,6 @@ test('P-seg-1: segment header rendered in phase timeline', async ({ page }) => {
 // P-ls-desc-1: selected structure shows its authoritative purpose
 test('P-ls-desc-1: selected structure shows its purpose', async ({ page }) => {
   await page.goto('/');
-  await page.locator('details.manual-form').evaluate(el => el.open = true);
   await page.locator('#structure-select').selectOption('1-2-4-All');
   const description = page.locator('[data-role="structure-description"]');
   expect(await description.isVisible() ? await description.textContent() : '').toContain('Engage everyone simultaneously in generating questions, ideas, and suggestions');
@@ -941,7 +936,6 @@ test('P-ls-desc-1: selected structure shows its purpose', async ({ page }) => {
 
 test('P-ls-desc-2: selected structure shows its approximate duration', async ({ page }) => {
   await page.goto('/');
-  await page.locator('details.manual-form').evaluate(el => el.open = true);
   await page.locator('#structure-select').selectOption('1-2-4-All');
   const description = page.locator('[data-role="structure-description"]');
   expect(await description.textContent()).toContain('About 15 minutes');
@@ -949,7 +943,6 @@ test('P-ls-desc-2: selected structure shows its approximate duration', async ({ 
 
 test('P-ls-desc-3: selected structure shows its group configuration', async ({ page }) => {
   await page.goto('/');
-  await page.locator('details.manual-form').evaluate(el => el.open = true);
   await page.locator('#structure-select').selectOption('1-2-4-All');
   const description = page.locator('[data-role="structure-description"]');
   expect(await description.textContent()).toContain('Alone → pairs → quartets → whole group');
@@ -958,7 +951,6 @@ test('P-ls-desc-3: selected structure shows its group configuration', async ({ p
 // P-url-2: learn-more link present after structure selection
 test('P-url-2: learn-more link present after structure selection', async ({ page }) => {
   await page.goto('/');
-  await page.locator('details.manual-form').evaluate(el => el.open = true);
   await page.locator('#structure-select').selectOption('1-2-4-All');
   const link = page.locator('[data-role="learn-more"]');
   await expect(link).toBeVisible();

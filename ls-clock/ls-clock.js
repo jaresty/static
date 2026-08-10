@@ -640,8 +640,8 @@ function renderSetupPage() {
       </aside>
     </div>
 
-    <details class="setup-section manual-form" open>
-      <summary><h2 style="display:inline">Set up your session</h2></summary>
+    <section class="setup-section manual-form">
+      <h2>Set up your session</h2>
       <button type="button" id="load-sample-btn">Load sample setup</button>
 
       <section class="setup-section llm-section">
@@ -723,7 +723,7 @@ function renderSetupPage() {
 
       <div class="error-msg" data-role="setup-error" role="alert" aria-live="assertive" tabindex="-1"></div>
       <button id="generate-btn" class="primary-btn">Generate session URL</button>
-    </details>
+    </section>
 
     <section class="setup-section" id="preview-section" style="display:none" data-role="preview">
       <h2>Confirm your session</h2>
@@ -892,8 +892,6 @@ function renderSetupPage() {
   if (new URLSearchParams(window.location.search).has('structure')) {
     try {
       const plan = quickPlanFromURL(window.location.href);
-      const manualForm = document.querySelector('details.manual-form');
-      manualForm.open = true;
 
       structSelect.value = plan.structures[0].key;
       updateStructureFields();
