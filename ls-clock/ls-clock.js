@@ -444,13 +444,12 @@ function renderSetupPage() {
 
     <section class="setup-section llm-section">
       <h2>Quick setup with an LLM</h2>
-      <p class="hint">Copy this prompt, paste it into any LLM (Claude, ChatGPT, etc.), answer its questions, then paste the JSON output below.</p>
-      <button id="copy-prompt-btn">Copy LLM prompt</button>
-      <div id="copy-confirm" class="copy-confirm" style="display:none">Copied!</div>
-      <h3>Paste JSON from LLM here:</h3>
-      <textarea id="json-input" rows="8" placeholder='{"id":"...","structure":"...","startTime":...,...}'></textarea>
-      <button id="load-json-btn" class="primary-btn">Load from JSON</button>
-      <div id="json-error" class="error-msg" style="display:none"></div>
+      <p class="hint">Copy the planning prompt into any LLM, answer its questions, then open the setup link it returns. The link is bookmarkable and the app fills in all activity mechanics.</p>
+      <div class="setup-actions">
+        <button id="copy-prompt-btn" class="primary-btn">Copy planning prompt</button>
+        <div id="copy-confirm" class="copy-confirm" style="display:none">Copied!</div>
+      </div>
+      <div id="plan-error" class="error-msg" style="display:none"></div>
     </section>
 
     <details class="setup-section manual-form">
@@ -596,15 +595,48 @@ function renderSetupPage() {
     copyText(url, document.getElementById('copy-url-btn'));
   });
   document.getElementById('copy-prompt-btn').addEventListener('click', () => {
-    copyText(getLLMPrompt(), document.getElementById('copy-prompt-btn'));
+    const appURL = `${window.location.origin}${window.location.pathname}`;
+    copyText(getLLMPrompt(appURL), document.getElementById('copy-prompt-btn'));
     const confirmEl = document.getElementById('copy-confirm');
     confirmEl.style.display = 'inline';
     setTimeout(() => confirmEl.style.display = 'none', 2000);
   });
-  document.getElementById('load-json-btn').addEventListener('click', loadFromJSON);
   document.getElementById('cancel-preview-btn')?.addEventListener('click', () => {
     document.getElementById('preview-section').style.display = 'none';
   });
+
+  if (new URLSearchParams(window.location.search).has('structure')) {
+    try {
+      const plan = quickPlanFromURL(window.location.href);
+      const manualForm = document.querySelector('details.manual-form');
+      manualForm.open = true;
+
+      structSelect.value = plan.structures[0].key;
+      updateStructureFields();
+      for (const structure of plan.structures.slice(1)) {
+        document.getElementById('add-structure-btn').click();
+        const selects = document.querySelectorAll('.structure-select-item');
+        selects[selects.length - 1].value = structure.key;
+      }
+      if (plan.invitation) invInput.value = plan.invitation;
+      if (typeof plan.startTime === 'number') {
+        const dt = new Date(plan.startTime * 1000);
+        const pad = number => String(number).padStart(2, '0');
+        document.getElementById('start-time-input').value = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+      }
+      document.getElementById('participants-input').value = (plan.participants || []).join('\n');
+      document.getElementById('locations-input').value = (plan.locations || []).join('\n');
+      document.getElementById('plenary-input').value = plan.plenaryLocation || '';
+
+      if (typeof plan.startTime === 'number' && plan.participants?.length) {
+        showSessionPreview(compileQuickPlan(plan));
+      }
+    } catch (error) {
+      const errorEl = document.getElementById('plan-error');
+      errorEl.textContent = error.message;
+      errorEl.style.display = '';
+    }
+  }
 }
 
 function generateURL() {
@@ -690,25 +722,7 @@ function generateURL() {
   document.getElementById('result-section').style.display = '';
 }
 
-function loadFromJSON() {
-  const raw = document.getElementById('json-input').value.trim();
-  const errEl = document.getElementById('json-error');
-  errEl.style.display = 'none';
-  let session;
-  try {
-    session = JSON.parse(raw);
-  } catch(e) {
-    errEl.textContent = 'Invalid JSON: ' + e.message;
-    errEl.style.display = '';
-    return;
-  }
-  const errors = validateSession(session);
-  if (errors.length > 0) {
-    errEl.innerHTML = errors.map(e => `<div data-role="json-error">${escHtml(e)}</div>`).join('');
-    errEl.style.display = '';
-    return;
-  }
-  // Show confirmation preview
+function showSessionPreview(session) {
   const preview = document.getElementById('preview-section');
   const startDate = new Date(session.startTime * 1000);
   preview.querySelector('[data-role="preview-structure"]').textContent = session.structure || '(custom)';

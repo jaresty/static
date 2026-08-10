@@ -40,146 +40,42 @@ function getNoteKey(sessionId, phaseIndex, participantName) {
   return `ls-clock:note:${sessionId}:${phaseIndex}:${participantName}`;
 }
 
-function getLLMPrompt() {
-  return `You are helping a facilitator set up a Liberating Structures session using the LS Activity Clock app.
+function getLLMPrompt(appURL = 'APP_URL') {
+  const structureKeys = Object.keys(STRUCTURES).join(', ');
+  return `You are helping a facilitator plan a Liberating Structures session for the LS Activity Clock app.
 
-Your job: interview the facilitator to collect everything needed, then output a complete SessionPayload JSON object.
+Your job: interview the facilitator, recommend the most suitable registered structure or ordered sequence of structures, and return a setup URL representing that plan. The app—not you—will expand each structure into its canonical phases, timing, groups, roles, transitions, and instructions.
 
-## Interview checklist (ask in order, adapt as needed)
-1. Which Liberating Structure? (1-2-4-All, What-So-What-Now-What, TRIZ, Min Specs, Impromptu Networking, Troika Consulting, 15% Solutions, Nine Whys, Wicked Questions, Appreciative Interviews, Purpose-to-Practice, User Experience Fishbowl)
-2. Do you want to chain multiple structures together in one session? If so, which ones, in what order?
-3. Do you want breaks between structures or phases? If so, how long?
-4. What is the invitation / central question for participants?
-5. When does the session start? (date and time, including timezone — be precise, as this drives the clock for all participants)
-6. Who are the participants? (names, one per line)
-7. What meeting locations are available? (Google Meet URLs, Zoom links, physical room names, breakout room names — one per line)
-8. Any custom phase durations or instructions? (or use defaults for the chosen structure)
+## Registered structure keys
+${structureKeys}
+
+Use these names exactly. Do not invent structure names. You may recommend one structure or an ordered sequence based on the facilitator's purpose.
+
+## Interview checklist
+1. What outcome does the facilitator want from the session?
+2. Which registered structure or sequence best supports that outcome?
+3. What is the invitation or central question?
+4. When does the session start? Include the timezone and convert it to a Unix timestamp in seconds.
+5. Who are the participants? Use names only.
+6. What meeting URLs or room names are available?
+7. What is the plenary or whole-group location?
 
 ## Output format
-When you have all the information, output ONLY a JSON object matching this schema — no explanation, no markdown fences:
+Output ONLY the complete setup URL—no explanation and no markdown fences.
 
-{
-  "id": "<random 8-char hex string>",
-  "structure": "<structure name>",
-  "invitation": "<the central question>",
-  "startTime": <Unix timestamp in seconds>,
-  "participants": [
-    { "name": "<name>", "id": <0-based integer> }
-  ],
-  "phases": [
-    {
-      "index": <0-based>,
-      "name": "<phase name>",
-      "duration": <seconds>,
-      "startOffset": <sum of prior durations in seconds>,
-      "groupSize": <participants per group; 0=break, 1=individual, 999=whole group>,
-      "instructions": "<what participants do>",
-      "inheritLocations": <true|false>
-    }
-  ],
-  "groups": {
-    "<phaseIndex>": [
-      {
-        "phaseIndex": <integer>,
-        "groupIndex": <integer>,
-        "members": [ { "name": "<name>", "id": <integer>, "role": "<optional role string — omit if not needed>", "roleInstructions": "<optional instructions for this role — omit if not needed>" } ],
-        "location": {
-          "type": "<url|physical|breakout>",
-          "label": "<display name>",
-          "url": "<URL or null>",
-          "instructions": "<optional extra instructions or null>",
-          "override": false
-        }
-      }
-    ]
-  },
-  "plenaryLocation": {
-    "type": "<url|physical|breakout>",
-    "label": "<display name>",
-    "url": "<URL or null>",
-    "instructions": null,
-    "override": false
-  },
-  "locationPool": {
-    "locations": [],
-    "strategy": "round-robin"
-  },
-  "segments": [
-    {
-      "name": "<display name for this structure/segment>",
-      "structureKey": "<key from STRUCTURES, or custom label>",
-      "phaseIndexStart": <0-based index of first phase in this segment>,
-      "phaseIndexEnd": <0-based index of last phase in this segment (inclusive)>
-    }
-  ]
-}
+Base URL: ${appURL}
 
-## Segments rules
-- segments[] is optional; omit if the session contains only one structure
-- Each segment groups a contiguous range of phases[] under a named label
-- Segments are display-only — they do not change group assignment logic
-- When chaining multiple structures, create one segment per structure plus one for each break
+Build its query string using these parameters:
+- structure=<exact registered key> — repeat in activity order
+- invitation=<central question>
+- startTime=<Unix timestamp in seconds>
+- participant=<name> — repeat for every participant
+- location=<meeting URL or room name> — repeat for every available location
+- plenary=<whole-group meeting URL or room name>
 
-## MeetingLocation type rules
-- type "url": online meeting link (Google Meet, Zoom, Teams, etc.) — set "url" to the link
-- type "physical": named physical space — set "url" to null, put details in "label" and "instructions"
-- type "breakout": named virtual breakout room — set "url" to null or the breakout URL
+URL-encode every parameter value. The result must begin with the exact base URL above and remain bookmarkable.
 
-## Group assignment rules
-- Phase 0 (individual): one group per participant, groupSize=1
-- Phase 1 (pairs): group participants in adjacent pairs from the participant list
-- Phase 2 (quartets): merge adjacent pairs, groupSize=4
-- Whole-group phases: one group with all participants, groupSize=999, use plenaryLocation
-- Distribute locations round-robin across groups in phase 0; subsequent phases inherit the location of the largest contributing sub-group from the prior phase
-
-## Built-in structure defaults
-
-### 1-2-4-All
-Phases: Introduction (60s, groupSize=999), Individual (60s, groupSize=1), Pairs (120s, groupSize=2), Quartets (300s, groupSize=4), Whole Group (420s, groupSize=999)
-
-### What-So-What-Now-What
-Phases: What? Individual (60s, groupSize=1), What? Small Group (300s, groupSize=5), What? Whole Group (120s, groupSize=999), So What? Individual (60s, groupSize=1), So What? Small Group (300s, groupSize=5), So What? Whole Group (120s, groupSize=999), Now What? Individual (60s, groupSize=1), Now What? Small Group (300s, groupSize=5), Now What? Whole Group (120s, groupSize=999)
-
-### TRIZ
-Phases: Individual (120s, groupSize=1), Small Group (900s, groupSize=4), Whole Group (600s, groupSize=999)
-
-### Min Specs
-Phases: Individual (300s, groupSize=1), Small Group (900s, groupSize=4), Whole Group (600s, groupSize=999)
-
-### Impromptu Networking
-Phases: Round 1 (120s, groupSize=2), Round 2 (120s, groupSize=2), Round 3 (120s, groupSize=2) — pre-assign different pairs each round
-
-### Troika Consulting
-Phases: Introduction (300s, groupSize=999), then 3 rounds × [Client speaks (60s, groupSize=3), Consultants confer (240s, groupSize=3), Debrief (60s, groupSize=3)], Whole Group Share-out (300s, groupSize=999)
-Role assignment: in each group of 3, assign role="Client" to one member and role="Consultant" to the other two; rotate the client role each round
-
-### 15% Solutions
-Phases: Individual (300s, groupSize=1), Small Group (900s, groupSize=4), Whole Group (600s, groupSize=999)
-
-### Nine Whys
-Phases: Pairs — Nine Whys (600s, groupSize=2), Whole Group (600s, groupSize=999)
-
-### Wicked Questions
-Phases: Individual (300s, groupSize=1), Small Group (900s, groupSize=4), Whole Group (600s, groupSize=999)
-
-### Appreciative Interviews
-Phases: Pairs — Interview (600s, groupSize=2), Small Group — Themes (600s, groupSize=4), Whole Group (300s, groupSize=999)
-
-### Purpose-to-Practice
-Phases: Individual (300s, groupSize=1), Small Group (1200s, groupSize=5), Whole Group (600s, groupSize=999)
-
-### User Experience Fishbowl
-Phases: Inner Circle Discussion (1200s, groupSize=5), Outer Circle Reflection (600s, groupSize=999), Whole Group Synthesis (300s, groupSize=999)
-Role assignment: assign role="User" to inner circle members and role="Observer" to outer circle participants
-
-## Break and transition phases
-Both use groupSize=0. Distinguish with the optional transitionType field:
-- transitionType: "passing" — room change; participant view shows the NEXT phase's location early so people can move. Use when groups physically or virtually change rooms.
-- transitionType: "breath" — everyone stays in the same space; short pause to reset attention. No location shown.
-- omit transitionType (or set to "break") — standard break with no location context.
-
-Example passing transition: { "index": N, "name": "Move to breakout rooms", "duration": 120, "startOffset": ..., "groupSize": 0, "transitionType": "passing", "instructions": "Head to your next room now.", "inheritLocations": false }
-Example breath: { "index": N, "name": "Take a breath", "duration": 30, "startOffset": ..., "groupSize": 0, "transitionType": "breath", "instructions": "Pause. Settle. We begin again in 30 seconds.", "inheritLocations": false }
+Do not add compiled activity collections or choose activity mechanics, timing details, grouping rules, instructions, or role assignments; the app owns those details.
 
 Start the interview now.`;
 }
@@ -402,6 +298,148 @@ const STRUCTURES = {
   },
 };
 
+function quickPlanToURL(plan, baseURL) {
+  const url = new URL(baseURL);
+  const params = new URLSearchParams();
+  for (const structure of plan.structures || []) params.append('structure', structure.key);
+  if (plan.invitation) params.set('invitation', plan.invitation);
+  if (typeof plan.startTime === 'number') params.set('startTime', String(plan.startTime));
+  for (const participant of plan.participants || []) params.append('participant', typeof participant === 'string' ? participant : participant.name);
+  for (const location of plan.locations || []) params.append('location', location);
+  if (plan.plenaryLocation) params.set('plenary', plan.plenaryLocation);
+  url.search = params.toString();
+  url.hash = '';
+  return url.toString();
+}
+
+function quickPlanFromURL(input) {
+  const url = new URL(input, 'http://localhost');
+  const plan = {
+    structures: url.searchParams.getAll('structure').map(key => ({ key })),
+  };
+  if (url.searchParams.has('invitation')) plan.invitation = url.searchParams.get('invitation');
+  if (url.searchParams.has('startTime')) plan.startTime = Number(url.searchParams.get('startTime'));
+  const participants = url.searchParams.getAll('participant');
+  if (participants.length) plan.participants = participants;
+  const locations = url.searchParams.getAll('location');
+  if (locations.length) plan.locations = locations;
+  if (url.searchParams.has('plenary')) plan.plenaryLocation = url.searchParams.get('plenary');
+  return plan;
+}
+
+function compileQuickPlan(plan) {
+  const mechanicalFields = ['phases', 'groups', 'segments', 'startOffset', 'groupSize', 'instructions', 'roles'];
+  const suppliedMechanicalField = plan && mechanicalFields.find(field => Object.hasOwn(plan, field));
+  if (suppliedMechanicalField) {
+    const error = new Error(`Activity mechanics are not allowed in a quick plan: ${suppliedMechanicalField}`);
+    error.code = 'ACTIVITY_MECHANICS_NOT_ALLOWED';
+    throw error;
+  }
+  if (!plan || !Array.isArray(plan.structures) || plan.structures.length === 0) {
+    throw new Error('Quick plan requires at least one structure');
+  }
+  const unknownStructure = plan.structures.find(item => !item || !Object.hasOwn(STRUCTURES, item.key));
+  if (unknownStructure) {
+    const error = new Error(`Unknown structure: ${unknownStructure?.key || '(missing key)'}`);
+    error.code = 'UNKNOWN_STRUCTURE_KEY';
+    throw error;
+  }
+
+  const phases = [];
+  const segments = [];
+  let startOffset = 0;
+  plan.structures.forEach((item, structureIndex) => {
+    if (structureIndex > 0) {
+      const transitionIndex = phases.length;
+      phases.push({
+        index: phases.length,
+        name: 'Transition',
+        duration: 120,
+        startOffset,
+        groupSize: 0,
+        transitionType: 'passing',
+        instructions: 'Move to the next activity.',
+        inheritLocations: false,
+      });
+      startOffset += 120;
+      segments.push({ name: 'Transition', structureKey: null, phaseIndexStart: transitionIndex, phaseIndexEnd: transitionIndex });
+    }
+    const phaseIndexStart = phases.length;
+    for (const templatePhase of STRUCTURES[item.key].phases) {
+      phases.push({ ...templatePhase, index: phases.length, startOffset });
+      startOffset += templatePhase.duration;
+    }
+    segments.push({ name: item.key, structureKey: item.key, phaseIndexStart, phaseIndexEnd: phases.length - 1 });
+  });
+
+  const participants = (plan.participants || []).map((participant, id) => (
+    typeof participant === 'string' ? { name: participant, id } : { ...participant, id: participant.id ?? id }
+  ));
+  const toMeetingLocation = value => ({
+    type: /^https?:\/\//i.test(value) ? 'url' : 'physical',
+    label: value,
+    url: /^https?:\/\//i.test(value) ? value : null,
+    instructions: null,
+    override: false,
+  });
+  const locationPool = {
+    locations: (plan.locations || []).map(toMeetingLocation),
+    strategy: 'round-robin',
+  };
+  const plenaryLocation = toMeetingLocation(plan.plenaryLocation || 'Whole Group');
+  const groups = assignGroups(participants, phases, locationPool);
+  for (const phase of phases) {
+    if (phase.groupSize >= 999 && groups[phase.index]?.[0]) {
+      groups[phase.index][0].location = { ...plenaryLocation };
+    }
+  }
+
+  for (const segment of segments) {
+    if (segment.structureKey === 'Troika Consulting') {
+      for (let phaseIndex = segment.phaseIndexStart; phaseIndex <= segment.phaseIndexEnd; phaseIndex++) {
+        const round = phases[phaseIndex].name.match(/^Round (\d+)/)?.[1];
+        if (!round) continue;
+        for (const group of groups[phaseIndex] || []) {
+          const clientIndex = (Number(round) - 1) % group.members.length;
+          group.members = group.members.map((member, index) => ({
+            ...member,
+            role: index === clientIndex ? 'Client' : 'Consultant',
+            roleInstructions: index === clientIndex
+              ? 'Share your challenge, then listen while the consultants confer.'
+              : 'Listen, then confer with the other consultant while the client turns away.',
+          }));
+        }
+      }
+    }
+    if (segment.structureKey === 'User Experience Fishbowl') {
+      for (let phaseIndex = segment.phaseIndexStart; phaseIndex <= segment.phaseIndexEnd; phaseIndex++) {
+        for (const group of groups[phaseIndex] || []) {
+          group.members = group.members.map(member => ({
+            ...member,
+            role: member.id < 5 ? 'User' : 'Observer',
+            roleInstructions: member.id < 5
+              ? 'Share your experience from the inner circle.'
+              : 'Listen from the outer circle and note what surprises you.',
+          }));
+        }
+      }
+    }
+  }
+
+  return {
+    id: plan.id || Math.random().toString(16).slice(2, 10).padEnd(8, '0'),
+    structure: plan.structures.map(item => item.key).join(' → '),
+    invitation: plan.invitation || STRUCTURES[plan.structures[0].key].invitation,
+    startTime: plan.startTime,
+    participants,
+    phases,
+    groups,
+    segments,
+    plenaryLocation,
+    locationPool,
+  };
+}
+
 function validateSession(obj) {
   const errors = [];
   if (!obj || typeof obj !== 'object') return ['Session must be an object'];
@@ -427,5 +465,5 @@ function validateSession(obj) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { getActivePhase, getParticipantGroup, getCountdownClass, encodeSession, decodeSession, getNoteKey, getLLMPrompt, assignGroups, STRUCTURES, validateSession };
+  module.exports = { getActivePhase, getParticipantGroup, getCountdownClass, encodeSession, decodeSession, getNoteKey, getLLMPrompt, assignGroups, STRUCTURES, quickPlanToURL, quickPlanFromURL, compileQuickPlan, validateSession };
 }

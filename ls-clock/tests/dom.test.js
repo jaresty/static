@@ -194,6 +194,81 @@ test('P-sample-2: sample action fills every field using the selected structure d
   });
 });
 
+test('P-plan-6a: manual generation preserves its session output', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('details.manual-form').evaluate(el => el.open = true);
+  await page.locator('#structure-select').selectOption('TRIZ');
+  await page.getByRole('button', { name: 'Load sample setup' }).click();
+  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  const url = await page.locator('#session-url-output').inputValue();
+  const encoded = new URL(url).hash.slice(1);
+  const session = await page.evaluate(value => decodeSession(value), encoded);
+  expect({
+    structure: session.structure,
+    participants: session.participants.map(participant => participant.name),
+    phases: session.phases.map(phase => phase.name),
+    plenaryLocation: session.plenaryLocation.label,
+  }).toEqual({
+    structure: 'TRIZ',
+    participants: ['Alice', 'Bob', 'Carol', 'Dave'],
+    phases: ['Individual', 'Small Group', 'Whole Group'],
+    plenaryLocation: 'Main Hall',
+  });
+});
+
+test('P-plan-6b: manual setup preserves its functional controls', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('details.manual-form').evaluate(el => el.open = true);
+  expect(await page.locator('#load-sample-btn, #structure-select, #invitation-input, #start-time-input, #participants-input, #locations-input, #plenary-input, #add-structure-btn, #generate-btn, #copy-url-btn').count()).toBe(10);
+});
+
+test('P-plan-url-3: bookmarked quick-plan URL compiles automatically on load', async ({ page }) => {
+  await page.goto('/?structure=TRIZ&invitation=How%20can%20we%20improve%20handoffs%3F&startTime=2000000000&participant=Alice&participant=Bob&participant=Carol&participant=Dave&location=Room%20A&location=Room%20B&plenary=Main%20Hall');
+  expect({
+    previewVisible: await page.locator('#preview-section').isVisible(),
+    structure: await page.locator('[data-role="preview-structure"]').textContent(),
+    phaseCount: await page.locator('[data-role="preview-phases"]').textContent(),
+    pasteFieldCount: await page.locator('#json-input').count(),
+    manualOpen: await page.locator('details.manual-form').evaluate(element => element.open),
+    manualInvitation: await page.locator('#invitation-input').inputValue(),
+    manualParticipants: await page.locator('#participants-input').inputValue(),
+    remainsBookmarkable: page.url().includes('structure=TRIZ'),
+  }).toEqual({
+    previewVisible: true,
+    structure: 'TRIZ',
+    phaseCount: '3 phases',
+    pasteFieldCount: 0,
+    manualOpen: true,
+    manualInvitation: 'How can we improve handoffs?',
+    manualParticipants: 'Alice\nBob\nCarol\nDave',
+    remainsBookmarkable: true,
+  });
+});
+
+test('P-setup-space-1: setup cards and control groups have breathing room', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('details.manual-form').evaluate(el => el.open = true);
+  await page.locator('#add-structure-btn').click();
+  const metrics = await page.evaluate(() => {
+    const px = value => Number.parseFloat(value) || 0;
+    const manual = getComputedStyle(document.querySelector('.manual-form'));
+    const quickSet = getComputedStyle(document.querySelector('.quick-set-row'));
+    const structureRow = getComputedStyle(document.querySelector('.structure-row'));
+    const description = getComputedStyle(document.querySelector('[data-role="structure-description"]'));
+    const transition = getComputedStyle(document.querySelector('.structure-break-row'));
+    const copyButton = getComputedStyle(document.querySelector('#copy-prompt-btn'));
+    return {
+      manualPadding: px(manual.paddingTop),
+      quickSetGap: px(quickSet.gap),
+      structureRowGap: px(structureRow.gap),
+      descriptionMargin: px(description.marginBottom),
+      transitionMargin: px(transition.marginBottom),
+      buttonHeight: px(copyButton.minHeight),
+    };
+  });
+  expect(metrics).toEqual({ manualPadding: 20, quickSetGap: 8, structureRowGap: 12, descriptionMargin: 12, transitionMargin: 12, buttonHeight: 42 });
+});
+
 // P-seq-1: add-structure button present in setup
 test('P-seq-1: add-structure button present in setup page', async ({ page }) => {
   await page.goto('/');
@@ -217,9 +292,7 @@ test('P-map-1: overview panel contains map of all groups for active phase', asyn
 test('P-preview-1: facilitator preview shows group details', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(({ session }) => {
-    const previewSection = document.getElementById('preview-section');
-    previewSection.style.display = '';
-    loadFromJSON(JSON.stringify(session));
+    showSessionPreview(session);
   }, { session: SESSION });
   const preview = page.locator('[data-role="preview"]');
   await expect(preview).toBeVisible();

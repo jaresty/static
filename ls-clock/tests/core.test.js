@@ -105,19 +105,176 @@ test('P6: getNoteKey — includes sessionId, phaseIndex, name', () => {
 });
 
 // P8: getLLMPrompt
-test('P8: getLLMPrompt — contains schema keywords', () => {
+test('P8: getLLMPrompt — contains quick-plan URL keywords', () => {
   const prompt = getLLMPrompt();
   assert.ok(prompt.length > 200);
   assert.ok(prompt.includes('startTime'));
-  assert.ok(prompt.includes('participants'));
-  assert.ok(prompt.includes('phases'));
-  assert.ok(prompt.includes('MeetingLocation'));
-  assert.ok(prompt.includes('JSON'));
+  assert.ok(prompt.includes('participant'));
+  assert.ok(prompt.includes('structure'));
+  assert.ok(prompt.includes('location'));
+  assert.ok(prompt.includes('APP_URL'));
 });
 
-test('P-ls-prompt-1: LLM prompt includes the authoritative 1-2-4-All introduction', () => {
+test('P-ls-prompt-1: LLM prompt lists every canonical structure by name', () => {
+  const { STRUCTURES } = require('../ls-clock-core.js');
   const prompt = getLLMPrompt();
-  assert.ok(prompt.includes('Introduction (60s, groupSize=999), Individual (60s, groupSize=1), Pairs (120s, groupSize=2), Quartets (300s, groupSize=4), Whole Group (420s, groupSize=999)'));
+  assert.ok(Object.keys(STRUCTURES).every(key => prompt.includes(key)));
+});
+
+test('P-plan-1a: quick plan requires at least one structure', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  assert.throws(() => compileQuickPlan({ structures: [] }), /at least one structure/i);
+});
+
+test('P-plan-1b: quick plan accepts only registered structure keys', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  assert.throws(() => compileQuickPlan({ structures: [{ key: 'Unknown Structure' }] }), /unknown structure/i);
+});
+
+test('P-plan-2a: LLM prompt excludes compiled activity collections', () => {
+  const prompt = getLLMPrompt();
+  assert.equal(['"phases"', '"groups"', '"segments"'].some(field => prompt.includes(field)), false);
+});
+
+test('P-plan-2b: LLM prompt excludes mechanical activity fields', () => {
+  const prompt = getLLMPrompt();
+  assert.equal(['"startOffset"', '"groupSize"', '"instructions"', '"roles"'].some(field => prompt.includes(field)), false);
+});
+
+test('P-plan-3a: compiler expands an ordered structure sequence canonically', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  const session = compileQuickPlan({
+    structures: [{ key: 'TRIZ' }, { key: '1-2-4-All' }],
+    startTime: 1000,
+    participants: ['Alice', 'Bob', 'Carol', 'Dave'],
+    locations: ['Room A', 'Room B'],
+    plenaryLocation: 'Main Hall',
+  });
+  assert.deepEqual(session.phases.map(({ index, name, duration, startOffset, groupSize, transitionType }) => ({ index, name, duration, startOffset, groupSize, ...(transitionType ? { transitionType } : {}) })), [
+    { index: 0, name: 'Individual', duration: 120, startOffset: 0, groupSize: 1 },
+    { index: 1, name: 'Small Group', duration: 900, startOffset: 120, groupSize: 4 },
+    { index: 2, name: 'Whole Group', duration: 600, startOffset: 1020, groupSize: 999 },
+    { index: 3, name: 'Transition', duration: 120, startOffset: 1620, groupSize: 0, transitionType: 'passing' },
+    { index: 4, name: 'Introduction', duration: 60, startOffset: 1740, groupSize: 999 },
+    { index: 5, name: 'Individual', duration: 60, startOffset: 1800, groupSize: 1 },
+    { index: 6, name: 'Pairs', duration: 120, startOffset: 1860, groupSize: 2 },
+    { index: 7, name: 'Quartets', duration: 300, startOffset: 1980, groupSize: 4 },
+    { index: 8, name: 'Whole Group', duration: 420, startOffset: 2280, groupSize: 999 },
+  ]);
+});
+
+test('P-plan-3d: compiler assigns canonical roles for role-based structures', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  const troika = compileQuickPlan({ structures: [{ key: 'Troika Consulting' }], participants: ['Alice', 'Bob', 'Carol'] });
+  const fishbowl = compileQuickPlan({ structures: [{ key: 'User Experience Fishbowl' }], participants: ['A', 'B', 'C', 'D', 'E', 'F'] });
+  assert.deepEqual({
+    troikaRounds: [1, 4, 7].map(index => troika.groups[index][0].members.map(member => member.role)),
+    fishbowlRoles: fishbowl.groups[0].flatMap(group => group.members.map(member => member.role)),
+  }, {
+    troikaRounds: [
+      ['Client', 'Consultant', 'Consultant'],
+      ['Consultant', 'Client', 'Consultant'],
+      ['Consultant', 'Consultant', 'Client'],
+    ],
+    fishbowlRoles: ['User', 'User', 'User', 'User', 'User', 'Observer'],
+  });
+});
+
+test('P-plan-3c: compiler creates segments for structures and transitions', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  const session = compileQuickPlan({
+    structures: [{ key: 'TRIZ' }, { key: '1-2-4-All' }],
+    participants: ['Alice'],
+  });
+  assert.deepEqual(session.segments, [
+    { name: 'TRIZ', structureKey: 'TRIZ', phaseIndexStart: 0, phaseIndexEnd: 2 },
+    { name: 'Transition', structureKey: null, phaseIndexStart: 3, phaseIndexEnd: 3 },
+    { name: '1-2-4-All', structureKey: '1-2-4-All', phaseIndexStart: 4, phaseIndexEnd: 8 },
+  ]);
+});
+
+test('P-plan-3b: compiler assigns participants, groups, and locations', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  const session = compileQuickPlan({
+    structures: [{ key: 'TRIZ' }],
+    startTime: 1000,
+    participants: ['Alice', 'Bob', 'Carol', 'Dave'],
+    locations: ['Room A', 'Room B'],
+    plenaryLocation: 'Main Hall',
+  });
+  assert.deepEqual({
+    participants: session.participants,
+    phaseGroupCounts: Object.values(session.groups).map(groups => groups.length),
+    smallGroupMembers: session.groups[1][0].members.map(member => member.name),
+    smallGroupLocation: session.groups[1][0].location.label,
+    wholeGroupLocation: session.groups[2][0].location.label,
+  }, {
+    participants: [{ name: 'Alice', id: 0 }, { name: 'Bob', id: 1 }, { name: 'Carol', id: 2 }, { name: 'Dave', id: 3 }],
+    phaseGroupCounts: [4, 1, 1],
+    smallGroupMembers: ['Alice', 'Bob', 'Carol', 'Dave'],
+    smallGroupLocation: 'Room A',
+    wholeGroupLocation: 'Main Hall',
+  });
+});
+
+test('P-plan-4a: compiler rejects inherited object keys as unknown structures', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  Object.prototype.InjectedStructure = { phases: [] };
+  try {
+    assert.throws(() => compileQuickPlan({ structures: [{ key: 'InjectedStructure' }] }));
+  } finally {
+    delete Object.prototype.InjectedStructure;
+  }
+});
+
+test('P-plan-4b: unknown structure errors have a stable code', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  let code;
+  try {
+    compileQuickPlan({ structures: [{ key: 'Unknown Structure' }] });
+  } catch (error) {
+    code = error.code;
+  }
+  assert.equal(code, 'UNKNOWN_STRUCTURE_KEY');
+});
+
+test('P-plan-5a: compiler rejects caller-supplied activity mechanics', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  assert.throws(() => compileQuickPlan({ structures: [{ key: 'TRIZ' }], phases: [] }));
+});
+
+test('P-plan-5b: activity-mechanics errors have a stable code', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  let code;
+  try {
+    compileQuickPlan({ structures: [{ key: 'TRIZ' }], phases: [] });
+  } catch (error) {
+    code = error.code;
+  }
+  assert.equal(code, 'ACTIVITY_MECHANICS_NOT_ALLOWED');
+});
+
+test('P-plan-url-1: quick plans round-trip through bookmarkable URLs', () => {
+  const { quickPlanToURL, quickPlanFromURL } = require('../ls-clock-core.js');
+  const plan = {
+    structures: [{ key: 'TRIZ' }, { key: '1-2-4-All' }],
+    invitation: 'How can we improve handoffs?',
+    startTime: 1234567890,
+    participants: ['Alice', 'Bob'],
+    locations: ['https://meet.example/room-a', 'Room B'],
+    plenaryLocation: 'Main Hall',
+  };
+  assert.deepEqual(quickPlanFromURL(quickPlanToURL(plan, 'https://example.test/ls-clock/')), plan);
+});
+
+test('P-plan-url-2: LLM prompt requests a one-click setup URL', () => {
+  const prompt = getLLMPrompt('https://example.test/ls-clock/');
+  assert.deepEqual({
+    includesAppURL: prompt.includes('https://example.test/ls-clock/'),
+    requestsSetupURL: prompt.includes('Output ONLY the complete setup URL'),
+    asksForPastedJSON: prompt.includes('paste the JSON'),
+    describesJSONObject: prompt.includes('JSON object'),
+  }, { includesAppURL: true, requestsSetupURL: true, asksForPastedJSON: false, describesJSONObject: false });
 });
 
 // P-ls-sequence-1: authoritative 1-2-4-All sequence
@@ -173,10 +330,11 @@ test('P-loc-1: validateSession warns when locationPool has fewer locations than 
   assert.ok(errs.some(e => e.includes('location')), 'should warn about insufficient locations');
 });
 
-// P-trans-3: getLLMPrompt documents transitionType
-test('P-trans-3: getLLMPrompt documents transitionType field', () => {
-  const prompt = getLLMPrompt();
-  assert.ok(prompt.includes('transitionType'), 'LLM prompt should document transitionType');
+// P-trans-3: compiler owns transitionType
+test('P-trans-3: quick-plan compiler creates passing transitions', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  const session = compileQuickPlan({ structures: [{ key: 'TRIZ' }, { key: 'Min Specs' }], participants: ['A'] });
+  assert.equal(session.phases.find(phase => phase.name === 'Transition').transitionType, 'passing');
 });
 
 // P-struct-1: new structures present with url fields
@@ -205,11 +363,11 @@ test('P-struct-2: Troika Consulting has phases with groupSize 3', () => {
   assert.ok(troika.phases.some(p => p.groupSize === 3), 'Troika should have groupSize 3 phases');
 });
 
-// P-seg-2: getLLMPrompt documents segments field
-test('P-seg-2: getLLMPrompt documents segments field', () => {
-  const prompt = getLLMPrompt();
-  assert.ok(prompt.includes('segments'), 'LLM prompt should document segments field');
-  assert.ok(prompt.includes('phaseIndexStart'), 'LLM prompt should document phaseIndexStart');
+// P-seg-2: compiler owns segment boundaries
+test('P-seg-2: quick-plan compiler calculates segment boundaries', () => {
+  const { compileQuickPlan } = require('../ls-clock-core.js');
+  const session = compileQuickPlan({ structures: [{ key: 'TRIZ' }], participants: ['A'] });
+  assert.deepEqual(session.segments, [{ name: 'TRIZ', structureKey: 'TRIZ', phaseIndexStart: 0, phaseIndexEnd: 2 }]);
 });
 
 // P-url-1: all STRUCTURES entries have a url field
@@ -221,10 +379,10 @@ test('P-url-1: all STRUCTURES entries have a url field', () => {
   }
 });
 
-// P-role-4: getLLMPrompt documents role and roleInstructions
-test('P-role-4: getLLMPrompt includes role and roleInstructions in member schema', () => {
+// P-role-4: prompt delegates roles to app code
+test('P-role-4: getLLMPrompt excludes caller-authored role instructions', () => {
   const prompt = getLLMPrompt();
-  assert.ok(prompt.includes('roleInstructions'), 'LLM prompt should mention roleInstructions field');
+  assert.equal(prompt.includes('roleInstructions'), false);
 });
 
 // P-role-5: validateSession accepts members with role fields
