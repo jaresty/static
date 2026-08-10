@@ -29,6 +29,7 @@ function completedWorkshop() {
     yLabel: 'Confidence', yLow: 'Lower', yHigh: 'Higher',
     items: 'Alpha\nBeta\nGamma',
   });
+  session = placeAt(session, { x: 0.5, y: 0.5 });
   session = placeAt(session, { x: 0.2, y: 0.8 });
   return placeAt(session, { x: 0.7, y: 0.4 });
 }

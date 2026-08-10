@@ -184,6 +184,11 @@
     .placement-orientation strong { color: var(--ink); }
     .placement-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .65fr); gap: 18px; align-items: start; }
     .placement-controls { position: sticky; top: 18px; }
+    .placement-tray { display: grid; gap: 9px; margin: 12px 0 18px; }
+    .unplaced-note { min-height: 48px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 780; text-align: left; cursor: grab; touch-action: none; box-shadow: 0 4px 12px rgba(23,32,27,.07); }
+    .unplaced-note:hover { border-color: var(--violet); transform: translateX(-2px); }
+    .unplaced-note.active { border: 2px solid var(--violet); background: var(--violet-soft); box-shadow: 0 0 0 3px rgba(111,90,232,.12); }
+    .unplaced-note.dragging { opacity: .68; cursor: grabbing; }
     .candidate-name { margin: 8px 0 0; color: var(--ink); font-size: clamp(1.35rem, 3vw, 2rem); letter-spacing: -.035em; line-height: 1.1; overflow-wrap: anywhere; }
     .placement-drag-instruction { margin: 12px 0 16px; color: var(--muted); line-height: 1.45; }
     .coordinate-readout { padding: 12px 14px; border-radius: 12px; background: #f8f5ed; color: var(--muted); font-size: .84rem; line-height: 1.45; }
@@ -403,19 +408,21 @@
       <div class="placement-layout">
         <section class="panel board-panel">
           <p class="eyebrow">Drag directly on both axes</p>
-          <div class="board-wrap" id="placement-board" role="region" aria-label="2×2 placement board">
+          <div class="board-wrap" id="placement-board" role="region" aria-label="2×2 placement board; click to place the selected option" data-placement-board>
             <span class="axis-title axis-title-x" id="placement-x-title"></span>
             <span class="axis-title axis-title-y" id="placement-y-title"></span>
             <span class="axis-label axis-x-low" id="placement-x-low"></span><span class="axis-label axis-x-high" id="placement-x-high"></span>
             <span class="axis-label axis-y-low" id="placement-y-low"></span><span class="axis-label axis-y-high" id="placement-y-high"></span>
           </div>
-          <p class="hint">Drag the highlighted option to where the group agrees it belongs. Existing options can be repositioned at any time.</p>
+          <p class="hint">Drag an option from the tray or select it and click the board. Existing options can be repositioned at any time.</p>
         </section>
         <aside class="panel placement-controls">
-          <p class="eyebrow">Now placing</p>
+          <p class="eyebrow">To place</p>
+          <div class="placement-tray" id="placement-tray" aria-label="Options waiting to be placed" data-unplaced-tray></div>
+          <p class="eyebrow">Selected option</p>
           <h3 class="candidate-name" id="candidate-card"></h3>
           <p class="context-description" id="candidate-description" hidden></p>
-          <p class="placement-drag-instruction" id="placement-drag-instruction">The highlighted card starts in the center. Drag it to where it belongs, or use the arrow keys.</p>
+          <p class="placement-drag-instruction" id="placement-drag-instruction">Drag this option onto the board, select it and click the board, or use the arrow keys and confirm.</p>
           <p class="coordinate-readout" id="placement-coordinates">Center · use arrow keys for precise movement</p>
           <button class="button button-accent" id="place-option" type="button" style="width:100%; margin-top:16px">Confirm this position</button>
           <div class="button-row"><button class="button button-secondary" id="placement-undo" type="button">Undo</button><button class="button button-quiet" id="placement-reset" type="button">Start over</button></div>

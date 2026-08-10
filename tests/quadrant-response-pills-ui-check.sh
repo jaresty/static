@@ -13,8 +13,10 @@ mapfile -t responses < <(PORT="$PORT" node --input-type=module <<'NODE'
 import { createWorkshop, placeAt } from './2x2-facilitator/core.mjs';
 import { encodeResponseUrl } from './2x2-facilitator/collaboration.mjs';
 let first = createWorkshop({prompt:'Choose a launch idea',xLabel:'Value',xLow:'Low value',xHigh:'High value',yLabel:'Confidence',yLow:'Low confidence',yHigh:'High confidence',items:'Alpha\nBeta'});
+first = placeAt(first, {x:.5,y:.5});
 first = placeAt(first, {x:.2,y:.8});
 let second = createWorkshop({prompt:'Choose a launch idea',xLabel:'Value',xLow:'Low value',xHigh:'High value',yLabel:'Confidence',yLow:'Low confidence',yHigh:'High confidence',items:'Alpha\nBeta'});
+second = placeAt(second, {x:.5,y:.5});
 second = placeAt(second, {x:.8,y:.2});
 const base = `http://127.0.0.1:${process.env.PORT}/2x2-facilitator/`;
 console.log(encodeResponseUrl(first, {contributor:'Alex', baseUrl:base}));

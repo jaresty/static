@@ -17,8 +17,7 @@ const frame = {
 async function completedSession() {
   const { createWorkshop, placeAt } = await loadCore();
   let session = createWorkshop(frame);
-  session = placeAt(session, { x: 0.8, y: 0.2 });
-  session = placeAt(session, { x: 0.65, y: 0.85 });
+  for (const point of [{ x: 0.5, y: 0.5 }, { x: 0.8, y: 0.2 }, { x: 0.65, y: 0.85 }]) session = placeAt(session, point);
   return session;
 }
 
@@ -59,7 +58,8 @@ test('optional activity and option descriptions normalize into the workshop mode
 test('direct grid placement passes with two-dimensional normalized coordinates', async () => {
   const { createWorkshop, placeAt, coordinates } = await loadCore();
   let session = createWorkshop(frame);
-  assert.deepEqual(coordinates(session)[0], { ...session.items[0], x: 0.5, y: 0.5, focused: false });
+  assert.deepEqual(coordinates(session), []);
+  session = placeAt(session, { x: 0.5, y: 0.5 });
   session = placeAt(session, { x: 0.8, y: 0.2 });
   session = placeAt(session, { x: 0.65, y: 0.85 });
 
@@ -229,6 +229,7 @@ test('c11 Quadrant collection rejects responses from another exercise', async ()
   const { createWorkshop, placeAt } = await loadCore();
   const session = await completedSession();
   let other = createWorkshop({ ...frame, prompt: 'A different decision' });
+  other = placeAt(other, { x: 0.5, y: 0.5 });
   other = placeAt(other, { x: 0.2, y: 0.4 });
   other = placeAt(other, { x: 0.7, y: 0.9 });
   const response = decodeShareUrl(encodeResponseUrl(other, { contributor: 'Blair', baseUrl: 'https://static.test/2x2-facilitator/' }));

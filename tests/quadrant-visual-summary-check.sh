@@ -12,7 +12,7 @@ for _ in {1..40}; do curl -fsS "http://127.0.0.1:$PORT/" >/dev/null 2>&1 && brea
 
 make_response() {
   local contributor="$1" first="$2" second="$3"
-  node --input-type=module -e "import {createWorkshop,placeAt} from './2x2-facilitator/core.mjs'; import {encodeResponseUrl} from './2x2-facilitator/collaboration.mjs'; let s=createWorkshop({prompt:'Choose a launch idea',xLabel:'Value',xLow:'Low value',xHigh:'High value',yLabel:'Confidence',yLow:'Low confidence',yHigh:'High confidence',items:'Alpha\nBeta\nGamma'}); s=placeAt(s,$first); s=placeAt(s,$second); console.log(encodeResponseUrl(s,{contributor:'$contributor',baseUrl:'http://127.0.0.1:$PORT/2x2-facilitator/'}));"
+  node --input-type=module -e "import {createWorkshop,placeAt} from './2x2-facilitator/core.mjs'; import {encodeResponseUrl} from './2x2-facilitator/collaboration.mjs'; let s=createWorkshop({prompt:'Choose a launch idea',xLabel:'Value',xLow:'Low value',xHigh:'High value',yLabel:'Confidence',yLow:'Low confidence',yHigh:'High confidence',items:'Alpha\nBeta\nGamma'}); s=placeAt(s,{x:.5,y:.5}); s=placeAt(s,$first); s=placeAt(s,$second); console.log(encodeResponseUrl(s,{contributor:'$contributor',baseUrl:'http://127.0.0.1:$PORT/2x2-facilitator/'}));"
 }
 first="$(make_response Alex '{x:.2,y:.7}' '{x:.8,y:.4}')"
 second="$(make_response Blair '{x:.9,y:.1}' '{x:.1,y:.9}')"

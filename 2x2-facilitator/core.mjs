@@ -52,8 +52,7 @@ export function createWorkshop(input) {
   if (!xLabel || !yLabel) throw new Error('Name both axes.');
 
   const items = parseItems(input.items);
-  const firstId = items[0].id;
-  const pending = items.slice(1).map(({ id }) => id);
+  const pending = items.map(({ id }) => id);
   return {
     version: 1,
     round: Number(input.round) || 1,
@@ -66,7 +65,7 @@ export function createWorkshop(input) {
     yLow: clean(input.yLow) || `Lower ${yLabel}`,
     yHigh: clean(input.yHigh) || `Higher ${yLabel}`,
     items,
-    positions: { [firstId]: { x: 0.5, y: 0.5 } },
+    positions: {},
     pending,
     candidateId: pending[0] ?? null,
     focusIds: [],
@@ -83,7 +82,7 @@ export function placeAt(session, { x, y }) {
 
   const next = snapshot(session);
   next.positions[session.candidateId] = { x, y };
-  next.pending = next.pending.slice(1);
+  next.pending = next.pending.filter((itemId) => itemId !== session.candidateId);
   next.candidateId = next.pending[0] ?? null;
   next.phase = next.candidateId ? 'placement' : 'review';
   return next;

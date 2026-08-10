@@ -78,7 +78,7 @@ const facilitatorApp = {
       'placement-view', 'review-view', 'setup-form', 'prompt', 'activity-description', 'x-label', 'x-low', 'x-high',
       'y-label', 'y-low', 'y-high', 'items', 'option-details', 'item-count', 'setup-error', 'example-button', 'resume-banner',
       'resume-summary', 'resume-button', 'discard-button', 'placement-round', 'placement-progress', 'placement-prompt', 'placement-activity-description', 'placement-board',
-      'placement-x-title', 'placement-y-title', 'placement-x-summary', 'placement-y-summary', 'placement-x-low', 'placement-x-high', 'placement-y-low', 'placement-y-high', 'candidate-card', 'candidate-description',
+      'placement-x-title', 'placement-y-title', 'placement-x-summary', 'placement-y-summary', 'placement-x-low', 'placement-x-high', 'placement-y-low', 'placement-y-high', 'placement-tray', 'candidate-card', 'candidate-description',
       'placement-coordinates', 'place-option', 'placement-undo', 'placement-reset', 'review-round', 'review-prompt', 'review-activity-description', 'item-description-inspector', 'item-description-title', 'item-description-text',
       'new-workshop', 'board', 'board-x-low', 'board-x-high', 'board-y-low', 'board-y-high',
       'setup-preview-prompt', 'setup-preview-description', 'setup-x-edit', 'setup-y-edit', 'setup-x-low', 'setup-x-high', 'setup-y-low', 'setup-y-high', 'setup-options',
@@ -153,6 +153,11 @@ const facilitatorApp = {
     this.elements['resume-button'].addEventListener('click', () => this.render());
     this.elements['discard-button'].addEventListener('click', () => this.reset());
     this.elements['place-option'].addEventListener('click', () => this.commitPlacement());
+    this.elements['placement-board'].addEventListener('click', (event) => {
+      if (event.target.closest('.board-item')) return;
+      this.draftPosition = this.pointFromEvent(event, this.elements['placement-board']);
+      this.commitPlacement();
+    });
     this.elements['placement-undo'].addEventListener('click', () => this.undo());
     this.elements['placement-reset'].addEventListener('click', () => this.reset());
     this.elements['new-workshop'].addEventListener('click', () => this.reset());
@@ -756,6 +761,7 @@ const facilitatorApp = {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `board-item${candidate ? ' candidate-preview' : ''}${point.focused ? ' focused' : ''}${point.id === this.selectedId ? ' selected' : ''}`;
+    if (!candidate) button.dataset.placedNote = '';
     button.textContent = point.text;
     this.positionElement(button, point);
     button.setAttribute('aria-label', `${point.text}${point.description ? '; details available' : ''}; ${this.describePosition(point)}${candidate ? '; drag to place' : ''}`);
@@ -824,6 +830,69 @@ const facilitatorApp = {
     for (const point of coordinates(this.session)) this.makeBoardItem(point, board);
   },
 
+  selectPending(itemId) {
+    if (!this.session.pending.includes(itemId)) return;
+    this.session = { ...this.session, candidateId: itemId };
+    this.draftPosition = { x: 0.5, y: 0.5 };
+    this.announce(`${this.item(itemId).text} selected. Choose a position on the board, drag it there, or use the arrow keys.`);
+    this.renderPlacement();
+  },
+
+  bindTrayDrag(button, itemId) {
+    button.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      const start = { x: event.clientX, y: event.clientY };
+      const board = this.elements['placement-board'];
+      let moved = false;
+      let latest = null;
+      button.setPointerCapture(event.pointerId);
+      const move = (moveEvent) => {
+        if (Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y) < 5) return;
+        moved = true;
+        button.classList.add('dragging');
+        latest = this.pointFromEvent(moveEvent, board);
+        this.elements['placement-coordinates'].textContent = this.describePosition(latest);
+      };
+      const finish = (upEvent) => {
+        button.releasePointerCapture(upEvent.pointerId);
+        button.removeEventListener('pointermove', move);
+        button.removeEventListener('pointerup', finish);
+        button.removeEventListener('pointercancel', finish);
+        const bounds = board.getBoundingClientRect();
+        const inside = moved && upEvent.clientX >= bounds.left && upEvent.clientX <= bounds.right
+          && upEvent.clientY >= bounds.top && upEvent.clientY <= bounds.bottom;
+        if (inside && latest) {
+          this.session = { ...this.session, candidateId: itemId };
+          this.draftPosition = latest;
+          this.commitPlacement();
+        } else if (moved) {
+          button.classList.remove('dragging');
+          this.elements['placement-coordinates'].textContent = this.describePosition(this.draftPosition);
+        }
+      };
+      button.addEventListener('pointermove', move);
+      button.addEventListener('pointerup', finish);
+      button.addEventListener('pointercancel', finish);
+    });
+  },
+
+  renderPlacementTray() {
+    this.elements['placement-tray'].replaceChildren(...this.session.pending.map((itemId, index) => {
+      const item = this.item(itemId);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `unplaced-note${itemId === this.session.candidateId ? ' active' : ''}`;
+      button.dataset.unplacedNote = '';
+      button.dataset.itemId = itemId;
+      button.textContent = item.text;
+      button.setAttribute('aria-label', `${item.text}; ${index + 1} of ${this.session.pending.length} still to place`);
+      if (itemId === this.session.candidateId) button.setAttribute('aria-current', 'true');
+      button.addEventListener('click', () => this.selectPending(itemId));
+      this.bindTrayDrag(button, itemId);
+      return button;
+    }));
+  },
+
   renderPlacement() {
     const candidate = this.item(this.session.candidateId);
     if (document.body.dataset.mode === 'response') this.elements['placement-round'].textContent = 'YOUR RESPONSE';
@@ -838,13 +907,13 @@ const facilitatorApp = {
     this.elements['placement-y-summary'].textContent = `${this.session.yLabel}: ${this.session.yLow} — ${this.session.yHigh}`;
     this.setAxisLabels('placement');
     this.renderPlacedItems(this.elements['placement-board']);
-    const candidateButton = this.makeBoardItem({ ...candidate, ...this.draftPosition, focused: false }, this.elements['placement-board'], { candidate: true });
+    this.renderPlacementTray();
     this.elements['candidate-card'].textContent = candidate.text;
     this.setOptionalText(this.elements['candidate-description'], candidate.description);
     this.elements['placement-coordinates'].textContent = this.describePosition(this.draftPosition);
     this.elements['placement-undo'].disabled = this.session.history.length === 0;
     this.show('placement');
-    candidateButton.focus();
+    this.elements['placement-tray'].querySelector(`[data-item-id="${candidate.id}"]`)?.focus();
   },
 
   commitPlacement() {
@@ -1452,6 +1521,12 @@ const facilitatorApp = {
 
   handleKey(event) {
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+    if (!this.elements['placement-view'].hidden && event.key === 'Enter' && event.target.matches('[data-unplaced-note]')) {
+      event.preventDefault();
+      if (event.target.dataset.itemId === this.session.candidateId) this.commitPlacement();
+      else this.selectPending(event.target.dataset.itemId);
+      return;
+    }
     const actions = { ArrowLeft: ['x', -1], ArrowRight: ['x', 1], ArrowDown: ['y', -1], ArrowUp: ['y', 1] };
     if (!this.elements['placement-view'].hidden && actions[event.key]) {
       event.preventDefault();

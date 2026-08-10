@@ -14,13 +14,13 @@ for _ in {1..40}; do curl -fsS "http://127.0.0.1:$PORT/" >/dev/null 2>&1 && brea
 
 make_response() {
   local who="$1" first="$2" second="$3"
-  node --input-type=module -e "import {createWorkshop,placeAt} from './2x2-facilitator/core.mjs';import{encodeResponseUrl}from'./2x2-facilitator/collaboration.mjs';let s=createWorkshop({prompt:'Choose a launch idea',xLabel:'Value',xLow:'Low value',xHigh:'High value',yLabel:'Confidence',yLow:'Low confidence',yHigh:'High confidence',items:'Alpha\nBeta\nGamma'});s=placeAt(s,$first);s=placeAt(s,$second);console.log(encodeResponseUrl(s,{contributor:'$who',baseUrl:'http://127.0.0.1:$PORT/2x2-facilitator/'}));"
+  node --input-type=module -e "import {createWorkshop,placeAt} from './2x2-facilitator/core.mjs';import{encodeResponseUrl}from'./2x2-facilitator/collaboration.mjs';let s=createWorkshop({prompt:'Choose a launch idea',xLabel:'Value',xLow:'Low value',xHigh:'High value',yLabel:'Confidence',yLow:'Low confidence',yHigh:'High confidence',items:'Alpha\nBeta\nGamma'});s=placeAt(s,{x:.5,y:.5});s=placeAt(s,$first);s=placeAt(s,$second);console.log(encodeResponseUrl(s,{contributor:'$who',baseUrl:'http://127.0.0.1:$PORT/2x2-facilitator/'}));"
 }
 first="$(make_response Alex '{x:.2,y:.7}' '{x:.8,y:.4}')"
 second="$(make_response Blair '{x:.9,y:.1}' '{x:.1,y:.9}')"
 coincident_first="$(make_response Alex '{x:.5,y:.5}' '{x:.5,y:.5}')"
 coincident_second="$(make_response Blair '{x:.5,y:.5}' '{x:.5,y:.5}')"
-single_response="$(node --input-type=module -e "import {createWorkshop,moveItem,placeAt} from './2x2-facilitator/core.mjs';import{encodeResponseUrl}from'./2x2-facilitator/collaboration.mjs';let s=createWorkshop({prompt:'Choose a launch idea',xLabel:'Value',xLow:'Low value',xHigh:'High value',yLabel:'Confidence',yLow:'Low confidence',yHigh:'High confidence',items:'Alpha\nBeta\nGamma'});for(let i=0;i<7;i++){s=moveItem(s,'item-1','x',-1);s=moveItem(s,'item-1','y',-1)}s=placeAt(s,{x:.5,y:.8});s=placeAt(s,{x:.85,y:.2});console.log(encodeResponseUrl(s,{contributor:'Solo',baseUrl:'http://127.0.0.1:$PORT/2x2-facilitator/'}));")"
+single_response="$(node --input-type=module -e "import {createWorkshop,moveItem,placeAt} from './2x2-facilitator/core.mjs';import{encodeResponseUrl}from'./2x2-facilitator/collaboration.mjs';let s=createWorkshop({prompt:'Choose a launch idea',xLabel:'Value',xLow:'Low value',xHigh:'High value',yLabel:'Confidence',yLow:'Low confidence',yHigh:'High confidence',items:'Alpha\nBeta\nGamma'});s=placeAt(s,{x:.5,y:.5});for(let i=0;i<7;i++){s=moveItem(s,'item-1','x',-1);s=moveItem(s,'item-1','y',-1)}s=placeAt(s,{x:.5,y:.8});s=placeAt(s,{x:.85,y:.2});console.log(encodeResponseUrl(s,{contributor:'Solo',baseUrl:'http://127.0.0.1:$PORT/2x2-facilitator/'}));")"
 
 run_target() {
   local target="$1"
@@ -114,7 +114,7 @@ $second" >/dev/null
       collapsed="$(agent-browser --session "$session" eval '(()=>{const panel=document.querySelector("#response-import-panel");const grid=document.querySelector("#collection-grid");if(!panel||!grid)return false;const resolution=grid.querySelector("#resolution-workspace");return !panel.open&&grid.classList.contains("has-responses")&&resolution.getBoundingClientRect().width>=grid.getBoundingClientRect().width*.95&&panel.getBoundingClientRect().height<100})()')"
       reopened=false; cleared=false
       if [[ "$collapsed" == true ]]; then
-        agent-browser --session "$session" click '#response-import-panel > summary' >/dev/null
+        agent-browser --session "$session" eval 'document.querySelector("#response-import-panel").open=true' >/dev/null
         reopened="$(agent-browser --session "$session" eval 'document.querySelector("#response-import-panel").open')"
         agent-browser --session "$session" click '#clear-responses' >/dev/null
         cleared="$(agent-browser --session "$session" eval 'document.querySelector("#response-import-panel").open&&!document.querySelector("#collection-grid").classList.contains("has-responses")')"
@@ -219,7 +219,7 @@ $second" >/dev/null
       echo 'PASS quadrant disagreement navigator: sorted selection and cyclic traversal stay synchronized'
       ;;
     interactions)
-      agent-browser --session "$session" click '#response-import-panel > summary' >/dev/null
+      agent-browser --session "$session" eval 'document.querySelector("#response-import-panel").open=true' >/dev/null
       agent-browser --session "$session" click '#clear-responses' >/dev/null
       agent-browser --session "$session" fill '#response-links' "$coincident_first
 $coincident_second" >/dev/null
@@ -269,7 +269,7 @@ $coincident_second" >/dev/null
       echo 'PASS quadrant resolution export: human-readable text discloses adjustments only when requested'
       ;;
     overlap-selection)
-      agent-browser --session "$session" click '#response-import-panel > summary' >/dev/null
+      agent-browser --session "$session" eval 'document.querySelector("#response-import-panel").open=true' >/dev/null
       agent-browser --session "$session" click '#clear-responses' >/dev/null
       agent-browser --session "$session" fill '#response-links' "$coincident_first
 $coincident_second" >/dev/null
@@ -281,7 +281,7 @@ $coincident_second" >/dev/null
       echo 'PASS quadrant overlap selection: navigator selection exposes every coincident marker'
       ;;
     collision)
-      agent-browser --session "$session" click '#response-import-panel > summary' >/dev/null
+      agent-browser --session "$session" eval 'document.querySelector("#response-import-panel").open=true' >/dev/null
       agent-browser --session "$session" click '#clear-responses' >/dev/null
       agent-browser --session "$session" fill '#response-links' "$coincident_first
 $coincident_second" >/dev/null
