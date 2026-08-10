@@ -164,6 +164,36 @@ test('P-trans-1: transition phase shows data-role="transition" and next-location
   await expect(page.locator('[data-role="break"]')).toHaveCount(0);
 });
 
+// P-sample-1: sample setup action is visible
+test('P-sample-1: manual setup offers a visible sample action', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('details.manual-form').evaluate(el => el.open = true);
+  await expect(page.getByRole('button', { name: 'Load sample setup' })).toBeVisible();
+});
+
+test('P-sample-2: sample action fills every field using the selected structure defaults', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('details.manual-form').evaluate(el => el.open = true);
+  await page.locator('#structure-select').selectOption('TRIZ');
+  await page.getByRole('button', { name: 'Load sample setup' }).click();
+  const startTime = await page.locator('#start-time-input').inputValue();
+  expect({
+    structure: await page.locator('#structure-select').inputValue(),
+    invitation: await page.locator('#invitation-input').inputValue(),
+    hasFutureStart: new Date(startTime).getTime() > Date.now(),
+    participants: await page.locator('#participants-input').inputValue(),
+    locations: await page.locator('#locations-input').inputValue(),
+    plenary: await page.locator('#plenary-input').inputValue(),
+  }).toEqual({
+    structure: 'TRIZ',
+    invitation: 'What could we do to make this problem worse? Now, how do we do the opposite?',
+    hasFutureStart: true,
+    participants: 'Alice\nBob\nCarol\nDave',
+    locations: 'Room A\nRoom B',
+    plenary: 'Main Hall',
+  });
+});
+
 // P-seq-1: add-structure button present in setup
 test('P-seq-1: add-structure button present in setup page', async ({ page }) => {
   await page.goto('/');
@@ -231,6 +261,31 @@ test('P-seg-1: segment header rendered in phase timeline', async ({ page }) => {
   const headers = page.locator('[data-role="segment-header"]');
   await expect(headers).toHaveCount(1);
   await expect(headers.first()).toContainText('1-2-4-All');
+});
+
+// P-ls-desc-1: selected structure shows its authoritative purpose
+test('P-ls-desc-1: selected structure shows its purpose', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('details.manual-form').evaluate(el => el.open = true);
+  await page.locator('#structure-select').selectOption('1-2-4-All');
+  const description = page.locator('[data-role="structure-description"]');
+  expect(await description.isVisible() ? await description.textContent() : '').toContain('Engage everyone simultaneously in generating questions, ideas, and suggestions');
+});
+
+test('P-ls-desc-2: selected structure shows its approximate duration', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('details.manual-form').evaluate(el => el.open = true);
+  await page.locator('#structure-select').selectOption('1-2-4-All');
+  const description = page.locator('[data-role="structure-description"]');
+  expect(await description.textContent()).toContain('About 15 minutes');
+});
+
+test('P-ls-desc-3: selected structure shows its group configuration', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('details.manual-form').evaluate(el => el.open = true);
+  await page.locator('#structure-select').selectOption('1-2-4-All');
+  const description = page.locator('[data-role="structure-description"]');
+  expect(await description.textContent()).toContain('Alone → pairs → quartets → whole group');
 });
 
 // P-url-2: learn-more link present after structure selection

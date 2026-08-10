@@ -115,6 +115,26 @@ test('P8: getLLMPrompt — contains schema keywords', () => {
   assert.ok(prompt.includes('JSON'));
 });
 
+test('P-ls-prompt-1: LLM prompt includes the authoritative 1-2-4-All introduction', () => {
+  const prompt = getLLMPrompt();
+  assert.ok(prompt.includes('Introduction (60s, groupSize=999), Individual (60s, groupSize=1), Pairs (120s, groupSize=2), Quartets (300s, groupSize=4), Whole Group (420s, groupSize=999)'));
+});
+
+// P-ls-sequence-1: authoritative 1-2-4-All sequence
+test('P-ls-sequence-1: 1-2-4-All includes the 1-minute introduction and 1/2/5/7 flow', () => {
+  const { STRUCTURES } = require('../ls-clock-core.js');
+  assert.deepEqual(
+    STRUCTURES['1-2-4-All'].phases.map(({ name, duration, startOffset }) => ({ name, duration, startOffset })),
+    [
+      { name: 'Introduction', duration: 60, startOffset: 0 },
+      { name: 'Individual', duration: 60, startOffset: 60 },
+      { name: 'Pairs', duration: 120, startOffset: 120 },
+      { name: 'Quartets', duration: 300, startOffset: 240 },
+      { name: 'Whole Group', duration: 420, startOffset: 540 },
+    ]
+  );
+});
+
 // P9: new structures present + Custom absent
 test('P9: STRUCTURES — TRIZ, Min Specs, Impromptu Networking present; Custom absent', () => {
   const { STRUCTURES } = require('../ls-clock-core.js');

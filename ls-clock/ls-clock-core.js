@@ -135,7 +135,7 @@ When you have all the information, output ONLY a JSON object matching this schem
 ## Built-in structure defaults
 
 ### 1-2-4-All
-Phases: Individual (60s, groupSize=1), Pairs (120s, groupSize=2), Quartets (300s, groupSize=4), Whole Group (420s, groupSize=999)
+Phases: Introduction (60s, groupSize=999), Individual (60s, groupSize=1), Pairs (120s, groupSize=2), Quartets (300s, groupSize=4), Whole Group (420s, groupSize=999)
 
 ### What-So-What-Now-What
 Phases: What? Individual (60s, groupSize=1), What? Small Group (300s, groupSize=5), What? Whole Group (120s, groupSize=999), So What? Individual (60s, groupSize=1), So What? Small Group (300s, groupSize=5), So What? Whole Group (120s, groupSize=999), Now What? Individual (60s, groupSize=1), Now What? Small Group (300s, groupSize=5), Now What? Whole Group (120s, groupSize=999)
@@ -255,13 +255,14 @@ const STRUCTURES = {
   '1-2-4-All': {
     name: '1-2-4-All',
     url: 'https://www.liberatingstructures.com/1-1-2-4-all/',
-    description: 'Engage everyone simultaneously — individual → pairs → quartets → whole group.',
+    description: 'Engage everyone simultaneously in generating questions, ideas, and suggestions. About 15 minutes. Alone → pairs → quartets → whole group.',
     invitation: 'What ideas or actions do you recommend?',
     phases: [
-      { index: 0, name: 'Individual',  duration: 60,  startOffset: 0,   groupSize: 1,   instructions: 'Work alone. Write your ideas.',              inheritLocations: false },
-      { index: 1, name: 'Pairs',       duration: 120, startOffset: 60,  groupSize: 2,   instructions: "Share and build on each other's ideas.",     inheritLocations: true  },
-      { index: 2, name: 'Quartets',    duration: 300, startOffset: 180, groupSize: 4,   instructions: 'Identify the most interesting ideas.',        inheritLocations: true  },
-      { index: 3, name: 'Whole Group', duration: 420, startOffset: 480, groupSize: 999, instructions: 'Share key insights with the whole group.',    inheritLocations: false },
+      { index: 0, name: 'Introduction', duration: 60,  startOffset: 0,   groupSize: 999, instructions: 'Share the invitation and identify the shared challenge.', inheritLocations: false },
+      { index: 1, name: 'Individual',   duration: 60,  startOffset: 60,  groupSize: 1,   instructions: 'Work alone. Write your ideas.',                        inheritLocations: false },
+      { index: 2, name: 'Pairs',        duration: 120, startOffset: 120, groupSize: 2,   instructions: "Share and build on each other's ideas.",               inheritLocations: true  },
+      { index: 3, name: 'Quartets',     duration: 300, startOffset: 240, groupSize: 4,   instructions: 'Identify the most interesting ideas.',                  inheritLocations: true  },
+      { index: 4, name: 'Whole Group',  duration: 420, startOffset: 540, groupSize: 999, instructions: 'Share key insights with the whole group.',              inheritLocations: false },
     ]
   },
   'What-So-What-Now-What': {

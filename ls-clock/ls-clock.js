@@ -455,6 +455,7 @@ function renderSetupPage() {
 
     <details class="setup-section manual-form">
       <summary><h2 style="display:inline">Or: Set up manually</h2></summary>
+      <button type="button" id="load-sample-btn">Load sample setup</button>
 
       <section class="setup-section">
         <h2>1. Choose a structure</h2>
@@ -465,6 +466,7 @@ function renderSetupPage() {
             </select>
             <a id="learn-more-link" data-role="learn-more" href="#" target="_blank" rel="noopener" style="display:none">Learn more →</a>
           </div>
+          <p data-role="structure-description"></p>
         </div>
         <button type="button" data-role="add-structure-btn" id="add-structure-btn">+ Add another structure</button>
       </section>
@@ -542,10 +544,12 @@ function renderSetupPage() {
   const structSelect = document.getElementById('structure-select');
   const invInput = document.getElementById('invitation-input');
   const learnMore = document.getElementById('learn-more-link');
+  const structureDescription = document.querySelector('[data-role="structure-description"]');
   const updateStructureFields = () => {
     const s = STRUCTURES[structSelect.value];
     if (s) {
       if (invInput) invInput.value = s.invitation;
+      if (structureDescription) structureDescription.textContent = s.description || '';
       if (learnMore) {
         learnMore.href = s.url || '#';
         learnMore.style.display = s.url ? '' : 'none';
@@ -555,6 +559,17 @@ function renderSetupPage() {
   if (structSelect) {
     structSelect.addEventListener('change', updateStructureFields);
     updateStructureFields();
+  }
+
+  const loadSampleBtn = document.getElementById('load-sample-btn');
+  if (loadSampleBtn) {
+    loadSampleBtn.addEventListener('click', () => {
+      updateStructureFields();
+      setStartTime(2 * 60 * 1000);
+      document.getElementById('participants-input').value = 'Alice\nBob\nCarol\nDave';
+      document.getElementById('locations-input').value = 'Room A\nRoom B';
+      document.getElementById('plenary-input').value = 'Main Hall';
+    });
   }
 
   // Wire add-structure button
