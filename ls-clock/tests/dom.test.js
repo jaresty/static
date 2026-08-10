@@ -443,6 +443,37 @@ test('P-walkthrough-participant: walkthrough demonstrates the participant journe
   expect(participantStates).toEqual(['landing', 'identity', 'live', 'overview']);
 });
 
+test('P-walkthrough-home: completing or dismissing the tour restores clean setup', async ({ page }) => {
+  const outcomes = [];
+  for (const exit of ['done', 'escape', 'close']) {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Take a walkthrough' }).click();
+    while (await page.locator('.driver-popover').count()) {
+      const title = (await page.locator('.driver-popover-title').textContent()).trim();
+      if (exit !== 'done' && title === 'Participant landing') {
+        if (exit === 'escape') await page.keyboard.press('Escape');
+        if (exit === 'close') await page.locator('.driver-popover-close-btn').click();
+        break;
+      }
+      const nextButton = page.locator('.driver-popover-next-btn');
+      const buttonText = (await nextButton.textContent()).trim();
+      await nextButton.click();
+      if (buttonText === 'Done') break;
+      await expect(page.locator('.driver-popover-title')).not.toHaveText(title);
+    }
+    await page.waitForFunction(() => Boolean(document.querySelector('.manual-form')?.offsetParent), null, { timeout: 1000 }).catch(() => {});
+    outcomes.push({
+      setupVisible: await page.locator('.manual-form').isVisible(),
+      participantAbsent: await page.locator('[data-role="participant-landing"], .participant-view').count() === 0,
+    });
+  }
+  expect(outcomes).toEqual([
+    { setupVisible: true, participantAbsent: true },
+    { setupVisible: true, participantAbsent: true },
+    { setupVisible: true, participantAbsent: true },
+  ]);
+});
+
 test('P-concept-visual: product introduction has clear visual hierarchy', async ({ page }) => {
   await page.goto('/');
   const metrics = await page.evaluate(() => {
@@ -460,6 +491,31 @@ test('P-concept-visual: product introduction has clear visual hierarchy', async 
   expect(metrics).toEqual({ documentTitle: 'LS Clock — Liberating Structures session runner', titleSize: 32, introSpacing: 24, taglineSize: 18 });
 });
 
+test('P-llm-toggle: LLM planning uses an accessible button-controlled panel', async ({ page }) => {
+  await page.goto('/');
+  const states = await page.evaluate(() => {
+    const button = document.querySelector('[data-role="llm-toggle"]');
+    const panel = button?.getAttribute('aria-controls')
+      ? document.getElementById(button.getAttribute('aria-controls'))
+      : null;
+    if (!button || !panel) return { button: false, name: null, controls: false, initial: null, opened: null, closed: null };
+    const initial = { expanded: button.getAttribute('aria-expanded'), hidden: panel.hidden };
+    button.click();
+    const opened = { expanded: button.getAttribute('aria-expanded'), hidden: panel.hidden };
+    button.click();
+    const closed = { expanded: button.getAttribute('aria-expanded'), hidden: panel.hidden };
+    return { button: button.tagName === 'BUTTON', name: button.textContent.trim(), controls: true, initial, opened, closed };
+  });
+  expect(states).toEqual({
+    button: true,
+    name: 'Plan with an LLM',
+    controls: true,
+    initial: { expanded: 'false', hidden: true },
+    opened: { expanded: 'true', hidden: false },
+    closed: { expanded: 'false', hidden: true },
+  });
+});
+
 test('P-hierarchy-2a: manual setup is open and precedes optional assistance', async ({ page }) => {
   await page.goto('/');
   const hierarchy = await page.evaluate(() => {
@@ -473,13 +529,14 @@ test('P-hierarchy-2a: manual setup is open and precedes optional assistance', as
   expect(hierarchy).toEqual({ manualOpen: true, manualBeforeAssistant: true });
 });
 
-test('P-hierarchy-2b: LLM assistance is an optional collapsed disclosure', async ({ page }) => {
+test('P-hierarchy-2b: LLM assistance begins behind a normal closed button', async ({ page }) => {
   await page.goto('/');
   const assistant = await page.locator('.llm-section').evaluate(element => ({
-    isDisclosure: element.tagName === 'DETAILS',
-    open: element.open,
+    isSection: element.tagName === 'SECTION',
+    buttonVisible: Boolean(element.querySelector('[data-role="llm-toggle"]')?.offsetParent),
+    panelHidden: element.querySelector('#llm-planning-panel')?.hidden,
   }));
-  expect(assistant).toEqual({ isDisclosure: true, open: false });
+  expect(assistant).toEqual({ isSection: true, buttonVisible: true, panelHidden: true });
 });
 
 test('P-hierarchy-option: optional assistance stays visible near the start of manual setup', async ({ page }) => {

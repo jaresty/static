@@ -66,11 +66,19 @@
 
   /* ---- Setup ---- */
   .setup-section { margin-bottom: 1.5rem; }
-  .llm-section, .manual-form, #preview-section, #result-section {
+  .manual-form, #preview-section, #result-section {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 1.25rem;
+  }
+  #llm-toggle-btn { min-height: 44px; }
+  .llm-section .assistant-content {
+    margin-top: .75rem;
+    padding: 1rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
   }
   .manual-form > summary { cursor: pointer; list-style-position: outside; }
   .manual-form[open] > summary { margin-bottom: 1.25rem; }

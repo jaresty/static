@@ -618,6 +618,10 @@ function startSetupWalkthrough() {
     prevBtnText: 'Back',
     doneBtnText: 'Done',
     popoverClass: 'ls-clock-tour',
+    onDestroyStarted: () => {
+      walkthrough.destroy();
+      renderSetupPage();
+    },
   });
   walkthrough.drive();
 }
@@ -640,9 +644,9 @@ function renderSetupPage() {
       <summary><h2 style="display:inline">Set up your session</h2></summary>
       <button type="button" id="load-sample-btn">Load sample setup</button>
 
-      <details class="setup-section llm-section">
-        <summary><h2 style="display:inline">Want help choosing? Plan with an LLM</h2></summary>
-        <div class="assistant-content">
+      <section class="setup-section llm-section">
+        <button type="button" id="llm-toggle-btn" data-role="llm-toggle" aria-expanded="false" aria-controls="llm-planning-panel">Plan with an LLM</button>
+        <div id="llm-planning-panel" class="assistant-content" hidden>
           <p class="hint">Copy the planning prompt into any LLM, answer its questions, then open the setup link it returns. The link is bookmarkable and the app fills in all activity mechanics.</p>
           <div class="setup-actions">
             <button id="copy-prompt-btn" class="primary-btn">Copy planning prompt</button>
@@ -650,7 +654,7 @@ function renderSetupPage() {
           </div>
           <div id="plan-error" class="error-msg" style="display:none"></div>
         </div>
-      </details>
+      </section>
 
       <section class="setup-section">
         <h2>1. Choose a structure</h2>
@@ -741,6 +745,13 @@ function renderSetupPage() {
     </section>`;
 
   document.getElementById('start-walkthrough-btn')?.addEventListener('click', startSetupWalkthrough);
+  const llmToggle = document.querySelector('[data-role="llm-toggle"]');
+  const llmPanel = document.getElementById('llm-planning-panel');
+  llmToggle?.addEventListener('click', () => {
+    const expanded = llmToggle.getAttribute('aria-expanded') === 'true';
+    llmToggle.setAttribute('aria-expanded', String(!expanded));
+    llmPanel.hidden = expanded;
+  });
 
   // Prefill start time to now + 2 min
   const setStartTime = (offsetMs) => {
