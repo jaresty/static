@@ -188,7 +188,8 @@
     .unplaced-note { min-height: 48px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 780; text-align: left; cursor: grab; touch-action: none; box-shadow: 0 4px 12px rgba(23,32,27,.07); }
     .unplaced-note:hover { border-color: var(--violet); transform: translateX(-2px); }
     .unplaced-note.active { border: 2px solid var(--violet); background: var(--violet-soft); box-shadow: 0 0 0 3px rgba(111,90,232,.12); }
-    .unplaced-note.dragging { opacity: .68; cursor: grabbing; }
+    .unplaced-note.dragging { opacity: .32; cursor: grabbing; }
+    .drag-ghost { position: fixed; z-index: 1000; min-height: 48px; padding: 10px 12px; border: 2px solid var(--violet); border-radius: 12px; background: var(--violet-soft); color: var(--ink); font: inherit; font-weight: 780; line-height: normal; text-align: left; pointer-events: none; transform: translate(-50%, -50%) rotate(-1.5deg); box-shadow: 0 16px 36px rgba(23,32,27,.24); overflow-wrap: anywhere; }
     .candidate-name { margin: 8px 0 0; color: var(--ink); font-size: clamp(1.35rem, 3vw, 2rem); letter-spacing: -.035em; line-height: 1.1; overflow-wrap: anywhere; }
     .placement-drag-instruction { margin: 12px 0 16px; color: var(--muted); line-height: 1.45; }
     .coordinate-readout { padding: 12px 14px; border-radius: 12px; background: #f8f5ed; color: var(--muted); font-size: .84rem; line-height: 1.45; }

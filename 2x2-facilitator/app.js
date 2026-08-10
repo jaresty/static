@@ -845,11 +845,31 @@ const facilitatorApp = {
       const board = this.elements['placement-board'];
       let moved = false;
       let latest = null;
+      let ghost = null;
       button.setPointerCapture(event.pointerId);
+      const moveGhost = (moveEvent) => {
+        if (!ghost) {
+          ghost = document.createElement('div');
+          ghost.className = 'drag-ghost';
+          ghost.dataset.dragGhost = '';
+          ghost.textContent = button.textContent;
+          ghost.setAttribute('aria-hidden', 'true');
+          ghost.style.width = `${button.getBoundingClientRect().width}px`;
+          document.body.append(ghost);
+          button.classList.add('dragging');
+        }
+        ghost.style.left = `${moveEvent.clientX}px`;
+        ghost.style.top = `${moveEvent.clientY}px`;
+      };
+      const clearDragVisual = () => {
+        ghost?.remove();
+        ghost = null;
+        button.classList.remove('dragging');
+      };
       const move = (moveEvent) => {
         if (Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y) < 5) return;
         moved = true;
-        button.classList.add('dragging');
+        moveGhost(moveEvent);
         latest = this.pointFromEvent(moveEvent, board);
         this.elements['placement-coordinates'].textContent = this.describePosition(latest);
       };
@@ -858,6 +878,7 @@ const facilitatorApp = {
         button.removeEventListener('pointermove', move);
         button.removeEventListener('pointerup', finish);
         button.removeEventListener('pointercancel', finish);
+        clearDragVisual();
         const bounds = board.getBoundingClientRect();
         const inside = moved && upEvent.clientX >= bounds.left && upEvent.clientX <= bounds.right
           && upEvent.clientY >= bounds.top && upEvent.clientY <= bounds.bottom;
@@ -866,7 +887,6 @@ const facilitatorApp = {
           this.draftPosition = latest;
           this.commitPlacement();
         } else if (moved) {
-          button.classList.remove('dragging');
           this.elements['placement-coordinates'].textContent = this.describePosition(this.draftPosition);
         }
       };
