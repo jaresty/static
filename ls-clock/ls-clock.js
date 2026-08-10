@@ -541,45 +541,74 @@ function startSetupWalkthrough() {
   const createDriver = window.driver?.js?.driver;
   if (typeof createDriver !== 'function') return;
 
+  const demoSession = compileQuickPlan({
+    structures: [{ key: '1-2-4-All' }],
+    invitation: 'What ideas or actions do you recommend?',
+    startTime: Math.floor(Date.now() / 1000) - 190,
+    participants: ['Alice', 'Bob', 'Carol', 'Dave'],
+    locations: ['Room A', 'Room B'],
+    plenaryLocation: 'Main Hall',
+  });
+  let walkthrough;
   const steps = [
     {
       element: '[data-role="clock-explanation"]',
-      popover: { title: 'One shared clock', description: 'See how a shared start time and each device’s clock keep the whole session on the same step—without a coordination server.' },
-    },
-    {
-      element: '#structure-sequence',
-      popover: { title: 'Choose a structure', description: 'Build an intentional sequence. Every selected activity shows what it is for, how long it takes, and how participation changes.' },
-    },
-    {
-      element: '[data-role="participants-setup"]',
-      popover: { title: 'Add participants', description: 'Enter the prepared roster. LS Clock uses it to create groups and keep role assignments transparent.' },
-    },
-    {
-      element: '[data-role="meeting-spaces"]',
-      popover: { title: 'Add meeting spaces', description: 'Provide enough rooms or links for the largest number of simultaneous breakout groups. Solo work needs no space.' },
-    },
-    {
-      element: '[data-role="timing-settings"]',
-      popover: { title: 'Set shared timing', description: 'Passing time and short breaks are session-wide, so every device stays on one timeline.' },
-    },
-    {
-      element: '#generate-btn',
-      popover: { title: 'Generate and share', description: 'Create one bookmarkable session URL, review the assignments, and share it with participants.' },
-    },
-    {
-      element: '[data-role="global-navigation"]',
-      popover: { title: 'Navigate anytime', description: 'Return Home or start a clean session from any primary view.' },
+      popover: { title: 'One shared clock', description: 'A facilitator shares one session link. From there, the most important experience belongs to each participant.' },
     },
   ];
+
   const roleAssignment = document.querySelector('[data-role="fishbowl-role-assignment"]');
   if (roleAssignment && !roleAssignment.hidden) {
-    steps.splice(3, 0, {
+    steps.push({
       element: '[data-role="fishbowl-role-assignment"]',
       popover: { title: 'Assign roles intentionally', description: 'For User Experience Fishbowl, choose the 3–7 experienced participants who belong in the inner circle.' },
     });
   }
 
-  createDriver({
+  steps.push(
+    {
+      element: '#generate-btn',
+      popover: {
+        title: 'Generate and share',
+        description: 'Create one bookmarkable session URL and share it. Next, see exactly what a participant sees.',
+        onNextClick: () => {
+          renderJoinOrView(demoSession);
+          requestAnimationFrame(() => walkthrough.moveNext());
+        },
+      },
+    },
+    {
+      element: '[data-role="participant-landing"]',
+      popover: { title: 'Participant landing', description: 'Before joining, participants see the shared start, invitation, countdown, and full session context.' },
+    },
+    {
+      element: '#join-btn',
+      popover: {
+        title: 'Join your session',
+        description: 'Prepared participants choose their name so the facilitator’s groups and roles stay authoritative.',
+        onNextClick: () => {
+          const nameInput = document.getElementById('name-input');
+          if (nameInput) nameInput.value = 'Alice';
+          document.getElementById('join-btn')?.click();
+          requestAnimationFrame(() => walkthrough.moveNext());
+        },
+      },
+    },
+    {
+      element: '[data-role="location"]',
+      popover: { title: 'Follow the current step', description: 'The live view emphasizes where to go, who is in the group, assigned roles, remaining time, and the activity instructions.' },
+    },
+    {
+      element: '[data-role="overview"]',
+      popover: { title: 'See the whole session', description: 'Participants can expand the overview to understand the sequence and see where every group is now.' },
+    },
+    {
+      element: '[data-role="global-navigation"]',
+      popover: { title: 'Navigate anytime', description: 'Return Home or start a clean session from any primary view.' },
+    },
+  );
+
+  walkthrough = createDriver({
     steps,
     showProgress: true,
     allowClose: true,
@@ -589,7 +618,8 @@ function startSetupWalkthrough() {
     prevBtnText: 'Back',
     doneBtnText: 'Done',
     popoverClass: 'ls-clock-tour',
-  }).drive();
+  });
+  walkthrough.drive();
 }
 
 function renderSetupPage() {

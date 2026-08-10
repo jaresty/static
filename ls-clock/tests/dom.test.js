@@ -398,27 +398,49 @@ test('P-clock-explanation: landing explains serverless synchronization through o
   }).toEqual({ why: true, serverless: true, start: true, device: true, derivesState: true });
 });
 
-test('P-walkthrough: in-product Driver.js tour covers the primary setup journey', async ({ page }) => {
+test('P-walkthrough-focus: walkthrough limits facilitator-control callouts', async ({ page }) => {
   await page.goto('/');
-  const available = await page.evaluate(() => ({
-    button: Boolean(document.querySelector('[data-role="start-walkthrough"]')),
-    driver: typeof window.driver?.js?.driver === 'function',
-  }));
-  const titles = [];
-  if (available.button && available.driver) {
-    await page.getByRole('button', { name: 'Take a walkthrough' }).click();
-    for (let index = 0; index < 7; index++) {
-      titles.push((await page.locator('.driver-popover-title').textContent()).trim());
-      if (index < 6) await page.locator('.driver-popover-next-btn').click();
+  await page.selectOption('#structure-select', { label: 'User Experience Fishbowl' });
+  await page.fill('#participants-input', 'A\nB\nC\nD\nE\nF\nG\nH');
+  await page.getByRole('button', { name: 'Take a walkthrough' }).click();
+  const shownFacilitatorControls = [];
+  while (await page.locator('.driver-popover').count()) {
+    const title = (await page.locator('.driver-popover-title').textContent()).trim();
+    const activeTarget = page.locator('.driver-active-element');
+    if (await activeTarget.locator('xpath=ancestor-or-self::*[contains(concat(" ", normalize-space(@class), " "), " manual-form ")]').count()) {
+      shownFacilitatorControls.push(title);
     }
-    await page.keyboard.press('Escape');
+    const nextButton = page.locator('.driver-popover-next-btn');
+    if ((await nextButton.textContent()).trim() === 'Done') break;
+    await nextButton.click();
+    await expect(page.locator('.driver-popover-title')).not.toHaveText(title);
   }
-  const dismissed = await page.locator('.driver-popover').count() === 0;
-  expect({ available, titles, dismissed }).toEqual({
-    available: { button: true, driver: true },
-    titles: ['One shared clock', 'Choose a structure', 'Add participants', 'Add meeting spaces', 'Set shared timing', 'Generate and share', 'Navigate anytime'],
-    dismissed: true,
-  });
+  await page.keyboard.press('Escape');
+  expect(shownFacilitatorControls.length).toBeLessThanOrEqual(2);
+  await expect(page.locator('.driver-popover')).toHaveCount(0);
+});
+
+test('P-walkthrough-participant: walkthrough demonstrates the participant journey in order', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Take a walkthrough' }).click();
+  const participantStates = [];
+  while (await page.locator('.driver-popover').count()) {
+    const title = (await page.locator('.driver-popover-title').textContent()).trim();
+    const expectedTarget = {
+      'Participant landing': ['[data-role="participant-landing"]', 'landing'],
+      'Join your session': ['#join-btn', 'identity'],
+      'Follow the current step': ['[data-role="location"]', 'live'],
+      'See the whole session': ['[data-role="overview"]', 'overview'],
+    }[title];
+    if (expectedTarget && await page.locator(expectedTarget[0]).evaluate(element => element.classList.contains('driver-active-element'))) {
+      participantStates.push(expectedTarget[1]);
+    }
+    const nextButton = page.locator('.driver-popover-next-btn');
+    if ((await nextButton.textContent()).trim() === 'Done') break;
+    await nextButton.click();
+    await expect(page.locator('.driver-popover-title')).not.toHaveText(title);
+  }
+  expect(participantStates).toEqual(['landing', 'identity', 'live', 'overview']);
 });
 
 test('P-concept-visual: product introduction has clear visual hierarchy', async ({ page }) => {
