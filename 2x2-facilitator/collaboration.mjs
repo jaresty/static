@@ -173,7 +173,7 @@ export function buildSlackMessage(artifact, url, { preview = false } = {}) {
   } else {
     lines.push('Results are concealed. Send this link privately to the facilitator.');
   }
-  lines.push(url);
+  lines.push(`[Quadrant response](${url})`);
   return lines.join('\n');
 }
 

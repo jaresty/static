@@ -185,12 +185,16 @@ test('c5 Quadrant Slack sharing conceals results by default', async () => {
   assert.doesNotMatch(message, /Placement preview:|X 0\.|Y 0\./i);
 });
 
-test('c6 Quadrant Slack sharing includes exactly one response URL', async () => {
+test('c6 Quadrant Slack sharing wraps the response URL in a labeled Markdown link', async () => {
   const { encodeResponseUrl, decodeShareUrl, buildSlackMessage } = await import('./collaboration.mjs');
   const session = await completedSession();
   const url = encodeResponseUrl(session, { contributor: 'Alex', baseUrl: 'https://static.test/2x2-facilitator/' });
   const message = buildSlackMessage(decodeShareUrl(url), url, { preview: false });
-  assert.equal(message.match(/https:\/\/\S+/g)?.length, 1);
+  const labeledLink = `[Quadrant response](${url})`;
+  assert.deepEqual({
+    labeled: message.endsWith(labeledLink),
+    rawUrlElsewhere: message.replace(labeledLink, '').includes(url),
+  }, { labeled: true, rawUrlElsewhere: false });
 });
 
 test('c7 Quadrant concealed Slack sharing recommends private facilitator handoff', async () => {

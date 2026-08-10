@@ -22,7 +22,8 @@ agent-browser --session "$session" click '#combine-mode' >/dev/null
 agent-browser --session "$session" fill '#response-links' "$first
 $second" >/dev/null
 agent-browser --session "$session" click '#collect-responses' >/dev/null
-result="$(agent-browser --session "$session" eval '(async()=>{const {decodeShareUrl}=await import("./collaboration.mjs");const expected=document.querySelector("#response-links").value.trim().split(/\s+/).flatMap(url=>{const response=decodeShareUrl(url);return Object.entries(response.payload.positions).map(([itemId,point])=>`${response.contributionId}:${itemId}:${point.x}:${point.y}`)}).sort();const actual=Array.from(document.querySelectorAll("[data-placement-mark]")).map(mark=>`${mark.dataset.contributionId}:${mark.dataset.itemId}:${mark.dataset.x}:${mark.dataset.y}`).sort();return expected.length===6&&JSON.stringify(actual)===JSON.stringify(expected)})()')"
+response_urls_json="$(node -e 'console.log(JSON.stringify(process.argv.slice(1)))' "$first" "$second")"
+result="$(agent-browser --session "$session" eval "(async()=>{const {decodeShareUrl}=await import('./collaboration.mjs');const expected=$response_urls_json.flatMap(url=>{const response=decodeShareUrl(url);return Object.entries(response.payload.positions).map(([itemId,point])=>\`\${response.contributionId}:\${itemId}:\${point.x}:\${point.y}\`)}).sort();const actual=Array.from(document.querySelectorAll('[data-placement-mark]')).map(mark=>\`\${mark.dataset.contributionId}:\${mark.dataset.itemId}:\${mark.dataset.x}:\${mark.dataset.y}\`).sort();return expected.length===6&&JSON.stringify(actual)===JSON.stringify(expected)})()")"
 if [[ "$result" != true ]]; then
   printf 'FAIL quadrant visual marks: submitted placements do not map one-to-one to rendered marks\n'
   exit 1

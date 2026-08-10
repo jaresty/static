@@ -72,7 +72,7 @@ const facilitatorApp = {
       'mode-view', 'solo-mode', 'setup-mode', 'combine-mode', 'facilitator-backup-input', 'facilitator-backup-status', 'back-to-choices', 'privacy-note', 'invitation-view', 'invitation-summary', 'start-response',
       'shared-facilitator-view', 'shared-facilitator-title', 'shared-facilitator-description', 'shared-facilitator-meta', 'shared-facilitator-x-summary', 'shared-facilitator-y-summary', 'shared-facilitator-board', 'shared-facilitator-disagreement-list', 'shared-facilitator-navigator-heading', 'shared-facilitator-navigator-meta', 'shared-facilitator-inspector', 'copy-shared-markdown', 'download-shared-markdown', 'shared-markdown-output', 'shared-markdown-status',
       'facilitator-handoff-view', 'facilitator-handoff-summary', 'import-facilitator-handoff', 'discard-facilitator-handoff',
-      'collection-view', 'collection-grid', 'response-import-panel', 'response-links', 'collect-responses', 'clear-responses', 'collection-status', 'response-count', 'response-list', 'disagreement-list', 'previous-disagreement', 'next-disagreement', 'undo-resolution', 'reset-all-resolutions', 'show-response-names', 'convergence-board', 'resolution-inspector', 'convergence-summary', 'include-resolution-adjustments', 'export-resolution', 'copy-resolution-export', 'resolution-export-output', 'resolution-export-status',
+      'collection-view', 'collection-grid', 'response-import-panel', 'response-links', 'response-pills', 'collect-responses', 'clear-responses', 'collection-status', 'response-count', 'response-list', 'disagreement-list', 'previous-disagreement', 'next-disagreement', 'undo-resolution', 'reset-all-resolutions', 'show-response-names', 'convergence-board', 'resolution-inspector', 'convergence-summary', 'include-resolution-adjustments', 'export-resolution', 'copy-resolution-export', 'resolution-export-output', 'resolution-export-status',
       'include-handoff-names', 'copy-facilitator-view', 'copy-facilitator-handoff', 'download-facilitator-backup', 'facilitator-share-output', 'facilitator-share-status',
       'setup-view', 'workspace-mode-label', 'setup-submit', 'setup-share-panel', 'setup-share-output', 'copy-setup-slack', 'copy-setup-link', 'answer-own-invitation', 'setup-share-status',
       'placement-view', 'review-view', 'setup-form', 'prompt', 'activity-description', 'x-label', 'x-low', 'x-high',
@@ -95,6 +95,11 @@ const facilitatorApp = {
     this.elements['back-to-choices'].addEventListener('click', () => this.enterEntry());
     this.elements['start-response'].addEventListener('click', () => this.startResponse());
     this.elements['collect-responses'].addEventListener('click', () => this.collectResponses());
+    this.elements['response-links'].addEventListener('paste', (event) => this.pasteResponses(event));
+    this.elements['response-pills'].addEventListener('click', (event) => {
+      const button = event.target.closest('[data-remove-response]');
+      if (button) this.removeResponse(button.dataset.removeResponse);
+    });
     this.elements['clear-responses'].addEventListener('click', () => this.clearCollection());
     this.elements['copy-setup-slack'].addEventListener('click', () => this.copySetup(true));
     this.elements['copy-setup-link'].addEventListener('click', () => this.copySetup(false));
@@ -927,15 +932,26 @@ const facilitatorApp = {
     await this.copyText(text, this.elements['export-output'], this.elements['response-share-status']);
   },
 
-  collectResponses() {
-    const urls = this.elements['response-links'].value.match(/https?:\/\/\S+/gu) ?? [];
+  pasteResponses(event) {
+    const text = event.clipboardData?.getData('text/plain') ?? '';
+    if (!text) return;
+    event.preventDefault();
+    this.collectResponses(text);
+  },
+
+  collectResponses(source = this.elements['response-links'].value) {
+    const urls = source.match(/https?:\/\/\S+/gu) ?? [];
     let added = 0;
     let duplicates = 0;
     let mismatches = 0;
+    let invalid = source.trim() && urls.length === 0 ? 1 : 0;
     for (const raw of urls) {
       try {
         const response = decodeShareUrl(raw.replace(/[)>.,]+$/u, ''));
-        if (response.kind !== 'response') continue;
+        if (response.kind !== 'response') {
+          invalid += 1;
+          continue;
+        }
         if (!this.collection) this.collection = createCollection(response.setup);
         const result = addResponse(this.collection, response);
         this.collection = result.collection;
@@ -943,11 +959,28 @@ const facilitatorApp = {
         if (result.status === 'duplicate') duplicates += 1;
         if (result.status === 'mismatch') mismatches += 1;
       } catch {
-        mismatches += 1;
+        invalid += 1;
       }
     }
-    this.elements['collection-status'].textContent = `${added} added · ${duplicates} duplicate · ${mismatches} mismatch`;
+    this.elements['response-links'].value = '';
+    this.elements['collection-status'].textContent = `${added} added · ${duplicates} duplicate · ${mismatches} setup mismatch · ${invalid} invalid response link${invalid === 1 ? '' : 's'}`;
     if (added > 0) this.resolution = createResolution(this.collection);
+    this.renderCollection();
+  },
+
+  removeResponse(contributionId) {
+    const removed = this.collection?.responses.find((response) => response.contributionId === contributionId);
+    if (!removed) return;
+    const remaining = this.collection.responses.filter((response) => response.contributionId !== contributionId);
+    if (remaining.length) {
+      this.collection = { ...structuredClone(this.collection), responses: remaining };
+      this.resolution = createResolution(this.collection);
+    } else {
+      this.collection = null;
+      this.resolution = null;
+    }
+    this.focusedResolutionId = null;
+    this.elements['collection-status'].textContent = `${removed.contributor || 'Response'} removed.`;
     this.renderCollection();
   },
 
@@ -1351,13 +1384,26 @@ const facilitatorApp = {
 
   renderCollection() {
     const responses = this.collection?.responses ?? [];
+    this.elements['response-pills'].replaceChildren(...responses.map(({ contributor, contributionId }, index) => {
+      const pill = document.createElement('span');
+      pill.className = 'response-pill';
+      pill.dataset.responsePill = contributionId;
+      pill.setAttribute('role', 'listitem');
+      const label = document.createElement('span');
+      label.textContent = contributor || `Response ${index + 1}`;
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.dataset.removeResponse = contributionId;
+      remove.setAttribute('aria-label', `Remove ${label.textContent} response`);
+      remove.textContent = '×';
+      pill.append(label, remove);
+      return pill;
+    }));
     const grid = this.elements['collection-grid'];
     const importPanel = this.elements['response-import-panel'];
-    const hadResponses = grid.classList.contains('has-responses');
     const hasResponses = responses.length > 0;
     grid.classList.toggle('has-responses', hasResponses);
-    if (!hasResponses) importPanel.open = true;
-    else if (!hadResponses) importPanel.open = false;
+    importPanel.open = true;
     this.elements['response-count'].textContent = `${responses.length} ${responses.length === 1 ? 'response' : 'responses'}`;
     this.elements['response-list'].replaceChildren(...responses.map(({ contributor }) => {
       const item = document.createElement('li');

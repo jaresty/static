@@ -115,7 +115,7 @@ function prepareCollection() {
   collection = addResponse(collection, second).collection;
   app.collection = collection;
   app.resolution = createResolution(collection);
-  app.elements['response-links'].value = `${firstUrl}\n${secondUrl}`;
+  app.elements['response-links'].value = '';
   app.enterCollection();
 }
 

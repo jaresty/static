@@ -47,7 +47,8 @@ for spec in "quadrant|2x2-facilitator|$quadrant_response|$quadrant_response_2|#q
   agent-browser --session "$session" fill '#response-links' "$response_url" >/dev/null
   agent-browser --session "$session" click '#collect-responses' >/dev/null
   first_ok="$(agent-browser --session "$session" eval 'document.querySelector("#response-count").textContent.trim() === "1 response" && /^1 added/.test(document.querySelector("#collection-status").textContent)')"
-  if [[ "$name" == quadrant ]]; then agent-browser --session "$session" click '#response-import-panel > summary' >/dev/null; fi
+  if [[ "$name" == quadrant ]]; then agent-browser --session "$session" eval 'document.querySelector("#response-import-panel").open=true' >/dev/null; fi
+  agent-browser --session "$session" fill '#response-links' "$response_url" >/dev/null
   agent-browser --session "$session" click '#collect-responses' >/dev/null
   duplicate_ok="$(agent-browser --session "$session" eval 'document.querySelector("#response-count").textContent.trim() === "1 response" && /1 duplicate/.test(document.querySelector("#collection-status").textContent)')"
   [[ "$first_ok" == true && "$duplicate_ok" == true ]] || failures+=("$name local collection")
