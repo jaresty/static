@@ -273,6 +273,16 @@
     background: var(--surface); border-radius: var(--radius);
     padding: .75rem 1rem; margin-bottom: 1rem; line-height: 1.5;
   }
+  .up-next {
+    background: rgba(108,142,245,.09); border: 1px solid rgba(108,142,245,.28);
+    border-radius: var(--radius); display: grid; gap: .45rem; margin-bottom: 1rem;
+    max-width: 100%; overflow-wrap: anywhere; padding: .85rem 1rem;
+  }
+  .up-next-heading { align-items: baseline; display: flex; flex-wrap: wrap; gap: .35rem .65rem; }
+  .up-next-heading > span:last-child { color: var(--muted); font-size: .82rem; margin-left: auto; }
+  .up-next-kicker { color: #aab2dc; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .up-next-movement { color: #dbe2ff; font-weight: 650; }
+  .up-next-detail { color: var(--muted); font-size: .85rem; line-height: 1.4; }
 
   .phase-transition .location-block {
     animation: flash .5s ease-out;

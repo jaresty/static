@@ -44,6 +44,13 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/tests/fixture.html');
 });
 
+test('setup warns that breakout URLs must work without the host', async ({ page }) => {
+  const guidance = await page.locator('[data-role="meeting-spaces"] .hint').textContent();
+  expect(guidance).toMatch(/verify in advance/i);
+  expect(guidance).toMatch(/every participant/i);
+  expect(guidance).toMatch(/without the host/i);
+});
+
 // P3: location element is first in DOM, before group-members
 test('P3: location element appears before group-members in participant view', async ({ page }) => {
   await page.evaluate(({ session, nowMs }) => {
@@ -69,6 +76,45 @@ test('P3: location element appears before group-members in participant view', as
   const joinBtn = page.locator('.join-btn');
   await expect(joinBtn).toBeVisible();
   await expect(joinBtn).toHaveText(/Meet A/);
+});
+
+test('active steps preview the next activity assignment', async ({ page }) => {
+  const nowMs = (SESSION.startTime + 30) * 1000;
+  await page.evaluate(({ session, nowMs }) => {
+    renderParticipantView(document.getElementById('app'), session, 'Alice', nowMs);
+  }, { session: SESSION, nowMs });
+
+  const preview = page.locator('[data-role="up-next"]');
+  await expect(preview).toBeVisible();
+  await expect(preview).toContainText('Up next');
+  await expect(preview).toContainText('Pairs');
+  await expect(preview).toContainText('Starts in 0:30');
+  await expect(preview.locator('[data-role="up-next-movement"]')).toContainText('Move to Meet A');
+  await expect(preview.locator('[data-role="up-next-group"]')).toContainText('Alice (you), Bob');
+  await expect(preview.locator('[data-role="up-next-location"]')).toContainText('Meet A');
+});
+
+test('final activity steps omit the Up next preview', async ({ page }) => {
+  const nowMs = (SESSION.startTime + 500) * 1000;
+  await page.evaluate(({ session, nowMs }) => {
+    renderParticipantView(document.getElementById('app'), session, 'Alice', nowMs);
+  }, { session: SESSION, nowMs });
+  await expect(page.locator('[data-role="up-next"]')).toHaveCount(0);
+});
+
+test('Up next preview fits a 390px participant viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const nowMs = (SESSION.startTime + 30) * 1000;
+  await page.evaluate(({ session, nowMs }) => {
+    renderParticipantView(document.getElementById('app'), session, 'Alice', nowMs);
+  }, { session: SESSION, nowMs });
+  const metrics = await page.locator('[data-role="up-next"]').evaluate(element => ({
+    cardWidth: element.getBoundingClientRect().width,
+    viewportWidth: document.documentElement.clientWidth,
+    pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  }));
+  expect(metrics.cardWidth).toBeLessThanOrEqual(metrics.viewportWidth);
+  expect(metrics.pageOverflow).toBe(false);
 });
 
 test('P-entry-9a: joined early participants see start guidance', async ({ page }) => {

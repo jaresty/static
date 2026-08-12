@@ -54,8 +54,8 @@ RFC 3986-encode values: ( as %28 and ) as %29. Output ONLY the complete setup UR
 
 ## Interview checklist — ask all four
 1. What outcome or question becomes the invitation?
-2. Who are all participants?
-3. What breakout rooms or meeting URLs are available?
+2. Who participates?
+3. Which room URLs can every participant enter without the host?
 4. What is the plenary/main room?
 Do not produce the URL until all four are answered and confirmed. Then silently verify: chosen structure count; invitation present; participant count equals names; location count equals breakout rooms; plenary present. If a value is unknown, ask for a placeholder; never silently omit it. Every field is editable on the site. Do not ask for start time.
 

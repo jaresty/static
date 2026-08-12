@@ -193,10 +193,58 @@ function renderParticipantView(container, session, participantName, nowMs) {
   instrEl.textContent = phase.instructions;
   container.appendChild(instrEl);
 
-  // 5. Overview panel (expandable)
+  // 5. Preview the next activity assignment
+  const phasePosition = session.phases.findIndex(candidate => candidate.index === phase.index);
+  const nextPhase = session.phases.slice(phasePosition + 1).find(candidate => candidate.groupSize > 0);
+  if (nextPhase) {
+    const nextGroup = getParticipantGroup(session, nextPhase.index, participantName);
+    const currentLocation = group?.location;
+    const nextLocation = nextGroup?.location || (nextPhase.groupSize >= 999 ? session.plenaryLocation : null);
+    const sameLocation = Boolean(currentLocation && nextLocation
+      && (currentLocation.url || currentLocation.label) === (nextLocation.url || nextLocation.label));
+    const sameMembers = Boolean(group && nextGroup
+      && group.members.map(member => member.id).sort().join(',') === nextGroup.members.map(member => member.id).sort().join(','));
+    const startsIn = Math.max(0, Math.round(session.startTime + nextPhase.startOffset - nowMs / 1000));
+
+    const preview = document.createElement('section');
+    preview.setAttribute('data-role', 'up-next');
+    preview.className = 'up-next';
+    preview.setAttribute('aria-label', 'Up next');
+    preview.innerHTML = `<div class="up-next-heading">
+      <span class="up-next-kicker">Up next</span>
+      <strong>${escHtml(nextPhase.name)}</strong>
+      <span>Starts in ${formatTime(startsIn)}</span>
+    </div>`;
+
+    const movement = document.createElement('div');
+    movement.setAttribute('data-role', 'up-next-movement');
+    movement.className = 'up-next-movement';
+    if (sameLocation && sameMembers) movement.textContent = 'Stay with this group in the same place';
+    else if (sameLocation) movement.textContent = 'Stay here; your group will change';
+    else movement.textContent = `Move to ${nextLocation?.label || 'the next location'}`;
+    preview.appendChild(movement);
+
+    if (nextGroup?.members?.length) {
+      const nextMembers = document.createElement('div');
+      nextMembers.setAttribute('data-role', 'up-next-group');
+      nextMembers.className = 'up-next-detail';
+      nextMembers.textContent = 'With: ' + nextGroup.members.map(member => formatMemberLabel(member, participantName)).join(', ');
+      preview.appendChild(nextMembers);
+    }
+    if (nextLocation) {
+      const nextLocationEl = document.createElement('div');
+      nextLocationEl.setAttribute('data-role', 'up-next-location');
+      nextLocationEl.className = 'up-next-detail';
+      nextLocationEl.textContent = 'Location: ' + nextLocation.label;
+      preview.appendChild(nextLocationEl);
+    }
+    container.appendChild(preview);
+  }
+
+  // 6. Overview panel (expandable)
   container.appendChild(buildOverviewPanel(session, phase));
 
-  // 6. Copy notes button
+  // 7. Copy notes button
   const copyBtn = document.createElement('button');
   copyBtn.setAttribute('data-role', 'copy-notes');
   copyBtn.className = 'copy-notes-btn';
@@ -700,6 +748,7 @@ function renderSetupPage() {
 
       <section class="setup-section" data-role="meeting-spaces">
         <h2>5. Meeting locations (one per line — paste URLs or room names)</h2>
+        <p class="hint">Verify in advance that every participant can enter each breakout URL without the host.</p>
         <textarea id="locations-input" rows="4" placeholder="https://meet.google.com/abc-defg&#10;https://meet.google.com/hij-klmn&#10;Conference Room A"></textarea>
       </section>
 

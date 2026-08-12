@@ -168,7 +168,7 @@ test('P-rooms-1: getLLMPrompt interview checklist asks for rooms and the plenary
   // Scope to the interview checklist section (the numbered-question block), not the whole prompt
   const checklist = prompt.slice(
     prompt.indexOf('## Interview checklist'),
-    prompt.indexOf('## Output format'));
+    prompt.indexOf('## Registered structures'));
   assert.ok(checklist.length > 0, 'checklist section should exist');
   // Breakout room list question (maps to repeated location=)
   assert.ok(/room|meeting URL|location/i.test(checklist),
@@ -176,6 +176,8 @@ test('P-rooms-1: getLLMPrompt interview checklist asks for rooms and the plenary
   // Plenary / whole-group main room question (maps to plenary=)
   assert.ok(/plenary|whole-group|main/i.test(checklist),
     'checklist should ask for the plenary / main meeting room');
+  assert.match(checklist, /without (?:a |the )?host/i,
+    'breakout URL guidance should require hostless participant access');
 });
 
 // P-rooms-2: editable-on-the-site escape hatch covers all fields (incl. rooms/plenary)
