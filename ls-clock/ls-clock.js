@@ -26,23 +26,68 @@ function getPhaseLocation(session, phase, group) {
   return group?.location || null;
 }
 
-function updateParticipantCompanion(session, nowMs) {
-  const phase = getActivePhase(session, nowMs);
-  if (!phase) {
+function updateMainRoomLink(session = null) {
+  document.querySelector('[data-role="main-room-fallback"]')?.remove();
+  if (!session?.plenaryLocation?.url) return;
+  const link = document.createElement('a');
+  link.dataset.role = 'main-room-fallback';
+  link.href = session.plenaryLocation.url;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = 'Main room';
+  document.querySelector('[data-role="global-navigation"]')?.appendChild(link);
+}
+
+function getParticipantAssignment(session, phase, participantName) {
+  if (!phase) return { phase: null, group: null, location: null };
+  const group = getParticipantGroup(session, phase.index, participantName);
+  return { phase, group, location: getPhaseLocation(session, phase, group) };
+}
+
+function getCompanionState(session, participantName, nowMs) {
+  const activePhase = getActivePhase(session, nowMs);
+  const beforeStart = nowMs / 1000 < session.startTime;
+  const currentPhase = activePhase || (beforeStart ? session.phases.find(phase => phase.groupSize > 0) : null);
+  if (!currentPhase) return null;
+  const phasePosition = session.phases.findIndex(phase => phase.index === currentPhase.index);
+  const nextPhase = activePhase
+    ? session.phases.slice(phasePosition + 1).find(phase => phase.groupSize > 0)
+    : currentPhase;
+  const current = getParticipantAssignment(session, currentPhase, participantName);
+  const next = getParticipantAssignment(session, nextPhase, participantName);
+  const remaining = beforeStart
+    ? Math.max(0, Math.ceil(session.startTime - nowMs / 1000))
+    : Math.max(0, Math.round(session.startTime + currentPhase.startOffset + currentPhase.duration - nowMs / 1000));
+  const sameLocation = Boolean(current.location && next.location
+    && (current.location.url || current.location.label) === (next.location.url || next.location.label));
+  return { beforeStart, current, next, remaining, sameLocation };
+}
+
+function updateParticipantCompanion(session, participantName, nowMs) {
+  const state = getCompanionState(session, participantName, nowMs);
+  if (!state) {
     document.title = 'LS Clock';
     return;
   }
-  const remaining = Math.max(0, Math.round(session.startTime + phase.startOffset + phase.duration - nowMs / 1000));
-  const time = formatTime(remaining);
-  document.title = `${time} · ${phase.name} · LS Clock`;
+  const time = formatTime(state.remaining);
+  const title = state.beforeStart ? 'Starts in' : state.current.phase.name;
+  document.title = `${time} · ${title} · LS Clock`;
   if (participantPipWindow && !participantPipWindow.closed) {
+    const { phase, group, location } = state.next;
+    const members = group?.members?.map(member => formatMemberLabel(member, participantName)).join(', ') || '';
+    const destination = location?.url
+      ? `<a href="${escHtml(location.url)}" target="_blank" rel="noopener" style="display:block;background:#6c8ef5;color:#fff;border-radius:10px;padding:10px 12px;text-decoration:none;font-weight:700;overflow-wrap:anywhere">${state.sameLocation && !state.beforeStart ? 'Stay here · ' : 'Join '}${escHtml(location.label)}</a>`
+      : `<div style="color:#dbe2ff;font-weight:700">${state.sameLocation && !state.beforeStart ? 'Stay here · ' : ''}${escHtml(location?.label || 'Location to be announced')}</div>`;
     const pipDocument = participantPipWindow.document;
     pipDocument.title = 'LS Clock';
     pipDocument.body.innerHTML = `<main style="font-family:system-ui,sans-serif;background:#0f1117;color:#e8eaf6;min-height:100vh;margin:0;padding:20px;box-sizing:border-box">
       <div style="color:#aab2dc;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase">LS Clock</div>
-      <div style="font-size:44px;font-weight:800;font-variant-numeric:tabular-nums;margin:8px 0">${escHtml(time)}</div>
-      <strong style="font-size:18px">${escHtml(phase.name)}</strong>
-      <p style="color:#aab2dc;line-height:1.4">${escHtml(phase.instructions || '')}</p>
+      <div style="font-size:40px;font-weight:800;font-variant-numeric:tabular-nums;margin:8px 0">${state.beforeStart ? 'Starts in ' : ''}${escHtml(time)}</div>
+      ${state.beforeStart ? '' : `<div style="color:#aab2dc;font-size:13px;margin-bottom:.35rem">Now · ${escHtml(state.current.phase.name)}</div>`}
+      <strong style="font-size:18px">${state.beforeStart ? '' : 'Up next · '}${escHtml(phase.name)}</strong>
+      <p style="color:#aab2dc;line-height:1.4;margin:.55rem 0">${escHtml(phase.instructions || '')}</p>
+      ${destination}
+      ${members ? `<p style="color:#dbe2ff;line-height:1.4"><strong>With:</strong> ${escHtml(members)}</p>` : ''}
     </main>`;
   }
 }
@@ -58,8 +103,15 @@ function renderParticipantView(container, session, participantName, nowMs) {
     msg.className = 'status-message';
     if (elapsed < 0) {
       const start = new Date(session.startTime * 1000);
+      const firstPhase = session.phases.find(candidate => candidate.groupSize > 0);
+      const assignment = getParticipantAssignment(session, firstPhase, participantName);
+      const members = assignment.group?.members?.map(member => formatMemberLabel(member, participantName)).join(', ') || '';
       msg.dataset.role = 'waiting-guidance';
-      msg.textContent = `You’re in the right place. Session starts at ${start.toLocaleString()} · Starts in ${formatTime(Math.ceil(-elapsed))}`;
+      msg.innerHTML = `<div>You’re in the right place. Session starts at ${escHtml(start.toLocaleString())}</div>
+        <div class="countdown">Starts in ${formatTime(Math.ceil(-elapsed))}</div>
+        <strong>${escHtml(firstPhase?.name || 'First activity')}</strong>
+        <div>${escHtml(assignment.location?.label || 'Location to be announced')}</div>
+        ${members ? `<div>With: ${escHtml(members)}</div>` : ''}`;
     } else {
       msg.textContent = 'Session complete. Thank you!';
     }
@@ -404,6 +456,7 @@ function initApp() {
 
 function renderJoinOrView(session) {
   const app = document.getElementById('app');
+  updateMainRoomLink(session);
   const params = new URLSearchParams(window.location.search);
   const prefilledName = params.get('name') || '';
   const isFacilitator = params.get('role') === 'facilitator';
@@ -541,6 +594,7 @@ function renderJoinOrView(session) {
 }
 
 function startParticipantClock(app, session, participantName) {
+  updateMainRoomLink(session);
   const view = document.createElement('div');
   view.className = 'participant-view';
 
@@ -548,25 +602,22 @@ function startParticipantClock(app, session, participantName) {
   companionControls.setAttribute('data-role', 'companion-controls');
   companionControls.className = 'companion-controls';
 
-  const alertsButton = document.createElement('button');
-  alertsButton.type = 'button';
-  alertsButton.textContent = 'Enable alerts';
-  companionControls.appendChild(alertsButton);
-
   if ('documentPictureInPicture' in window) {
-    const pipButton = document.createElement('button');
-    pipButton.type = 'button';
-    pipButton.textContent = 'Keep timer visible';
-    pipButton.addEventListener('click', async () => {
+    const openCompanionWindow = async () => {
       try {
-        participantPipWindow = await window.documentPictureInPicture.requestWindow({ width: 320, height: 240 });
+        participantPipWindow = await window.documentPictureInPicture.requestWindow({ width: 360, height: 320 });
         if (window.documentPictureInPicture && !window.documentPictureInPicture.window) {
           try { window.documentPictureInPicture.window = participantPipWindow; } catch (_) {}
         }
-        updateParticipantCompanion(session, Date.now());
+        updateParticipantCompanion(session, participantName, Date.now());
       } catch (_) {}
-    });
+    };
+    const pipButton = document.createElement('button');
+    pipButton.type = 'button';
+    pipButton.textContent = 'Keep timer visible';
+    pipButton.addEventListener('click', openCompanionWindow);
     companionControls.appendChild(pipButton);
+    openCompanionWindow();
   }
 
   const timeline = document.createElement('div');
@@ -594,7 +645,7 @@ function startParticipantClock(app, session, participantName) {
   app.appendChild(notesLabel);
   app.appendChild(notesEl);
 
-  let lastPhaseIndex = null;
+  let lastPhaseIndex = Date.now() / 1000 < session.startTime ? 'before-start' : null;
   let alertsEnabled = false;
   let audioContext = null;
 
@@ -617,21 +668,22 @@ function startParticipantClock(app, session, participantName) {
     } catch (_) {}
   };
 
-  alertsButton.addEventListener('click', () => {
+  const armAlerts = () => {
+    if (alertsEnabled) return;
     alertsEnabled = true;
     try {
       const Context = window.AudioContext || window.webkitAudioContext;
       if (Context) audioContext ||= new Context();
       audioContext?.resume?.().catch(() => {});
     } catch (_) {}
-    alertsButton.textContent = 'Alerts enabled';
-    alertsButton.disabled = true;
-  });
+  };
+  app.addEventListener('pointerdown', armAlerts, { once: true });
+  app.addEventListener('keydown', armAlerts, { once: true });
 
   const tick = () => {
     const now = Date.now();
     const phase = getActivePhase(session, now);
-    const phaseIndex = phase ? phase.index : null;
+    const phaseIndex = phase ? phase.index : (now / 1000 < session.startTime ? 'before-start' : null);
 
     if (phaseIndex !== lastPhaseIndex) {
       if (lastPhaseIndex !== null && alertsEnabled) playTransitionCue();
@@ -645,7 +697,7 @@ function startParticipantClock(app, session, participantName) {
 
     renderParticipantView(view, session, participantName, now);
     renderPhaseTimeline(timeline, session, now);
-    updateParticipantCompanion(session, now);
+    updateParticipantCompanion(session, participantName, now);
   };
 
   notesEl.addEventListener('input', () => {
@@ -657,6 +709,7 @@ function startParticipantClock(app, session, participantName) {
 }
 
 function renderFacilitatorView(app, session) {
+  updateMainRoomLink(session);
   const tick = () => {
     const now = Date.now();
     const active = getActivePhase(session, now);
@@ -724,8 +777,8 @@ function startSetupWalkthrough() {
     {
       element: '#generate-btn',
       popover: {
-        title: 'Generate and share',
-        description: 'Create one bookmarkable session URL and share it. Next, see exactly what a participant sees.',
+        title: 'Copy and share',
+        description: 'Create and copy one bookmarkable session URL to share. Next, see exactly what a participant sees.',
         onNextClick: () => {
           renderJoinOrView(demoSession);
           requestAnimationFrame(() => walkthrough.moveNext());
@@ -782,6 +835,7 @@ function startSetupWalkthrough() {
 }
 
 function renderSetupPage() {
+  updateMainRoomLink();
   const app = document.getElementById('app');
   app.innerHTML = `
     <h1 class="app-title">LS Clock</h1>
@@ -878,7 +932,7 @@ function renderSetupPage() {
       </section>
 
       <div class="error-msg" data-role="setup-error" role="alert" aria-live="assertive" tabindex="-1"></div>
-      <button id="generate-btn" class="primary-btn">Generate session URL</button>
+      <button id="generate-btn" class="primary-btn">Copy session URL</button>
     </section>
 
     <section class="setup-section" id="preview-section" style="display:none" data-role="preview">
@@ -895,8 +949,7 @@ function renderSetupPage() {
     <section class="setup-section" id="result-section" style="display:none">
       <h2>Session URL</h2>
       <textarea id="session-url-output" rows="3" readonly></textarea>
-      <button id="copy-url-btn">Copy URL</button>
-      <div class="url-hint">Share this URL with participants. They enter their name to join.</div>
+      <div class="url-hint">Copied. Share this URL with participants. They enter their name to join.</div>
       <div class="url-hint">Add <code>?role=facilitator</code> to see the full facilitator view.</div>
     </section>`;
 
@@ -1029,11 +1082,6 @@ function renderSetupPage() {
 
   const generateBtn = document.getElementById('generate-btn');
   if (generateBtn) generateBtn.addEventListener('click', generateURL);
-
-  document.getElementById('copy-url-btn')?.addEventListener('click', () => {
-    const url = document.getElementById('session-url-output').value;
-    copyText(url, document.getElementById('copy-url-btn'));
-  });
   document.getElementById('copy-prompt-btn').addEventListener('click', () => {
     const appURL = `${window.location.origin}${window.location.pathname}`;
     copyText(getLLMPrompt(appURL), document.getElementById('copy-prompt-btn'));
@@ -1206,6 +1254,7 @@ function generateURL() {
   const url = `${window.location.origin}${window.location.pathname}#${encoded}`;
   document.getElementById('session-url-output').value = url;
   document.getElementById('result-section').style.display = '';
+  copyText(url, document.getElementById('generate-btn'));
 }
 
 function showSessionPreview(session) {

@@ -149,9 +149,12 @@ test('long meeting URL labels do not overflow the mobile participant view', asyn
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
 });
 
-test('participant clock offers opt-in alerts and sounds once at an activity boundary', async ({ page }) => {
+test('participant alerts arm on the first interaction without a dedicated enable action', async ({ page }) => {
   await page.addInitScript(() => {
     window.__audioStarts = 0;
+    let now = 1_700_000_000_000;
+    Date.now = () => now;
+    window.__advanceClock = value => { now = value; };
     class FakeAudioContext {
       createOscillator() { return { connect() {}, start() { window.__audioStarts += 1; }, stop() {}, frequency: { value: 0 }, type: '' }; }
       createGain() { return { connect() {}, gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} } }; }
@@ -164,15 +167,16 @@ test('participant clock offers opt-in alerts and sounds once at an activity boun
   await page.reload();
   await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), {
     ...SESSION,
-    startTime: Math.floor(Date.now() / 1000) - 59,
+    startTime: 1_700_000_001,
   });
-  await page.getByRole('button', { name: 'Enable alerts' }).click();
-  await page.waitForTimeout(2200);
+  await expect(page.getByRole('button', { name: /enable alerts/i })).toHaveCount(0);
+  await page.locator('.participant-view').click();
+  await page.evaluate(() => window.__advanceClock(1_700_000_002_000));
+  await page.waitForTimeout(1100);
   expect(await page.evaluate(() => window.__audioStarts)).toBe(1);
-  await expect(page.getByRole('button', { name: 'Alerts enabled' })).toBeDisabled();
 });
 
-test('Picture-in-Picture timer is opt-in when supported and omitted otherwise', async ({ page }) => {
+test('Picture-in-Picture previews pre-start and active assignments', async ({ page }) => {
   await page.addInitScript(() => {
     window.__pipRequested = 0;
     const pipDocument = document.implementation.createHTMLDocument('');
@@ -183,15 +187,56 @@ test('Picture-in-Picture timer is opt-in when supported and omitted otherwise', 
     });
   });
   await page.reload();
-  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 30 };
+  const futureSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) + 600 };
+  const encoded = await page.evaluate(session => encodeSession(session), futureSession);
+  await page.goto(`/?pip=default#${encoded}`);
+  await page.locator('[data-role="prepared-name"]').selectOption('Alice');
+  await page.getByRole('button', { name: 'Join session' }).click();
+  expect(await page.evaluate(() => window.__pipRequested)).toBe(1);
+  expect(await page.evaluate(() => ({
+    text: documentPictureInPicture.window?.document.body.textContent || '',
+    href: documentPictureInPicture.window?.document.querySelector('a')?.href || '',
+  }))).toEqual(expect.objectContaining({
+    text: expect.stringMatching(/Starts in.*Individual.*Seat A.*Alice \(you\)/s),
+  }));
+
+  const liveSession = {
+    ...SESSION,
+    startTime: Math.floor(Date.now() / 1000) - 30,
+    groups: {
+      ...SESSION.groups,
+      1: SESSION.groups[1].map((group, index) => index === 0 ? {
+        ...group,
+        members: group.members.map(member => member.name === 'Alice' ? { ...member, role: 'Host' } : member),
+      } : group),
+    },
+  };
   await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), liveSession);
   await page.getByRole('button', { name: 'Keep timer visible' }).click();
-  expect(await page.evaluate(() => window.__pipRequested)).toBe(1);
-  expect(await page.evaluate(() => documentPictureInPicture.window?.document.body.textContent || '')).toMatch(/LS Clock|Individual/);
+  expect(await page.evaluate(() => ({
+    text: documentPictureInPicture.window?.document.body.textContent || '',
+    href: documentPictureInPicture.window?.document.querySelector('a')?.href || '',
+  }))).toEqual({
+    text: expect.stringMatching(/Individual.*Up next.*Pairs.*Meet A.*Alice — Host \(you\).*Bob/s),
+    href: 'https://meet.google.com/aaa',
+  });
 
   await page.evaluate(() => { delete window.documentPictureInPicture; });
   await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), SESSION);
   await expect(page.getByRole('button', { name: 'Keep timer visible' })).toHaveCount(0);
+});
+
+test('main-room fallback is actionable throughout session pages', async ({ page }) => {
+  const encoded = await page.evaluate(session => encodeSession(session), SESSION);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/#${encoded}`);
+  await expect(page.getByRole('link', { name: /main room/i })).toHaveAttribute('href', 'https://zoom.us/main');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
+  await page.locator('[data-role="prepared-name"]').selectOption('Alice');
+  await page.getByRole('button', { name: 'Join session' }).click();
+  await expect(page.getByRole('link', { name: /main room/i })).toHaveAttribute('href', 'https://zoom.us/main');
+  await page.goto(`/?role=facilitator#${encoded}`);
+  await expect(page.getByRole('link', { name: /main room/i })).toHaveAttribute('href', 'https://zoom.us/main');
 });
 
 test('sticky companion controls fit a 390px viewport', async ({ page }) => {
@@ -284,13 +329,17 @@ test('participant notes stay continuous across phase changes', async ({ page }) 
   expect(await page.evaluate(session => localStorage.getItem(getNoteKey(session.id, 'session', 'Alice')), SESSION)).toBe('One continuous set of notes');
 });
 
-test('P-entry-9a: joined early participants see start guidance', async ({ page }) => {
+test('P-entry-9a: joined early participants see the start countdown and first assignment', async ({ page }) => {
   const futureSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) + 600 };
   await page.evaluate(({ session, nowMs }) => {
     renderParticipantView(document.getElementById('app'), session, 'Alice', nowMs);
   }, { session: futureSession, nowMs: Date.now() });
-  const message = await page.evaluate(() => document.querySelector('[data-role="waiting-guidance"]')?.textContent || '');
-  expect({ startsAt: /starts at/i.test(message), startsIn: /starts in/i.test(message) }).toEqual({ startsAt: true, startsIn: true });
+  const guidance = page.locator('[data-role="waiting-guidance"]');
+  await expect(guidance).toContainText(/starts at/i);
+  await expect(guidance).toContainText(/starts in/i);
+  await expect(guidance).toContainText('Individual');
+  await expect(guidance).toContainText('Seat A');
+  await expect(guidance).toContainText('Alice (you)');
 });
 
 // P2: Break phase renders data-role="break", no location, no group-members
@@ -423,7 +472,7 @@ test('P-role-transparency: every group presentation shows each member role', asy
   await page.goto('/?rolemap=manual');
   await page.locator('#structure-select').selectOption('Troika Consulting');
   await page.getByRole('button', { name: 'Load sample setup' }).click();
-  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  await page.getByRole('button', { name: 'Copy session URL' }).click();
   const manualSession = await page.evaluate(value => decodeSession(new URL(value).hash.slice(1)), await page.locator('#session-url-output').inputValue());
   const manualRound = manualSession.phases.find(phase => phase.name === 'Round 1 — Client speaks');
   const manualLabels = (manualSession.groups[manualRound.index] || []).flatMap(group =>
@@ -541,7 +590,7 @@ test('P-navigation-global: primary views expose Home and Start new session', asy
 
   await page.goto('/');
   await observeNav('setup');
-  await page.goto(`/#${encodedFuture}`);
+  await page.goto(`/?view=landing#${encodedFuture}`);
   await observeNav('landing');
   await page.goto(`/?role=facilitator#${encodedLive}`);
   await observeNav('facilitator');
@@ -559,7 +608,13 @@ test('P-navigation-global: primary views expose Home and Start new session', asy
   const destination = await page.evaluate(() => ({ search: location.search, hash: location.hash, setup: Boolean(document.querySelector('#structure-select')) }));
 
   expect({ states, destination }).toEqual({
-    states: ['setup', 'landing', 'facilitator', 'live', 'preview'].map(state => ({ state, labels: ['Home', 'Start new session'], cleanTargets: true, accessibleSize: true })),
+    states: [
+      { state: 'setup', labels: ['Home', 'Start new session'], cleanTargets: true, accessibleSize: true },
+      { state: 'landing', labels: ['Home', 'Start new session', 'Main room'], cleanTargets: true, accessibleSize: true },
+      { state: 'facilitator', labels: ['Home', 'Start new session', 'Main room'], cleanTargets: true, accessibleSize: true },
+      { state: 'live', labels: ['Home', 'Start new session', 'Main room'], cleanTargets: true, accessibleSize: true },
+      { state: 'preview', labels: ['Home', 'Start new session'], cleanTargets: true, accessibleSize: true },
+    ],
     destination: { search: '', hash: '', setup: true },
   });
 });
@@ -795,12 +850,24 @@ test('P-sample-2: sample action fills every field using the selected structure d
   });
 });
 
-test('P-plan-6a: manual generation preserves its session output', async ({ page }) => {
+test('P-plan-6a: one Copy session URL action generates, displays, and copies the session', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__copiedSessionURLs = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async value => { window.__copiedSessionURLs.push(value); } },
+    });
+  });
   await page.goto('/');
   await page.locator('#structure-select').selectOption('TRIZ');
   await page.getByRole('button', { name: 'Load sample setup' }).click();
-  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  const copyAction = page.locator('#generate-btn');
+  await expect(copyAction).toHaveAccessibleName('Copy session URL');
+  await expect(page.getByRole('button', { name: /^Copy URL$/ })).toHaveCount(0);
+  await copyAction.click();
   const url = await page.locator('#session-url-output').inputValue();
+  await expect(copyAction).toHaveText('Copied!');
+  expect(await page.evaluate(() => window.__copiedSessionURLs)).toEqual([url]);
   const encoded = new URL(url).hash.slice(1);
   const session = await page.evaluate(value => decodeSession(value), encoded);
   expect({
@@ -823,7 +890,7 @@ test('P-short-break-manual: manual Troika sessions classify unchanged boundaries
   await page.getByRole('button', { name: '+ Add another structure' }).click();
   await page.locator('.structure-select-item').nth(1).selectOption('Troika Consulting');
   await page.locator('#short-break-input').fill('1');
-  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  await page.getByRole('button', { name: 'Copy session URL' }).click();
   const session = await page.evaluate(value => decodeSession(new URL(value).hash.slice(1)), await page.locator('#session-url-output').inputValue());
   const shortBreaks = session.phases.filter(phase => phase.transitionType === 'short-break');
   expect({ count: shortBreaks.length, durations: [...new Set(shortBreaks.map(phase => phase.duration))] }).toEqual({ count: 17, durations: [60] });
@@ -834,7 +901,7 @@ test('P-passing-manual: manual sessions apply configured transition timing consi
   await page.getByRole('button', { name: 'Load sample setup' }).click();
   await page.locator('#passing-time-input').fill('3');
   await page.locator('#short-break-input').fill('1');
-  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  await page.getByRole('button', { name: 'Copy session URL' }).click();
   const session = await page.evaluate(value => decodeSession(new URL(value).hash.slice(1)), await page.locator('#session-url-output').inputValue());
   const passing = session.phases.filter(phase => phase.transitionType === 'passing');
   expect({
@@ -844,9 +911,22 @@ test('P-passing-manual: manual sessions apply configured transition timing consi
   }).toEqual({ transitionTiming: { passingSeconds: 180, shortBreakSeconds: 60 }, passingCount: 4, passingDurations: [180] });
 });
 
-test('P-plan-6b: manual setup preserves its functional controls', async ({ page }) => {
+test('P-plan-6b: invalid setup neither displays nor copies a session URL', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__copiedSessionURLs = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async value => { window.__copiedSessionURLs.push(value); } },
+    });
+  });
   await page.goto('/');
-  expect(await page.locator('#load-sample-btn, #structure-select, #invitation-input, #start-time-input, #participants-input, #locations-input, #plenary-input, #add-structure-btn, #generate-btn, #copy-url-btn').count()).toBe(10);
+  await page.getByRole('button', { name: 'Copy session URL' }).click();
+  expect({
+    controls: await page.locator('#load-sample-btn, #structure-select, #invitation-input, #start-time-input, #participants-input, #locations-input, #plenary-input, #add-structure-btn, #generate-btn').count(),
+    copyActions: await page.getByRole('button', { name: /copy (session )?url/i }).count(),
+    output: await page.locator('#session-url-output').inputValue(),
+    clipboard: await page.evaluate(() => window.__copiedSessionURLs),
+  }).toEqual({ controls: 9, copyActions: 1, output: '', clipboard: [] });
 });
 
 test('P-plan-url-3: bookmarked quick-plan URL compiles automatically on load', async ({ page }) => {
@@ -882,7 +962,7 @@ test('P-preserve-3b: bookmarks and manual generation retain their outputs', asyn
   await page.goto('/');
   await page.locator('#structure-select').selectOption('TRIZ');
   await page.getByRole('button', { name: 'Load sample setup' }).click();
-  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  await page.getByRole('button', { name: 'Copy session URL' }).click();
   const generatedURL = await page.locator('#session-url-output').inputValue();
   const session = await page.evaluate(value => decodeSession(value), new URL(generatedURL).hash.slice(1));
   expect({ bookmark, generated: { structure: session.structure, phases: session.phases.map(phase => phase.name) } }).toEqual({
@@ -1049,6 +1129,7 @@ test('P-entry-6: facilitator view is discoverable from the landing page', async 
     return { text: link?.textContent || '', href: link?.getAttribute('href') || '' };
   });
   if (before.href) await page.locator('[data-role="facilitator-link"]').click();
+  await expect(page.getByRole('heading', { name: 'Facilitator View' })).toBeVisible();
   const after = await page.evaluate(() => document.querySelector('h1')?.textContent || '');
   expect({ before, after }).toEqual({ before: { text: 'Open facilitator view', href: `?role=facilitator#${encoded}` }, after: 'Facilitator View' });
 });
@@ -1176,14 +1257,14 @@ test('P-space-capacity-3: manual generation blocks insufficient non-solo meeting
   await page.locator('#participants-input').fill('Alice\nBob\nCarol\nDave');
   await page.locator('#locations-input').fill('Room A');
   await page.locator('#plenary-input').fill('Main Hall');
-  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  await page.getByRole('button', { name: 'Copy session URL' }).click();
   const blocked = await page.evaluate(() => ({
     error: document.querySelector('[data-role="setup-error"]')?.textContent || '',
     generated: Boolean(document.querySelector('#session-url-output')?.value),
   }));
 
   await page.locator('#locations-input').fill('Room A\nRoom B');
-  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  await page.getByRole('button', { name: 'Copy session URL' }).click();
   const recovered = Boolean(await page.locator('#session-url-output').inputValue());
 
   expect({
@@ -1197,7 +1278,7 @@ test('P-space-capacity-3: manual generation blocks insufficient non-solo meeting
 test('P-entry-5: prepared participant names must be unique', async ({ page }) => {
   await page.goto('/');
   await page.locator('#participants-input').fill('Alice\n alice  ');
-  await page.getByRole('button', { name: 'Generate session URL' }).click();
+  await page.getByRole('button', { name: 'Copy session URL' }).click();
   const observed = await page.evaluate(() => ({
     error: document.querySelector('[data-role="setup-error"]')?.textContent || '',
     generated: getComputedStyle(document.querySelector('#result-section')).display !== 'none',
@@ -1240,7 +1321,7 @@ test('P-fishbowl-2: facilitator intentionally assigns three to seven Fishbowl us
     for (const id of [1, 3, 5]) await selector.locator(`input[data-participant-id="${id}"]`).check();
     await page.locator('#locations-input').fill('Room A\nRoom B');
     await page.locator('#plenary-input').fill('Main Hall');
-    await page.getByRole('button', { name: 'Generate session URL' }).click();
+    await page.getByRole('button', { name: 'Copy session URL' }).click();
   }
 
   const observed = await page.evaluate(() => {
