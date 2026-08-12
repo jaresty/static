@@ -115,7 +115,7 @@ test('P8: getLLMPrompt — contains quick-plan URL keywords', () => {
 });
 
 test('P8b: getLLMPrompt keeps the complete URL contract before Gemini’s observed cutoff', () => {
-  const prompt = getLLMPrompt();
+  const prompt = getLLMPrompt('https://jaresty.github.io/static/ls-clock/');
   const guideStart = prompt.indexOf('## Registered structures');
   const openingContract = prompt.slice(0, guideStart);
   assert.ok(prompt.length < 3000, `prompt should fit below the observed 3,092-character cutoff; got ${prompt.length}`);
@@ -123,8 +123,12 @@ test('P8b: getLLMPrompt keeps the complete URL contract before Gemini’s observ
   for (const parameter of ['structure=', 'invitation=', 'participant=', 'location=', 'plenary=']) {
     assert.ok(openingContract.includes(parameter), `${parameter} must appear before the structure guide`);
   }
-  assert.match(openingContract, /APP_URL\?structure=.*&invitation=.*&participant=.*&participant=.*&location=.*&location=.*&plenary=/,
+  assert.match(openingContract, /https:\/\/jaresty\.github\.io\/static\/ls-clock\/\?structure=.*&invitation=.*&participant=.*&participant=.*&location=.*&location=.*&plenary=/,
     'opening contract should include one complete repeated-parameter URL template');
+  assert.match(openingContract, /RFC 3986/,
+    'opening contract should name the strict query-value encoding standard');
+  assert.match(openingContract, /\( as %28.*\) as %29/,
+    'opening contract should explicitly require encoding parentheses');
 });
 
 // P-simplify-1: prompt no longer mentions startTime (site sets it manually)

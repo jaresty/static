@@ -50,7 +50,7 @@ function getLLMPrompt(appURL = 'APP_URL') {
 Base: ${appURL}
 The query MUST contain structure=, invitation=, participant= for every person, location= for every breakout room, and plenary= for the main room. Repeat structure= in order; repeat participant= and location= per value.
 Template: ${appURL}?structure=KEY&invitation=QUESTION&participant=NAME1&participant=NAME2&location=ROOM1&location=ROOM2&plenary=MAIN_ROOM
-Encode every value. Output ONLY the complete setup URL; no prose or markdown. A structure-only URL is invalid.
+RFC 3986-encode values: ( as %28 and ) as %29. Output ONLY the complete setup URL; no prose or markdown. A structure-only URL is invalid.
 
 ## Interview checklist — ask all four
 1. What outcome or question becomes the invitation?
