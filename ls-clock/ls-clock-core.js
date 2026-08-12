@@ -51,31 +51,27 @@ Your job: interview the facilitator, recommend the most suitable registered stru
 ## When to choose each registered structure
 ${structureGuide}
 
-Use these names exactly. Do not invent structure names. Compare the descriptions against the facilitator's purpose, participants, desired outcome, and interaction pattern. Recommend only structures that fit those needs; do not assemble an arbitrary sequence. Briefly justify each recommendation in terms of the facilitator's purpose or intent, then ask the facilitator to confirm the sequence before producing the final URL.
+Use these names exactly. Do not invent structure names. Match the descriptions against the facilitator's purpose and desired outcome, recommend a fitting structure or sequence, briefly justify it in terms of their purpose or intent, and confirm the sequence before producing the URL. Infer what you reasonably can rather than interrogating — ask only for what you cannot infer.
 
-## Interview checklist
-1. What outcome does the facilitator want from the session?
-2. Which registered structure or sequence best supports that outcome?
-3. What is the invitation or central question?
-4. When does the session start? Include the timezone and convert it to a Unix timestamp in seconds.
-5. Who are the participants? Use names only.
-6. What meeting URLs or room names are available?
-7. What is the plenary or whole-group location?
+## Interview checklist (ask only what you still need)
+1. What outcome or central question does the facilitator want? (drives both structure choice and the invitation)
+2. Who are the participants, and what meeting URLs or room names are available?
 
 ## Output format
-Output ONLY the complete setup URL—no explanation and no markdown fences.
+Once the facilitator confirms, produce the final result. Output ONLY the complete setup URL—no explanation and no markdown fences.
 
 Base URL: ${appURL}
 
 Build its query string using these parameters:
 - structure=<exact registered key> — repeat in activity order
 - invitation=<central question>
-- startTime=<Unix timestamp in seconds>
 - participant=<name> — repeat for every participant
 - location=<meeting URL or room name> — repeat for every available location
 - plenary=<whole-group meeting URL or room name>
 
 URL-encode every parameter value. The result must begin with the exact base URL above and remain bookmarkable.
+
+Do not ask for the session start time — the facilitator sets that on the site. Participant names, locations, and every other field can also be edited on the site after opening the URL, so if you do not know exact participant names, emit the URL anyway using whatever names you have (or omit the participant parameters) rather than stalling.
 
 Do not add compiled activity collections or choose activity mechanics, timing details, grouping rules, instructions, or role assignments; the app owns activity mechanics, timing, grouping, roles, transitions, and instructions.
 
@@ -325,10 +321,15 @@ function quickPlanFromURL(input) {
   };
   if (url.searchParams.has('invitation')) plan.invitation = url.searchParams.get('invitation');
   if (url.searchParams.has('startTime')) plan.startTime = Number(url.searchParams.get('startTime'));
-  const participants = url.searchParams.getAll('participant');
-  if (participants.length) plan.participants = participants;
-  const locations = url.searchParams.getAll('location');
-  if (locations.length) plan.locations = locations;
+  // Canonical: repeated singular params. Fallback: a plural param whose value is
+  // newline- or comma-joined (some LLMs emit this form). Singular wins if present.
+  const splitPlural = value => (value || '').split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+  const participants = url.searchParams.getAll('participant').map(s => s.trim()).filter(Boolean);
+  const participantsFallback = participants.length ? participants : splitPlural(url.searchParams.get('participants'));
+  if (participantsFallback.length) plan.participants = participantsFallback;
+  const locations = url.searchParams.getAll('location').map(s => s.trim()).filter(Boolean);
+  const locationsFallback = locations.length ? locations : splitPlural(url.searchParams.get('locations'));
+  if (locationsFallback.length) plan.locations = locationsFallback;
   if (url.searchParams.has('plenary')) plan.plenaryLocation = url.searchParams.get('plenary');
   return plan;
 }

@@ -108,11 +108,41 @@ test('P6: getNoteKey — includes sessionId, phaseIndex, name', () => {
 test('P8: getLLMPrompt — contains quick-plan URL keywords', () => {
   const prompt = getLLMPrompt();
   assert.ok(prompt.length > 200);
-  assert.ok(prompt.includes('startTime'));
   assert.ok(prompt.includes('participant'));
   assert.ok(prompt.includes('structure'));
   assert.ok(prompt.includes('location'));
   assert.ok(prompt.includes('APP_URL'));
+});
+
+// P-simplify-1: prompt no longer mentions startTime (site sets it manually)
+test('P-simplify-1: getLLMPrompt omits startTime entirely', () => {
+  const prompt = getLLMPrompt();
+  assert.ok(!/startTime/i.test(prompt), 'prompt should not reference startTime');
+  assert.ok(!/unix timestamp/i.test(prompt), 'prompt should not ask for a Unix timestamp');
+});
+
+// P-simplify-2: URL param names match quickPlanFromURL (singular, not plural)
+test('P-simplify-2: getLLMPrompt uses singular participant= and location= params', () => {
+  const prompt = getLLMPrompt();
+  assert.ok(prompt.includes('participant='), 'prompt should show participant= param');
+  assert.ok(prompt.includes('location='), 'prompt should show location= param');
+  assert.ok(!prompt.includes('participants='), 'prompt must not use plural participants= (parser reads getAll("participant"))');
+  assert.ok(!prompt.includes('locations='), 'prompt must not use plural locations= (parser reads getAll("location"))');
+});
+
+// P-simplify-3: prompt tells the LLM participant names are editable on the site
+test('P-simplify-3: getLLMPrompt notes participants can be edited on the site', () => {
+  const prompt = getLLMPrompt();
+  assert.ok(/edit|adjust|change/i.test(prompt) && /site|app/i.test(prompt),
+    'prompt should tell the LLM names can be edited on the site');
+});
+
+// P-simplify-4: interview checklist is shorter than the old 7 questions
+test('P-simplify-4: getLLMPrompt interview checklist has fewer than 7 questions', () => {
+  const prompt = getLLMPrompt();
+  const numberedQuestions = (prompt.match(/^\s*\d+\.\s/gm) || []).length;
+  assert.ok(numberedQuestions > 0 && numberedQuestions < 7,
+    `expected fewer than 7 numbered questions, got ${numberedQuestions}`);
 });
 
 test('P-ls-prompt-1: LLM prompt lists every canonical structure by name', () => {
@@ -318,6 +348,29 @@ test('P-plan-url-1: quick plans round-trip through bookmarkable URLs', () => {
     plenaryLocation: 'Main Hall',
   };
   assert.deepEqual(quickPlanFromURL(quickPlanToURL(plan, 'https://example.test/ls-clock/')), plan);
+});
+
+// P-plan-url-1b: parser tolerates plural newline/comma-joined params from LLMs
+test('P-plan-url-1b: quickPlanFromURL accepts plural participants/locations as a fallback', () => {
+  const { quickPlanFromURL } = require('../ls-clock-core.js');
+  const base = 'https://example.test/ls-clock/';
+
+  // P1/P2: plural newline-joined (the real Gemini failure)
+  const nl = quickPlanFromURL(`${base}?structure=1-2-4-All&participants=${encodeURIComponent('Alice\nBob')}&locations=${encodeURIComponent('https://meet.example/a\nRoom B')}`);
+  assert.deepEqual(nl.participants, ['Alice', 'Bob']);
+  assert.deepEqual(nl.locations, ['https://meet.example/a', 'Room B']);
+
+  // P3: plural comma-joined
+  const csv = quickPlanFromURL(`${base}?participants=${encodeURIComponent('Alice,Bob')}`);
+  assert.deepEqual(csv.participants, ['Alice', 'Bob']);
+
+  // P4: singular still canonical and wins over plural when both present
+  const sing = quickPlanFromURL(`${base}?participant=Carol&participant=Dave&participants=${encodeURIComponent('Alice\nBob')}`);
+  assert.deepEqual(sing.participants, ['Carol', 'Dave']);
+
+  // P5: trims whitespace and drops empty entries
+  const messy = quickPlanFromURL(`${base}?participants=${encodeURIComponent(' Alice \n\nBob ')}`);
+  assert.deepEqual(messy.participants, ['Alice', 'Bob']);
 });
 
 test('P-plan-url-2: LLM prompt requests a one-click setup URL', () => {
