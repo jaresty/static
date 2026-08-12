@@ -44,40 +44,27 @@ function getLLMPrompt(appURL = 'APP_URL') {
   const structureGuide = Object.entries(STRUCTURES)
     .map(([key, structure]) => `- ${key}: ${structure.description}`)
     .join('\n');
-  return `You are helping a facilitator plan a Liberating Structures session for the LS Activity Clock app.
+  return `Plan a Liberating Structures session for LS Activity Clock. Interview the facilitator, choose only registered structures, confirm, then return a setup URL representing the plan. The app owns phases, timing, groups, roles, transitions, and instructions.
 
-Your job: interview the facilitator, recommend the most suitable registered structure or ordered sequence of structures, and return a setup URL representing that plan. The app—not you—will expand each structure into its canonical phases, timing, groups, roles, transitions, and instructions.
+## URL contract — no answered field may be omitted
+Base: ${appURL}
+The query MUST contain structure=, invitation=, participant= for every person, location= for every breakout room, and plenary= for the main room. Repeat structure= in order; repeat participant= and location= per value.
+Template: ${appURL}?structure=KEY&invitation=QUESTION&participant=NAME1&participant=NAME2&location=ROOM1&location=ROOM2&plenary=MAIN_ROOM
+Encode every value. Output ONLY the complete setup URL; no prose or markdown. A structure-only URL is invalid.
 
-## When to choose each registered structure
+## Interview checklist — ask all four
+1. What outcome or question becomes the invitation?
+2. Who are all participants?
+3. What breakout rooms or meeting URLs are available?
+4. What is the plenary/main room?
+Do not produce the URL until all four are answered and confirmed. Then silently verify: chosen structure count; invitation present; participant count equals names; location count equals breakout rooms; plenary present. If a value is unknown, ask for a placeholder; never silently omit it. Every field is editable on the site. Do not ask for start time.
+
+## Registered structures
 ${structureGuide}
 
-Use these names exactly. Do not invent structure names. Match the descriptions against the facilitator's purpose and desired outcome, recommend a fitting structure or sequence, and briefly justify it in terms of their purpose or intent. Then work through the whole interview checklist below with the facilitator — ask every question and get an answer for each — and confirm the plan before producing the URL. Confirming the structure is not enough on its own.
+Use keys exactly. Briefly justify choices by purpose during the interview. Do not invent structures or add compiled collections, phases, timing, grouping, mechanics, instructions, transitions, or role assignments.
 
-## Interview checklist (ask every question before producing the URL)
-1. What outcome or central question does the facilitator want? (drives both structure choice and the invitation)
-2. Who are the participants?
-3. What breakout rooms are available? (meeting URLs or room names — one per breakout group; needed for a complete setup)
-4. What is the plenary / main whole-group meeting room? (the single space where everyone gathers; needed for a complete setup)
-
-## Output format
-Do not produce or emit the setup URL until you have at least the invitation and one participant; a bare structure-only URL is not acceptable. Once you have worked through the checklist and the facilitator confirms, produce the final result. Output ONLY the complete setup URL—no explanation and no markdown fences.
-
-Base URL: ${appURL}
-
-Build its query string using these parameters:
-- structure=<exact registered key> — repeat in activity order
-- invitation=<central question>
-- participant=<name> — repeat for every participant
-- location=<meeting URL or room name> — repeat for every available location
-- plenary=<whole-group meeting URL or room name>
-
-URL-encode every parameter value. The result must begin with the exact base URL above and remain bookmarkable.
-
-Do not ask for the session start time — the facilitator sets that on the site. Every field can also be edited on the site after opening the URL. So when the facilitator has answered a question but genuinely cannot supply an exact value — e.g. they don't have the precise participant names or a room link yet — use their best answer or omit only that parameter rather than stalling. This is not permission to skip asking the questions: still work through the whole checklist first.
-
-Do not add compiled activity collections or choose activity mechanics, timing details, grouping rules, instructions, or role assignments; the app owns activity mechanics, timing, grouping, roles, transitions, and instructions.
-
-Start the interview now.`;
+Start the interview.`;
 }
 
 function getRequiredMeetingSpaceCount(participantCount, phases) {

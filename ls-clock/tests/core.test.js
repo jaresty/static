@@ -114,6 +114,19 @@ test('P8: getLLMPrompt — contains quick-plan URL keywords', () => {
   assert.ok(prompt.includes('APP_URL'));
 });
 
+test('P8b: getLLMPrompt keeps the complete URL contract before Gemini’s observed cutoff', () => {
+  const prompt = getLLMPrompt();
+  const guideStart = prompt.indexOf('## Registered structures');
+  const openingContract = prompt.slice(0, guideStart);
+  assert.ok(prompt.length < 3000, `prompt should fit below the observed 3,092-character cutoff; got ${prompt.length}`);
+  assert.ok(guideStart > 0, 'prompt should place a compact URL contract before the structure guide');
+  for (const parameter of ['structure=', 'invitation=', 'participant=', 'location=', 'plenary=']) {
+    assert.ok(openingContract.includes(parameter), `${parameter} must appear before the structure guide`);
+  }
+  assert.match(openingContract, /APP_URL\?structure=.*&invitation=.*&participant=.*&participant=.*&location=.*&location=.*&plenary=/,
+    'opening contract should include one complete repeated-parameter URL template');
+});
+
 // P-simplify-1: prompt no longer mentions startTime (site sets it manually)
 test('P-simplify-1: getLLMPrompt omits startTime entirely', () => {
   const prompt = getLLMPrompt();
