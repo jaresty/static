@@ -232,6 +232,15 @@
     margin-bottom: .75rem; max-width: 100%; padding: .6rem; position: sticky; top: .5rem; z-index: 20;
   }
   .companion-controls button { flex: 1 1 170px; }
+  .process-orientation-shell {
+    background: linear-gradient(145deg, rgba(108,142,245,.14), rgba(32,37,54,.78));
+    border: 1px solid rgba(108,142,245,.3); border-radius: var(--radius);
+    margin-bottom: .85rem; padding: .75rem .85rem;
+  }
+  .process-orientation { align-items: baseline; display: flex; gap: .65rem; margin-bottom: .6rem; }
+  .process-orientation span { color: #aab2dc; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .process-orientation strong { color: var(--text); font-size: 1rem; }
+  .process-orientation-shell .timeline-strip { margin-bottom: 0; max-height: 2rem; overflow: hidden; }
 
   .location-block {
     background: var(--surface);
@@ -281,6 +290,16 @@
     background: var(--surface); border-radius: var(--radius);
     padding: .75rem 1rem; margin-bottom: 1rem; line-height: 1.5;
   }
+  .current-task {
+    background: linear-gradient(135deg, rgba(108,142,245,.16), var(--surface));
+    border: 1px solid rgba(108,142,245,.38); border-left: 4px solid var(--accent);
+    color: var(--text); padding: 1rem 1.1rem;
+  }
+  .current-task-label {
+    color: #aab2dc; display: block; font-size: .72rem; font-weight: 800;
+    letter-spacing: .09em; margin-bottom: .35rem; text-transform: uppercase;
+  }
+  .current-task p { font-size: 1.08rem; line-height: 1.45; margin: 0; }
   .up-next {
     background: rgba(108,142,245,.09); border: 1px solid rgba(108,142,245,.28);
     border-radius: var(--radius); display: grid; gap: .45rem; margin-bottom: 1rem;
@@ -347,13 +366,27 @@
     text-align: center; margin-bottom: .75rem;
   }
 
-  /* ---- Notes ---- */
-  .notes-label { font-size: .85rem; color: var(--muted); display: block; margin-bottom: .3rem; }
+  /* ---- Notes and assignment recovery ---- */
+  .notes-section {
+    background: rgba(32,37,54,.62); border: 1px solid var(--border); border-radius: var(--radius);
+    margin: 0 0 1rem; padding: .75rem;
+  }
+  .notes-label { font-size: .85rem; color: #c6d2ff; display: block; font-weight: 700; margin-bottom: .35rem; }
   .notes-area {
-    width: 100%; min-height: 120px; background: var(--surface);
+    width: 100%; min-height: 96px; background: var(--surface);
     border: 1px solid var(--border); color: var(--text);
     padding: .5rem .75rem; border-radius: var(--radius);
     font-family: inherit; font-size: .9rem; resize: vertical;
+  }
+  .notes-section .copy-notes-btn { margin-top: .55rem; min-height: 36px; padding: .4rem .75rem; }
+  .overview-movement-row { display: grid; gap: .3rem; }
+  .overview-movement-route { color: var(--muted); overflow-wrap: anywhere; }
+  .overview-map-row a { color: #c6d2ff; font-weight: 700; }
+
+  @media (max-width: 600px) {
+    .process-orientation-shell { padding: .65rem .7rem; }
+    .process-orientation { margin-bottom: .45rem; }
+    .notes-area { min-height: 82px; }
   }
 
   /* ---- Facilitator view ---- */

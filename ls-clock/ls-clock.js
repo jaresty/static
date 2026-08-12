@@ -76,17 +76,23 @@ function updateParticipantCompanion(session, participantName, nowMs) {
     const { phase, group, location } = state.next;
     const members = group?.members?.map(member => formatMemberLabel(member, participantName)).join(', ') || '';
     const destination = location?.url
-      ? `<a href="${escHtml(location.url)}" target="_blank" rel="noopener" style="display:block;background:#6c8ef5;color:#fff;border-radius:10px;padding:10px 12px;text-decoration:none;font-weight:700;overflow-wrap:anywhere">${state.sameLocation && !state.beforeStart ? 'Stay here · ' : 'Join '}${escHtml(location.label)}</a>`
-      : `<div style="color:#dbe2ff;font-weight:700">${state.sameLocation && !state.beforeStart ? 'Stay here · ' : ''}${escHtml(location?.label || 'Location to be announced')}</div>`;
+      ? `<a href="${escHtml(location.url)}" target="_blank" rel="noopener" style="display:block;background:#6c8ef5;color:#fff;border-radius:10px;padding:8px 10px;text-decoration:none;font-weight:700;overflow-wrap:anywhere">Open ${escHtml(location.label)}</a>`
+      : `<div style="color:#dbe2ff;font-weight:700">${escHtml(location?.label || 'Location to be announced')}</div>`;
+    const movementGuidance = state.beforeStart ? '' : state.next.phase.groupSize === 1
+      ? '<div style="background:#283047;color:#dbe2ff;border-radius:8px;font-weight:800;margin:8px 0;padding:8px 10px">Work individually</div>'
+      : state.sameLocation
+        ? '<div style="background:#173c2a;color:#b7f7cb;border:1px solid #22c55e;border-radius:8px;font-weight:800;margin:8px 0;padding:8px 10px">Stay where you are</div>'
+        : `<div style="background:#283047;color:#dbe2ff;border-radius:8px;font-weight:800;margin:8px 0;padding:8px 10px">Move to ${escHtml(location?.label || 'your next location')}</div>`;
     const pipDocument = participantPipWindow.document;
     pipDocument.title = 'LS Clock';
     pipDocument.body.innerHTML = `<main style="font-family:system-ui,sans-serif;background:#0f1117;color:#e8eaf6;min-height:100vh;margin:0;padding:20px;box-sizing:border-box">
       <div style="color:#aab2dc;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase">LS Clock</div>
       <div style="font-size:40px;font-weight:800;font-variant-numeric:tabular-nums;margin:8px 0">${state.beforeStart ? 'Starts in ' : ''}${escHtml(time)}</div>
-      ${state.beforeStart ? '' : `<section style="border-bottom:1px solid #30364d;margin-bottom:12px;padding-bottom:10px">
+      ${state.beforeStart ? '' : `<section style="border-bottom:1px solid #30364d;margin-bottom:8px;padding-bottom:8px">
         <strong style="font-size:17px">Now · ${escHtml(state.current.phase.name)}</strong>
-        <p style="color:#dbe2ff;line-height:1.4;margin:.4rem 0 0">${escHtml(state.current.phase.instructions || '')}</p>
+        <p style="color:#dbe2ff;line-height:1.3;margin:.3rem 0 0">${escHtml(state.current.phase.instructions || '')}</p>
       </section>`}
+      ${movementGuidance}
       <strong style="font-size:18px">${state.beforeStart ? '' : 'Up next · '}${escHtml(phase.name)}</strong>
       <p style="color:#aab2dc;line-height:1.4;margin:.55rem 0">${escHtml(phase.instructions || '')}</p>
       ${destination}
@@ -95,7 +101,34 @@ function updateParticipantCompanion(session, participantName, nowMs) {
   }
 }
 
-function renderParticipantView(container, session, participantName, nowMs) {
+function buildProcessOrientation(session, phase) {
+  const activities = session.phases.filter(candidate => candidate.groupSize > 0);
+  const target = phase?.groupSize > 0
+    ? phase
+    : session.phases.slice(session.phases.findIndex(candidate => candidate.index === phase?.index) + 1).find(candidate => candidate.groupSize > 0)
+      || activities[0];
+  const step = Math.max(1, activities.findIndex(candidate => candidate.index === target?.index) + 1);
+  const orientation = document.createElement('div');
+  orientation.className = 'process-orientation';
+  orientation.innerHTML = `<span>Step ${step} of ${activities.length}</span><strong>${escHtml(target?.name || 'Session complete')}</strong>`;
+  return orientation;
+}
+
+function appendLocationLink(container, location, prefix = '') {
+  if (!location) return;
+  if (location.url) {
+    const link = document.createElement('a');
+    link.href = location.url;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = `${prefix}${location.label}`;
+    container.appendChild(link);
+  } else {
+    container.append(`${prefix}${location.label}`);
+  }
+}
+
+function renderParticipantView(container, session, participantName, nowMs, notesSection = null) {
   const phase = getActivePhase(session, nowMs);
   const overviewWasOpen = Boolean(container.querySelector('[data-role="overview"]')?.open);
   container.innerHTML = '';
@@ -119,6 +152,7 @@ function renderParticipantView(container, session, participantName, nowMs) {
       msg.textContent = 'Session complete. Thank you!';
     }
     container.appendChild(msg);
+    if (notesSection) container.appendChild(notesSection);
     return;
   }
 
@@ -183,15 +217,18 @@ function renderParticipantView(container, session, participantName, nowMs) {
     countdownEl.setAttribute('data-role', 'countdown');
     countdownEl.className = `countdown countdown-${getCountdownClass(remainSec)}`;
     countdownEl.textContent = formatTime(remainSec);
-    const instrEl = document.createElement('div');
-    instrEl.className = 'phase-instructions';
-    instrEl.textContent = isPassing && breakEl.querySelector('.transition-stay')
+    const instrEl = document.createElement('section');
+    instrEl.className = 'phase-instructions current-task';
+    instrEl.setAttribute('aria-label', 'Current task');
+    instrEl.innerHTML = `<span data-role="current-task-label" class="current-task-label">Current task</span><p></p>`;
+    instrEl.querySelector('p').textContent = isPassing && breakEl.querySelector('.transition-stay')
       ? 'Keep this room open. Your next step will begin here.'
       : phase.instructions;
     breakEl.appendChild(breakTitle);
     breakEl.appendChild(countdownEl);
     breakEl.appendChild(instrEl);
     container.appendChild(breakEl);
+    if (notesSection) container.appendChild(notesSection);
 
     // Overview panel
     container.appendChild(buildOverviewPanel(session, phase, overviewWasOpen));
@@ -289,11 +326,13 @@ function renderParticipantView(container, session, participantName, nowMs) {
   container.appendChild(countdownEl);
 
   // 4. Phase instructions
-  const instrEl = document.createElement('div');
+  const instrEl = document.createElement('section');
   instrEl.setAttribute('data-role', 'instructions');
-  instrEl.className = 'phase-instructions';
-  instrEl.textContent = phase.instructions;
+  instrEl.className = 'phase-instructions current-task';
+  instrEl.setAttribute('aria-label', 'Current task');
+  instrEl.innerHTML = `<span data-role="current-task-label" class="current-task-label">Current task</span><p>${escHtml(phase.instructions)}</p>`;
   container.appendChild(instrEl);
+  if (notesSection) container.appendChild(notesSection);
 
   // 5. Preview the next activity assignment
   const phasePosition = session.phases.findIndex(candidate => candidate.index === phase.index);
@@ -321,7 +360,8 @@ function renderParticipantView(container, session, participantName, nowMs) {
     const movement = document.createElement('div');
     movement.setAttribute('data-role', 'up-next-movement');
     movement.className = 'up-next-movement';
-    if (sameLocation && sameMembers) movement.textContent = 'Stay with this group in the same place';
+    if (nextPhase.groupSize === 1) movement.textContent = 'Work individually';
+    else if (sameLocation && sameMembers) movement.textContent = 'Stay with this group in the same place';
     else if (sameLocation) movement.textContent = 'Stay here; your group will change';
     else movement.textContent = `Move to ${nextLocation?.label || 'the next location'}`;
     preview.appendChild(movement);
@@ -333,7 +373,7 @@ function renderParticipantView(container, session, participantName, nowMs) {
       nextMembers.textContent = 'With: ' + nextGroup.members.map(member => formatMemberLabel(member, participantName)).join(', ');
       preview.appendChild(nextMembers);
     }
-    if (nextLocation) {
+    if (nextLocation && nextPhase.groupSize !== 1) {
       const nextLocationEl = document.createElement('div');
       nextLocationEl.setAttribute('data-role', 'up-next-location');
       nextLocationEl.className = 'up-next-detail';
@@ -355,16 +395,6 @@ function renderParticipantView(container, session, participantName, nowMs) {
   // 6. Overview panel (expandable)
   container.appendChild(buildOverviewPanel(session, phase, overviewWasOpen));
 
-  // 7. Copy notes button
-  const copyBtn = document.createElement('button');
-  copyBtn.setAttribute('data-role', 'copy-notes');
-  copyBtn.className = 'copy-notes-btn';
-  copyBtn.textContent = 'Copy my notes';
-  copyBtn.addEventListener('click', () => {
-    const note = localStorage.getItem(getNoteKey(session.id, 'session', participantName)) || '';
-    navigator.clipboard.writeText(note).catch(() => {});
-  });
-  container.appendChild(copyBtn);
 }
 
 function buildOverviewPanel(session, activePhase, open = false) {
@@ -387,25 +417,58 @@ function buildOverviewPanel(session, activePhase, open = false) {
   }
   wrapper.appendChild(list);
 
-  // Full group map for active phase
-  if (session.groups && session.groups[activePhase.index]) {
-    const mapDiv = document.createElement('div');
-    mapDiv.setAttribute('data-role', 'overview-map');
-    mapDiv.className = 'overview-map';
-    const mapTitle = document.createElement('div');
-    mapTitle.className = 'overview-map-title';
-    mapTitle.textContent = 'Where everyone is now:';
-    mapDiv.appendChild(mapTitle);
-    for (const group of session.groups[activePhase.index]) {
+  const mapDiv = document.createElement('div');
+  mapDiv.setAttribute('data-role', 'overview-map');
+  mapDiv.className = 'overview-map';
+  const mapTitle = document.createElement('div');
+  mapTitle.className = 'overview-map-title';
+  mapDiv.appendChild(mapTitle);
+
+  if (activePhase.groupSize === 0) {
+    const phasePosition = session.phases.findIndex(candidate => candidate.index === activePhase.index);
+    const priorPhase = [...session.phases.slice(0, phasePosition)].reverse().find(candidate => candidate.groupSize > 0);
+    const nextPhase = session.phases.slice(phasePosition + 1).find(candidate => candidate.groupSize > 0);
+    const priorGroups = priorPhase ? (session.groups[priorPhase.index] || []) : [];
+    const nextGroups = nextPhase ? (session.groups[nextPhase.index] || []) : [];
+    mapTitle.textContent = 'Assigned movement';
+    for (const nextGroup of nextGroups) {
       const row = document.createElement('div');
-      row.className = 'overview-map-row';
-      const locLabel = group.location?.label || '?';
-      const members = group.members.map(member => formatMemberLabel(member)).join(', ');
-      row.textContent = `${locLabel}: ${members}`;
+      row.className = 'overview-map-row overview-movement-row';
+      const members = nextGroup.members.map(member => formatMemberLabel(member)).join(', ');
+      const priorLocations = [...new Map(nextGroup.members.map(member => {
+        const priorGroup = priorGroups.find(group => group.members.some(candidate => candidate.id === member.id));
+        const location = getPhaseLocation(session, priorPhase, priorGroup);
+        return [location?.url || location?.label, location];
+      }).filter(([key]) => key)).values()];
+      const nextLocation = getPhaseLocation(session, nextPhase, nextGroup);
+      const people = document.createElement('strong');
+      people.textContent = members;
+      row.appendChild(people);
+      const route = document.createElement('div');
+      route.className = 'overview-movement-route';
+      if (priorLocations.length) {
+        priorLocations.forEach((location, index) => {
+          if (index) route.append(', ');
+          appendLocationLink(route, location);
+        });
+      } else route.append('Previous assignment unavailable');
+      route.append(' → ');
+      appendLocationLink(route, nextLocation || { label: 'Next assignment pending' });
+      row.appendChild(route);
       mapDiv.appendChild(row);
     }
-    wrapper.appendChild(mapDiv);
+  } else {
+    mapTitle.textContent = 'Current assignments';
+    for (const group of session.groups?.[activePhase.index] || []) {
+      const row = document.createElement('div');
+      row.className = 'overview-map-row';
+      const location = getPhaseLocation(session, activePhase, group);
+      appendLocationLink(row, location || { label: 'Location pending' });
+      row.append(`: ${group.members.map(member => formatMemberLabel(member)).join(', ')}`);
+      mapDiv.appendChild(row);
+    }
   }
+  wrapper.appendChild(mapDiv);
 
   return wrapper;
 }
@@ -620,7 +683,7 @@ function startParticipantClock(app, session, participantName) {
         return;
       }
       try {
-        participantPipWindow = await window.documentPictureInPicture.requestWindow({ width: 360, height: 320 });
+        participantPipWindow = await window.documentPictureInPicture.requestWindow({ width: 320, height: 280 });
         participantPipWindow.addEventListener('pagehide', markCompanionClosed, { once: true });
         if (window.documentPictureInPicture && !window.documentPictureInPicture.window) {
           try { window.documentPictureInPicture.window = participantPipWindow; } catch (_) {}
@@ -633,13 +696,23 @@ function startParticipantClock(app, session, participantName) {
     companionControls.appendChild(pipButton);
   }
 
+  const orientation = document.createElement('section');
+  orientation.dataset.role = 'process-orientation';
+  orientation.className = 'process-orientation-shell';
+  const orientationSummary = document.createElement('div');
+  orientationSummary.className = 'process-orientation-summary';
   const timeline = document.createElement('div');
   timeline.className = 'timeline-strip';
+  orientation.appendChild(orientationSummary);
+  orientation.appendChild(timeline);
 
   const invitationEl = document.createElement('div');
   invitationEl.className = 'invitation-footer';
   invitationEl.textContent = session.invitation;
 
+  const notesSection = document.createElement('section');
+  notesSection.dataset.role = 'notes';
+  notesSection.className = 'notes-section';
   const notesLabel = document.createElement('label');
   notesLabel.className = 'notes-label';
   notesLabel.textContent = 'Your notes';
@@ -649,14 +722,22 @@ function startParticipantClock(app, session, participantName) {
   notesEl.placeholder = 'Write your thoughts here…';
   const sessionNoteKey = getNoteKey(session.id, 'session', participantName);
   notesEl.value = localStorage.getItem(sessionNoteKey) || '';
+  const copyBtn = document.createElement('button');
+  copyBtn.setAttribute('data-role', 'copy-notes');
+  copyBtn.className = 'copy-notes-btn';
+  copyBtn.textContent = 'Copy my notes';
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(notesEl.value).catch(() => {});
+  });
+  notesSection.appendChild(notesLabel);
+  notesSection.appendChild(notesEl);
+  notesSection.appendChild(copyBtn);
 
   app.innerHTML = '';
   app.appendChild(companionControls);
+  app.appendChild(orientation);
   app.appendChild(view);
-  app.appendChild(timeline);
   app.appendChild(invitationEl);
-  app.appendChild(notesLabel);
-  app.appendChild(notesEl);
 
   let lastPhaseIndex = Date.now() / 1000 < session.startTime ? 'before-start' : null;
   let alertsEnabled = false;
@@ -708,7 +789,9 @@ function startParticipantClock(app, session, participantName) {
       view.classList.add('phase-transition');
     }
 
-    renderParticipantView(view, session, participantName, now);
+    const orientationPhase = phase || session.phases.find(candidate => candidate.groupSize > 0);
+    orientationSummary.replaceChildren(buildProcessOrientation(session, orientationPhase));
+    renderParticipantView(view, session, participantName, now, notesSection);
     renderPhaseTimeline(timeline, session, now);
     updateParticipantCompanion(session, participantName, now);
   };

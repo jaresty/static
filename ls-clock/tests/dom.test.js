@@ -94,6 +94,27 @@ test('active steps preview the next activity assignment', async ({ page }) => {
   await expect(preview.locator('[data-role="up-next-location"]')).toContainText('Meet A');
 });
 
+test('solo next steps say to work individually without a false destination', async ({ page }) => {
+  const soloNextSession = {
+    ...SESSION,
+    phases: [
+      { ...SESSION.phases[1], index: 0, startOffset: 0 },
+      { ...SESSION.phases[0], index: 1, startOffset: 120 },
+    ],
+    groups: {
+      0: SESSION.groups[1].map(group => ({ ...group, phaseIndex: 0 })),
+      1: SESSION.groups[0].map(group => ({ ...group, phaseIndex: 1 })),
+    },
+  };
+  await page.evaluate(session => {
+    renderParticipantView(document.getElementById('app'), session, 'Alice', (session.startTime + 30) * 1000);
+  }, soloNextSession);
+  const preview = page.locator('[data-role="up-next"]');
+  await expect(preview).toContainText('Work individually');
+  await expect(preview).not.toContainText(/move to|no meeting space needed/i);
+  await expect(preview.locator('[data-role="up-next-location"]')).toHaveCount(0);
+});
+
 test('final activity steps omit the Up next preview', async ({ page }) => {
   const nowMs = (SESSION.startTime + 500) * 1000;
   await page.evaluate(({ session, nowMs }) => {
@@ -181,16 +202,27 @@ test('floating timer stays closed until explicitly opened and toggles predictabl
     window.__pipRequested = 0;
     window.__pipClosed = 0;
     window.__pipPageHide = null;
-    const pipDocument = document.implementation.createHTMLDocument('');
     const pipWindow = {
-      document: pipDocument,
+      document: null,
       closed: false,
       addEventListener(type, listener) { if (type === 'pagehide') window.__pipPageHide = listener; },
       close() { this.closed = true; window.__pipClosed += 1; window.__pipPageHide?.(); },
     };
     Object.defineProperty(window, 'documentPictureInPicture', {
       configurable: true,
-      value: { requestWindow: async () => { window.__pipRequested += 1; pipWindow.closed = false; return pipWindow; }, window: null },
+      value: {
+        requestWindow: async options => {
+          window.__pipRequested += 1;
+          window.__pipSize = options;
+          const frame = document.createElement('iframe');
+          frame.style.cssText = `position:fixed;inset:0;width:${options.width}px;height:${options.height}px;border:0`;
+          document.documentElement.appendChild(frame);
+          pipWindow.document = frame.contentDocument;
+          pipWindow.closed = false;
+          return pipWindow;
+        },
+        window: null,
+      },
     });
   });
   await page.reload();
@@ -205,9 +237,16 @@ test('floating timer stays closed until explicitly opened and toggles predictabl
   const toggle = page.locator('[data-role="companion-controls"] button');
   await expect(toggle).toHaveText('Open floating timer');
   await toggle.click();
-  expect(await page.evaluate(() => window.__pipRequested)).toBe(1);
+  expect(await page.evaluate(() => ({ requests: window.__pipRequested, size: window.__pipSize }))).toEqual({ requests: 1, size: { width: 320, height: 280 } });
   await expect(toggle).toHaveText('Close floating timer');
   expect(await page.evaluate(() => documentPictureInPicture.window?.document.body.textContent || '')).toMatch(/Starts in.*Individual.*Write silently\..*Seat A.*Alice \(you\)/s);
+  expect(await page.evaluate(() => {
+    const doc = documentPictureInPicture.window.document;
+    return {
+      horizontal: doc.documentElement.scrollWidth > doc.documentElement.clientWidth,
+      vertical: doc.documentElement.scrollHeight > doc.documentElement.clientHeight,
+    };
+  })).toEqual({ horizontal: false, vertical: false });
 
   await toggle.click();
   expect(await page.evaluate(() => window.__pipClosed)).toBe(1);
@@ -220,6 +259,38 @@ test('floating timer stays closed until explicitly opened and toggles predictabl
 
 test('floating timer separates current guidance from the next assignment', async ({ page }) => {
   await page.addInitScript(() => {
+    Object.defineProperty(window, 'documentPictureInPicture', {
+      configurable: true,
+      value: {
+        requestWindow: async ({ width, height }) => {
+          const frame = document.createElement('iframe');
+          frame.style.cssText = `position:fixed;inset:0;width:${width}px;height:${height}px;border:0`;
+          document.documentElement.appendChild(frame);
+          const pipWindow = frame.contentWindow;
+          pipWindow.addEventListener = () => {};
+          window.__pipFrame = frame;
+          return pipWindow;
+        },
+        window: null,
+      },
+    });
+  });
+  await page.reload();
+  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 30 };
+  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), liveSession);
+  await page.getByRole('button', { name: 'Open floating timer' }).click();
+  expect(await page.evaluate(() => documentPictureInPicture.window?.document.body.textContent || '')).toMatch(/Now · Individual.*Write silently\..*Up next · Pairs.*Share with partner\..*Meet A.*Alice \(you\).*Bob/s);
+  expect(await page.evaluate(() => {
+    const doc = documentPictureInPicture.window.document;
+    return {
+      horizontal: doc.documentElement.scrollWidth > doc.documentElement.clientWidth,
+      vertical: doc.documentElement.scrollHeight > doc.documentElement.clientHeight,
+    };
+  })).toEqual({ horizontal: false, vertical: false });
+});
+
+test('floating timer makes same-room guidance prominent', async ({ page }) => {
+  await page.addInitScript(() => {
     const pipDocument = document.implementation.createHTMLDocument('');
     const pipWindow = { document: pipDocument, closed: false, addEventListener() {}, close() { this.closed = true; } };
     Object.defineProperty(window, 'documentPictureInPicture', {
@@ -228,10 +299,19 @@ test('floating timer separates current guidance from the next assignment', async
     });
   });
   await page.reload();
-  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 30 };
-  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), liveSession);
+  const sameRoomSession = {
+    ...SESSION,
+    startTime: Math.floor(Date.now() / 1000) - 90,
+    groups: {
+      ...SESSION.groups,
+      2: SESSION.groups[2].map(group => ({ ...group, location: SESSION.groups[1][0].location })),
+    },
+  };
+  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), sameRoomSession);
   await page.getByRole('button', { name: 'Open floating timer' }).click();
-  expect(await page.evaluate(() => documentPictureInPicture.window?.document.body.textContent || '')).toMatch(/Now · Individual.*Write silently\..*Up next · Pairs.*Share with partner\..*Meet A.*Alice \(you\).*Bob/s);
+  const text = await page.evaluate(() => documentPictureInPicture.window?.document.body.textContent || '');
+  expect(text).toMatch(/Stay where you are.*Up next · Quartets/s);
+  expect(text).not.toMatch(/Move to/);
 });
 
 test('floating timer control is omitted when Picture-in-Picture is unsupported', async ({ page }) => {
@@ -314,6 +394,42 @@ test('same-room passing makes staying put unmistakable', async ({ page }) => {
   await expect(transition.locator('[data-role="next-location"] a')).toHaveAttribute('href', 'https://meet.google.com/aaa');
 });
 
+test('passing overview maps assigned movement with actionable room links', async ({ page }) => {
+  const passingSession = {
+    ...TRANSITION_SESSION,
+    groups: {
+      ...TRANSITION_SESSION.groups,
+      0: [{ phaseIndex: 0, groupIndex: 0, members: [{ name: 'Alice', id: 0 }, { name: 'Bob', id: 1 }], location: { type: 'url', label: 'Meet A', url: 'https://meet.google.com/aaa', override: false } }],
+      2: [{ phaseIndex: 2, groupIndex: 0, members: [{ name: 'Alice', id: 0 }, { name: 'Bob', id: 1 }], location: { type: 'url', label: 'Meet B', url: 'https://meet.google.com/bbb', override: false } }],
+    },
+    plenaryLocation: { type: 'url', label: 'Meet B', url: 'https://meet.google.com/bbb', override: false },
+  };
+  await page.evaluate(({ session, nowMs }) => {
+    renderParticipantView(document.getElementById('app'), session, 'Alice', nowMs);
+  }, { session: passingSession, nowMs: NOW_TRANSITION });
+  const overview = page.locator('[data-role="overview"]');
+  await overview.locator('summary').click();
+  const map = overview.locator('[data-role="overview-map"]');
+  await expect(map).toContainText('Assigned movement');
+  await expect(map).toContainText(/Alice.*Bob/);
+  await expect(map.getByRole('link', { name: 'Meet A' })).toHaveAttribute('href', 'https://meet.google.com/aaa');
+  await expect(map.getByRole('link', { name: 'Meet B' })).toHaveAttribute('href', 'https://meet.google.com/bbb');
+  await expect(map).not.toContainText('Where everyone is now');
+});
+
+test('active overview shows current assignments with room links', async ({ page }) => {
+  await page.evaluate(({ session, nowMs }) => {
+    renderParticipantView(document.getElementById('app'), session, 'Alice', nowMs);
+  }, { session: SESSION, nowMs: NOW_PAIRS });
+  const overview = page.locator('[data-role="overview"]');
+  await overview.locator('summary').click();
+  const map = overview.locator('[data-role="overview-map"]');
+  await expect(map).toContainText('Current assignments');
+  await expect(map).toContainText(/Alice.*Bob/);
+  await expect(map.getByRole('link', { name: 'Meet A' })).toHaveAttribute('href', 'https://meet.google.com/aaa');
+  await expect(map).not.toContainText('Where everyone is now');
+});
+
 test('opened session overview stays open across clock ticks', async ({ page }) => {
   await page.evaluate(({ session, nowMs }) => {
     renderParticipantView(document.getElementById('app'), session, 'Alice', nowMs);
@@ -326,6 +442,64 @@ test('opened session overview stays open across clock ticks', async ({ page }) =
   }, { session: SESSION, nowMs: NOW_PAIRS });
   await expect(page.locator('[data-role="overview"]')).toHaveAttribute('open', '');
   await expect(page.locator('[data-role="overview"]')).toHaveClass(/overview-panel/);
+});
+
+test('participant hierarchy follows orient, act, capture, prepare, recover', async ({ page }) => {
+  await page.addInitScript(() => { Date.now = () => (1_700_000_000 + 90) * 1000; });
+  await page.reload();
+  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), SESSION);
+  const observed = await page.evaluate(() => {
+    const ordered = [
+      '[data-role="process-orientation"]',
+      '[data-role="location"]',
+      '[data-role="instructions"]',
+      '[data-role="notes"]',
+      '[data-role="up-next"]',
+      '[data-role="overview"]',
+    ].map(selector => document.querySelector(selector));
+    const positions = ordered.map(element => element?.getBoundingClientRect().top ?? -1);
+    return {
+      positions,
+      labels: ordered.map(element => element?.textContent.replace(/\s+/g, ' ').trim().slice(0, 60) || ''),
+      notesInFirstMobileViewport: document.querySelector('[data-role="notes"]')?.getBoundingClientRect().top < 844,
+    };
+  });
+  expect(observed.positions.every((position, index, positions) => index === 0 || position > positions[index - 1])).toBe(true);
+  expect(observed.labels[0]).toMatch(/Step 2 of 4.*Pairs/);
+  const currentTask = page.getByRole('region', { name: 'Current task' });
+  await expect(currentTask).toContainText("Share with partner.");
+  await expect(currentTask.locator('[data-role="current-task-label"]')).toHaveText('Current task');
+  await expect(page.locator('[data-role="notes"] [data-role="copy-notes"]')).toHaveCount(1);
+  expect(observed.notesInFirstMobileViewport).toBe(true);
+});
+
+test('notes follow the current guidance before secondary context in pre-start and transition states', async ({ page }) => {
+  await page.addInitScript(() => { Date.now = () => 1_700_000_000_000; });
+  await page.reload();
+  const states = await page.evaluate(({ session, transitionSession, nowTransition }) => {
+    const app = document.getElementById('app');
+    const observe = (candidate, now, currentSelector) => {
+      Date.now = () => now;
+      startParticipantClock(app, candidate, 'Alice');
+      const orientation = document.querySelector('[data-role="process-orientation"]');
+      const current = document.querySelector(currentSelector);
+      const notes = document.querySelector('[data-role="notes"]');
+      const overview = document.querySelector('[data-role="overview"]');
+      return {
+        order: [orientation, current, notes].map(element => element?.getBoundingClientRect().top ?? -1),
+        notesBeforeOverview: !overview || notes.getBoundingClientRect().top < overview.getBoundingClientRect().top,
+      };
+    };
+    return {
+      prestart: observe({ ...session, startTime: 1_700_000_600 }, 1_700_000_000_000, '[data-role="waiting-guidance"]'),
+      transition: observe(transitionSession, nowTransition, '[data-role="transition"]'),
+    };
+  }, { session: SESSION, transitionSession: TRANSITION_SESSION, nowTransition: NOW_TRANSITION });
+  for (const state of Object.values(states)) {
+    expect(state.order[0]).toBeLessThan(state.order[1]);
+    expect(state.order[1]).toBeLessThan(state.order[2]);
+    expect(state.notesBeforeOverview).toBe(true);
+  }
 });
 
 test('participant notes stay continuous across phase changes', async ({ page }) => {
@@ -1208,12 +1382,11 @@ test('P-name-1: prepared name selector contains every participant', async ({ pag
 });
 
 // P-copy-1: copy-notes button present in participant view
-test('P-copy-1: copy-notes button present in participant view', async ({ page }) => {
-  await page.evaluate(({ session, nowMs }) => {
-    const container = document.getElementById('app');
-    renderParticipantView(container, session, 'Alice', nowMs);
-  }, { session: SESSION, nowMs: NOW_PAIRS });
-  await expect(page.locator('[data-role="copy-notes"]')).toHaveCount(1);
+test('P-copy-1: copy-notes button stays with session-continuous notes', async ({ page }) => {
+  await page.addInitScript(value => { Date.now = () => value; }, NOW_PAIRS);
+  await page.reload();
+  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), SESSION);
+  await expect(page.locator('[data-role="notes"] [data-role="copy-notes"]')).toHaveCount(1);
 });
 
 // P-seg-1: segment headers rendered in timeline when segments present
