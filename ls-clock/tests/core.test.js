@@ -145,6 +145,30 @@ test('P-simplify-4: getLLMPrompt interview checklist has fewer than 7 questions'
     `expected fewer than 7 numbered questions, got ${numberedQuestions}`);
 });
 
+// P-rooms-1: interview checklist explicitly asks for breakout rooms and the plenary main room
+test('P-rooms-1: getLLMPrompt interview checklist asks for rooms and the plenary main room', () => {
+  const prompt = getLLMPrompt();
+  // Scope to the interview checklist section (the numbered-question block), not the whole prompt
+  const checklist = prompt.slice(
+    prompt.indexOf('## Interview checklist'),
+    prompt.indexOf('## Output format'));
+  assert.ok(checklist.length > 0, 'checklist section should exist');
+  // Breakout room list question (maps to repeated location=)
+  assert.ok(/room|meeting URL|location/i.test(checklist),
+    'checklist should ask for the list of available rooms');
+  // Plenary / whole-group main room question (maps to plenary=)
+  assert.ok(/plenary|whole-group|main/i.test(checklist),
+    'checklist should ask for the plenary / main meeting room');
+});
+
+// P-rooms-2: editable-on-the-site escape hatch covers locations and plenary
+test('P-rooms-2: getLLMPrompt says rooms/plenary are editable on the site', () => {
+  const prompt = getLLMPrompt();
+  const editSentence = prompt.split('\n').find(line => /edit/i.test(line) && /site/i.test(line)) || '';
+  assert.ok(/location|room/i.test(editSentence) && /plenary|main/i.test(editSentence),
+    'the editable-on-the-site guidance should name locations/rooms and plenary');
+});
+
 test('P-ls-prompt-1: LLM prompt lists every canonical structure by name', () => {
   const { STRUCTURES } = require('../ls-clock-core.js');
   const prompt = getLLMPrompt();

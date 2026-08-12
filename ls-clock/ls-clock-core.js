@@ -55,7 +55,9 @@ Use these names exactly. Do not invent structure names. Match the descriptions a
 
 ## Interview checklist (ask only what you still need)
 1. What outcome or central question does the facilitator want? (drives both structure choice and the invitation)
-2. Who are the participants, and what meeting URLs or room names are available?
+2. Who are the participants?
+3. What breakout rooms are available? (meeting URLs or room names — one per breakout group; needed for a complete setup)
+4. What is the plenary / main whole-group meeting room? (the single space where everyone gathers; needed for a complete setup)
 
 ## Output format
 Once the facilitator confirms, produce the final result. Output ONLY the complete setup URL—no explanation and no markdown fences.
@@ -71,7 +73,7 @@ Build its query string using these parameters:
 
 URL-encode every parameter value. The result must begin with the exact base URL above and remain bookmarkable.
 
-Do not ask for the session start time — the facilitator sets that on the site. Participant names, locations, and every other field can also be edited on the site after opening the URL, so if you do not know exact participant names, emit the URL anyway using whatever names you have (or omit the participant parameters) rather than stalling.
+Do not ask for the session start time — the facilitator sets that on the site. Participant names, breakout rooms/locations, the plenary main room, and every other field can also be edited on the site after opening the URL, so if you are unsure of any of them, emit the URL anyway using whatever you have (or omit those parameters) rather than stalling.
 
 Do not add compiled activity collections or choose activity mechanics, timing details, grouping rules, instructions, or role assignments; the app owns activity mechanics, timing, grouping, roles, transitions, and instructions.
 
