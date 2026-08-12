@@ -323,7 +323,7 @@ function quickPlanFromURL(input) {
   return plan;
 }
 
-const DEFAULT_TRANSITION_TIMING = Object.freeze({ passingSeconds: 120, shortBreakSeconds: 30 });
+const DEFAULT_TRANSITION_TIMING = Object.freeze({ passingSeconds: 60, shortBreakSeconds: 30 });
 
 function insertConsistentTransitions(phases, groups, segments, transitionTiming, options = {}) {
   const includePassing = options.includePassing !== false;

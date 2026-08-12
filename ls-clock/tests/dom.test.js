@@ -117,6 +117,173 @@ test('Up next preview fits a 390px participant viewport', async ({ page }) => {
   expect(metrics.pageOverflow).toBe(false);
 });
 
+test('resilient companion keeps timing visible and exposes the next-room link', async ({ page }) => {
+  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 30 };
+  const encoded = await page.evaluate(session => encodeSession(session), liveSession);
+  await page.goto(`/#${encoded}`);
+  await page.locator('[data-role="prepared-name"]').selectOption('Alice');
+  await page.getByRole('button', { name: 'Join session' }).click();
+
+  await expect(page.locator('[data-role="countdown"]')).toHaveCSS('position', 'sticky');
+  await expect(page).toHaveTitle(/0:2\d · Individual · LS Clock/);
+  const nextLink = page.locator('[data-role="up-next-location"] a');
+  await expect(nextLink).toHaveAttribute('href', 'https://meet.google.com/aaa');
+  await expect(nextLink).toContainText('Join Meet A');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
+});
+
+test('long meeting URL labels do not overflow the mobile participant view', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const session = await page.evaluate(() => compileQuickPlan({
+    structures: [{ key: '1-2-4-All' }],
+    invitation: 'Test',
+    startTime: Math.floor(Date.now() / 1000) - 250,
+    participants: ['Alice', 'Bob', 'Carol', 'Dave'],
+    locations: ['https://meet.google.com/aaa-bbbb-cccc', 'https://meet.google.com/ddd-eeee-ffff'],
+    plenaryLocation: 'https://meet.google.com/main-room',
+  }));
+  const encoded = await page.evaluate(value => encodeSession(value), session);
+  await page.goto(`/?name=Alice#${encoded}`);
+  await expect(page.locator('.join-btn')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
+});
+
+test('participant clock offers opt-in alerts and sounds once at an activity boundary', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__audioStarts = 0;
+    class FakeAudioContext {
+      createOscillator() { return { connect() {}, start() { window.__audioStarts += 1; }, stop() {}, frequency: { value: 0 }, type: '' }; }
+      createGain() { return { connect() {}, gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} } }; }
+      resume() { return Promise.resolve(); }
+      get currentTime() { return 0; }
+      get destination() { return {}; }
+    }
+    window.AudioContext = FakeAudioContext;
+  });
+  await page.reload();
+  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), {
+    ...SESSION,
+    startTime: Math.floor(Date.now() / 1000) - 59,
+  });
+  await page.getByRole('button', { name: 'Enable alerts' }).click();
+  await page.waitForTimeout(2200);
+  expect(await page.evaluate(() => window.__audioStarts)).toBe(1);
+  await expect(page.getByRole('button', { name: 'Alerts enabled' })).toBeDisabled();
+});
+
+test('Picture-in-Picture timer is opt-in when supported and omitted otherwise', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__pipRequested = 0;
+    const pipDocument = document.implementation.createHTMLDocument('');
+    const pipWindow = { document: pipDocument, addEventListener() {}, close() {} };
+    Object.defineProperty(window, 'documentPictureInPicture', {
+      configurable: true,
+      value: { requestWindow: async () => { window.__pipRequested += 1; return pipWindow; }, window: null },
+    });
+  });
+  await page.reload();
+  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 30 };
+  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), liveSession);
+  await page.getByRole('button', { name: 'Keep timer visible' }).click();
+  expect(await page.evaluate(() => window.__pipRequested)).toBe(1);
+  expect(await page.evaluate(() => documentPictureInPicture.window?.document.body.textContent || '')).toMatch(/LS Clock|Individual/);
+
+  await page.evaluate(() => { delete window.documentPictureInPicture; });
+  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), SESSION);
+  await expect(page.getByRole('button', { name: 'Keep timer visible' })).toHaveCount(0);
+});
+
+test('sticky companion controls fit a 390px viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), SESSION);
+  const metrics = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    controlsWidth: document.querySelector('[data-role="companion-controls"]')?.getBoundingClientRect().width || 0,
+    viewportWidth: document.documentElement.clientWidth,
+  }));
+  expect(metrics.overflow).toBe(false);
+  expect(metrics.controlsWidth).toBeLessThanOrEqual(metrics.viewportWidth);
+});
+
+test('manual setup defaults passing time to one minute', async ({ page }) => {
+  await expect(page.locator('#passing-time-input')).toHaveValue('1');
+});
+
+test('passing time keeps the next-room URL actionable', async ({ page }) => {
+  const passingSession = {
+    ...TRANSITION_SESSION,
+    groups: {
+      ...TRANSITION_SESSION.groups,
+      2: [{
+        phaseIndex: 2,
+        groupIndex: 0,
+        members: [{ name: 'Alice', id: 0 }, { name: 'Bob', id: 1 }],
+        location: { type: 'url', label: 'Meet B', url: 'https://meet.google.com/bbb', override: false },
+      }],
+    },
+    plenaryLocation: { type: 'url', label: 'Meet B', url: 'https://meet.google.com/bbb', override: false },
+  };
+  await page.evaluate(({ session, nowMs }) => {
+    renderParticipantView(document.getElementById('app'), session, 'Alice', nowMs);
+  }, { session: passingSession, nowMs: NOW_TRANSITION });
+  const link = page.locator('[data-role="next-location"] a');
+  await expect(link).toHaveAttribute('href', 'https://meet.google.com/bbb');
+  await expect(link).toContainText('Join Meet B');
+});
+
+test('same-room passing makes staying put unmistakable', async ({ page }) => {
+  const sameRoom = {
+    ...TRANSITION_SESSION,
+    groups: {
+      ...TRANSITION_SESSION.groups,
+      2: [{
+        phaseIndex: 2,
+        groupIndex: 0,
+        members: [{ name: 'Alice', id: 0 }, { name: 'Bob', id: 1 }],
+        location: { type: 'url', label: 'Meet A', url: 'https://meet.google.com/aaa', override: false },
+      }],
+    },
+    plenaryLocation: { type: 'url', label: 'Meet A', url: 'https://meet.google.com/aaa', override: false },
+  };
+  await page.evaluate(({ session, nowMs }) => {
+    renderParticipantView(document.getElementById('app'), session, 'Alice', nowMs);
+  }, { session: sameRoom, nowMs: NOW_TRANSITION });
+  const transition = page.locator('[data-role="transition"]');
+  await expect(transition.locator('[data-role="transition-action"]')).toHaveText('Stay in this room');
+  await expect(transition).not.toContainText('Move to your next room');
+  await expect(transition.locator('[data-role="next-location"] a')).toHaveAttribute('href', 'https://meet.google.com/aaa');
+});
+
+test('opened session overview stays open across clock ticks', async ({ page }) => {
+  await page.evaluate(({ session, nowMs }) => {
+    renderParticipantView(document.getElementById('app'), session, 'Alice', nowMs);
+  }, { session: SESSION, nowMs: NOW_PAIRS });
+  const overview = page.locator('[data-role="overview"]');
+  await overview.locator('summary').click();
+  await expect(overview).toHaveAttribute('open', '');
+  await page.evaluate(({ session, nowMs }) => {
+    renderParticipantView(document.getElementById('app'), session, 'Alice', nowMs + 1000);
+  }, { session: SESSION, nowMs: NOW_PAIRS });
+  await expect(page.locator('[data-role="overview"]')).toHaveAttribute('open', '');
+  await expect(page.locator('[data-role="overview"]')).toHaveClass(/overview-panel/);
+});
+
+test('participant notes stay continuous across phase changes', async ({ page }) => {
+  await page.addInitScript(() => {
+    let now = (1_700_000_000 + 30) * 1000;
+    Date.now = () => now;
+    window.__advanceClock = value => { now = value; };
+  });
+  await page.reload();
+  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), SESSION);
+  await page.locator('.notes-area').fill('One continuous set of notes');
+  await page.evaluate(nextNow => window.__advanceClock(nextNow), (SESSION.startTime + 90) * 1000);
+  await page.waitForTimeout(1100);
+  await expect(page.locator('.notes-area')).toHaveValue('One continuous set of notes');
+  expect(await page.evaluate(session => localStorage.getItem(getNoteKey(session.id, 'session', 'Alice')), SESSION)).toBe('One continuous set of notes');
+});
+
 test('P-entry-9a: joined early participants see start guidance', async ({ page }) => {
   const futureSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) + 600 };
   await page.evaluate(({ session, nowMs }) => {
@@ -314,7 +481,7 @@ const NOW_TRANSITION = (TRANSITION_SESSION.startTime + 130) * 1000;
 test('P-short-break-guidance: short breaks say the group and location stay the same', async ({ page }) => {
   const session = await page.evaluate(() => compileQuickPlan({
     structures: [{ key: 'Troika Consulting' }],
-    startTime: Math.floor(Date.now() / 1000) - 490,
+    startTime: Math.floor(Date.now() / 1000) - 430,
     participants: ['Alice', 'Bob', 'Carol'],
     locations: ['Room A'],
     plenaryLocation: 'Main Hall',
@@ -1115,7 +1282,7 @@ test('P-passing-config: setup exposes one session-wide passing time and short br
       visible: [...passing, ...shortBreak].every(input => input.offsetParent !== null),
     };
   });
-  expect(observed).toEqual({ passing: ['2'], shortBreak: ['0.5'], labels: ['Passing time (minutes)', 'Short break (minutes)'], visible: true });
+  expect(observed).toEqual({ passing: ['1'], shortBreak: ['0.5'], labels: ['Passing time (minutes)', 'Short break (minutes)'], visible: true });
 });
 
 test('P7: phase timeline marks elapsed, active, and upcoming phases correctly', async ({ page }) => {

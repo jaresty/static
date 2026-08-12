@@ -226,6 +226,12 @@
 
   /* ---- Participant view ---- */
   .participant-view { margin-bottom: 1.5rem; }
+  .companion-controls {
+    align-items: center; background: rgba(15,17,23,.96); border: 1px solid var(--border);
+    border-radius: var(--radius); display: flex; flex-wrap: wrap; gap: .5rem;
+    margin-bottom: .75rem; max-width: 100%; padding: .6rem; position: sticky; top: .5rem; z-index: 20;
+  }
+  .companion-controls button { flex: 1 1 170px; }
 
   .location-block {
     background: var(--surface);
@@ -242,6 +248,7 @@
     text-decoration: none;
     font-size: 1.4rem;
     font-weight: 700;
+    max-width: 100%; overflow-wrap: anywhere;
     padding: .85rem 2rem;
     border-radius: var(--radius);
     transition: background .15s;
@@ -261,8 +268,9 @@
   }
 
   .countdown {
-    font-size: 3rem; font-weight: 800; text-align: center;
-    letter-spacing: .05em; margin-bottom: 1rem; font-variant-numeric: tabular-nums;
+    background: rgba(15,17,23,.96); border-radius: var(--radius); font-size: 3rem;
+    font-weight: 800; letter-spacing: .05em; margin-bottom: 1rem; padding: .25rem;
+    position: sticky; text-align: center; top: 4.6rem; z-index: 15; font-variant-numeric: tabular-nums;
   }
   .countdown-normal { color: var(--text); }
   .countdown-amber { color: var(--amber); }
@@ -283,6 +291,30 @@
   .up-next-kicker { color: #aab2dc; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
   .up-next-movement { color: #dbe2ff; font-weight: 650; }
   .up-next-detail { color: var(--muted); font-size: .85rem; line-height: 1.4; }
+  .up-next-detail a, .next-location a { color: #c6d2ff; font-weight: 700; }
+  .transition-block, .break-block {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    display: grid; gap: .65rem; margin-bottom: 1rem; padding: 1.25rem;
+  }
+  .transition-action { font-size: 1.7rem; font-weight: 800; line-height: 1.15; }
+  .transition-stay {
+    background: rgba(34,197,94,.13); border: 2px solid var(--green); border-radius: var(--radius);
+    color: #b7f7cb; padding: 1rem; text-align: center;
+  }
+  .transition-move { color: #dbe2ff; }
+  .next-location a {
+    background: var(--accent); border-radius: var(--radius); color: white; display: inline-block;
+    font-size: 1.05rem; padding: .7rem 1rem; text-decoration: none;
+  }
+  .overview-panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    margin: 1rem 0; overflow: hidden;
+  }
+  .overview-panel summary { cursor: pointer; font-weight: 700; min-height: 44px; padding: .8rem 1rem; }
+  .overview-phases, .overview-map { border-top: 1px solid var(--border); display: grid; gap: .5rem; padding: 1rem; }
+  .overview-phase-row, .overview-map-row { border-radius: 7px; color: var(--muted); padding: .5rem .65rem; }
+  .overview-active { background: rgba(108,142,245,.14); color: var(--text); font-weight: 650; }
+  .overview-map-title { color: #c6d2ff; font-weight: 700; }
 
   .phase-transition .location-block {
     animation: flash .5s ease-out;

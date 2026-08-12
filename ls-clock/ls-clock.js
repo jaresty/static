@@ -18,8 +18,38 @@ function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+let participantPipWindow = null;
+
+function getPhaseLocation(session, phase, group) {
+  if (!phase) return null;
+  if (phase.groupSize >= 999) return session.plenaryLocation || group?.location || null;
+  return group?.location || null;
+}
+
+function updateParticipantCompanion(session, nowMs) {
+  const phase = getActivePhase(session, nowMs);
+  if (!phase) {
+    document.title = 'LS Clock';
+    return;
+  }
+  const remaining = Math.max(0, Math.round(session.startTime + phase.startOffset + phase.duration - nowMs / 1000));
+  const time = formatTime(remaining);
+  document.title = `${time} · ${phase.name} · LS Clock`;
+  if (participantPipWindow && !participantPipWindow.closed) {
+    const pipDocument = participantPipWindow.document;
+    pipDocument.title = 'LS Clock';
+    pipDocument.body.innerHTML = `<main style="font-family:system-ui,sans-serif;background:#0f1117;color:#e8eaf6;min-height:100vh;margin:0;padding:20px;box-sizing:border-box">
+      <div style="color:#aab2dc;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase">LS Clock</div>
+      <div style="font-size:44px;font-weight:800;font-variant-numeric:tabular-nums;margin:8px 0">${escHtml(time)}</div>
+      <strong style="font-size:18px">${escHtml(phase.name)}</strong>
+      <p style="color:#aab2dc;line-height:1.4">${escHtml(phase.instructions || '')}</p>
+    </main>`;
+  }
+}
+
 function renderParticipantView(container, session, participantName, nowMs) {
   const phase = getActivePhase(session, nowMs);
+  const overviewWasOpen = Boolean(container.querySelector('[data-role="overview"]')?.open);
   container.innerHTML = '';
 
   if (!phase) {
@@ -46,10 +76,21 @@ function renderParticipantView(container, session, participantName, nowMs) {
 
     if (isPassing) {
       // Show where to go next
-      const nextPhase = session.phases.find(p => p.index === phase.index + 1);
+      const phasePosition = session.phases.findIndex(candidate => candidate.index === phase.index);
+      const priorPhase = [...session.phases.slice(0, phasePosition)].reverse().find(candidate => candidate.groupSize > 0);
+      const nextPhase = session.phases.slice(phasePosition + 1).find(candidate => candidate.groupSize > 0);
+      const priorGroup = priorPhase ? getParticipantGroup(session, priorPhase.index, participantName) : null;
       const nextGroup = nextPhase ? getParticipantGroup(session, nextPhase.index, participantName) : null;
-      let nextLabel = null;
+      const priorLocation = getPhaseLocation(session, priorPhase, priorGroup);
+      const nextLocation = getPhaseLocation(session, nextPhase, nextGroup);
+      const sameLocation = Boolean(priorLocation && nextLocation
+        && (priorLocation.url || priorLocation.label) === (nextLocation.url || nextLocation.label));
       if (nextPhase) {
+        const actionEl = document.createElement('div');
+        actionEl.setAttribute('data-role', 'transition-action');
+        actionEl.className = `transition-action ${sameLocation ? 'transition-stay' : 'transition-move'}`;
+        actionEl.textContent = sameLocation ? 'Stay in this room' : `Move to ${nextLocation?.label || 'your next location'}`;
+        breakEl.appendChild(actionEl);
         const nextStepEl = document.createElement('div');
         nextStepEl.setAttribute('data-role', 'next-step');
         nextStepEl.textContent = `Next: ${nextPhase.name}`;
@@ -57,21 +98,25 @@ function renderParticipantView(container, session, participantName, nowMs) {
         if (nextGroup?.members?.length) {
           const nextGroupEl = document.createElement('div');
           nextGroupEl.setAttribute('data-role', 'next-group');
-          nextGroupEl.textContent = `With: ${nextGroup.members.map(member => formatMemberLabel(member)).join(', ')}`;
+          nextGroupEl.textContent = `With: ${nextGroup.members.map(member => formatMemberLabel(member, participantName)).join(', ')}`;
           breakEl.appendChild(nextGroupEl);
         }
-        if (nextPhase.groupSize >= 999) {
-          nextLabel = session.plenaryLocation?.label || 'Whole Group';
-        } else if (nextGroup?.location) {
-          nextLabel = nextGroup.location.label;
+        if (nextLocation) {
+          const nextLocEl = document.createElement('div');
+          nextLocEl.setAttribute('data-role', 'next-location');
+          nextLocEl.className = 'next-location';
+          if (nextLocation.url) {
+            const link = document.createElement('a');
+            link.href = nextLocation.url;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.textContent = `Join ${nextLocation.label}`;
+            nextLocEl.appendChild(link);
+          } else {
+            nextLocEl.textContent = nextLocation.label;
+          }
+          breakEl.appendChild(nextLocEl);
         }
-      }
-      if (nextLabel) {
-        const nextLocEl = document.createElement('div');
-        nextLocEl.setAttribute('data-role', 'next-location');
-        nextLocEl.className = 'next-location';
-        nextLocEl.textContent = 'Head to: ' + nextLabel;
-        breakEl.appendChild(nextLocEl);
       }
     }
     const breakTitle = document.createElement('div');
@@ -85,14 +130,16 @@ function renderParticipantView(container, session, participantName, nowMs) {
     countdownEl.textContent = formatTime(remainSec);
     const instrEl = document.createElement('div');
     instrEl.className = 'phase-instructions';
-    instrEl.textContent = phase.instructions;
+    instrEl.textContent = isPassing && breakEl.querySelector('.transition-stay')
+      ? 'Keep this room open. Your next step will begin here.'
+      : phase.instructions;
     breakEl.appendChild(breakTitle);
     breakEl.appendChild(countdownEl);
     breakEl.appendChild(instrEl);
     container.appendChild(breakEl);
 
     // Overview panel
-    container.appendChild(buildOverviewPanel(session, phase));
+    container.appendChild(buildOverviewPanel(session, phase, overviewWasOpen));
     return;
   }
 
@@ -235,14 +282,23 @@ function renderParticipantView(container, session, participantName, nowMs) {
       const nextLocationEl = document.createElement('div');
       nextLocationEl.setAttribute('data-role', 'up-next-location');
       nextLocationEl.className = 'up-next-detail';
-      nextLocationEl.textContent = 'Location: ' + nextLocation.label;
+      if (nextLocation.url) {
+        const link = document.createElement('a');
+        link.href = nextLocation.url;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = `Join ${nextLocation.label}`;
+        nextLocationEl.appendChild(link);
+      } else {
+        nextLocationEl.textContent = 'Location: ' + nextLocation.label;
+      }
       preview.appendChild(nextLocationEl);
     }
     container.appendChild(preview);
   }
 
   // 6. Overview panel (expandable)
-  container.appendChild(buildOverviewPanel(session, phase));
+  container.appendChild(buildOverviewPanel(session, phase, overviewWasOpen));
 
   // 7. Copy notes button
   const copyBtn = document.createElement('button');
@@ -250,20 +306,17 @@ function renderParticipantView(container, session, participantName, nowMs) {
   copyBtn.className = 'copy-notes-btn';
   copyBtn.textContent = 'Copy my notes';
   copyBtn.addEventListener('click', () => {
-    const lines = session.phases.map(p => {
-      const key = getNoteKey(session.id, p.index, participantName);
-      const note = localStorage.getItem(key) || '';
-      return note ? `${p.name}:\n${note}` : null;
-    }).filter(Boolean);
-    navigator.clipboard.writeText(lines.join('\n\n')).catch(() => {});
+    const note = localStorage.getItem(getNoteKey(session.id, 'session', participantName)) || '';
+    navigator.clipboard.writeText(note).catch(() => {});
   });
   container.appendChild(copyBtn);
 }
 
-function buildOverviewPanel(session, activePhase) {
+function buildOverviewPanel(session, activePhase, open = false) {
   const wrapper = document.createElement('details');
   wrapper.setAttribute('data-role', 'overview');
   wrapper.className = 'overview-panel';
+  wrapper.open = open;
   const summary = document.createElement('summary');
   summary.textContent = 'Session overview';
   wrapper.appendChild(summary);
@@ -491,8 +544,30 @@ function startParticipantClock(app, session, participantName) {
   const view = document.createElement('div');
   view.className = 'participant-view';
 
-  const locationSection = document.createElement('div');
-  locationSection.className = 'main-section';
+  const companionControls = document.createElement('div');
+  companionControls.setAttribute('data-role', 'companion-controls');
+  companionControls.className = 'companion-controls';
+
+  const alertsButton = document.createElement('button');
+  alertsButton.type = 'button';
+  alertsButton.textContent = 'Enable alerts';
+  companionControls.appendChild(alertsButton);
+
+  if ('documentPictureInPicture' in window) {
+    const pipButton = document.createElement('button');
+    pipButton.type = 'button';
+    pipButton.textContent = 'Keep timer visible';
+    pipButton.addEventListener('click', async () => {
+      try {
+        participantPipWindow = await window.documentPictureInPicture.requestWindow({ width: 320, height: 240 });
+        if (window.documentPictureInPicture && !window.documentPictureInPicture.window) {
+          try { window.documentPictureInPicture.window = participantPipWindow; } catch (_) {}
+        }
+        updateParticipantCompanion(session, Date.now());
+      } catch (_) {}
+    });
+    companionControls.appendChild(pipButton);
+  }
 
   const timeline = document.createElement('div');
   timeline.className = 'timeline-strip';
@@ -508,8 +583,11 @@ function startParticipantClock(app, session, participantName) {
   const notesEl = document.createElement('textarea');
   notesEl.className = 'notes-area';
   notesEl.placeholder = 'Write your thoughts here…';
+  const sessionNoteKey = getNoteKey(session.id, 'session', participantName);
+  notesEl.value = localStorage.getItem(sessionNoteKey) || '';
 
   app.innerHTML = '';
+  app.appendChild(companionControls);
   app.appendChild(view);
   app.appendChild(timeline);
   app.appendChild(invitationEl);
@@ -517,6 +595,38 @@ function startParticipantClock(app, session, participantName) {
   app.appendChild(notesEl);
 
   let lastPhaseIndex = null;
+  let alertsEnabled = false;
+  let audioContext = null;
+
+  const playTransitionCue = () => {
+    try {
+      const Context = window.AudioContext || window.webkitAudioContext;
+      if (!Context) return;
+      audioContext ||= new Context();
+      audioContext.resume?.().catch(() => {});
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 880;
+      gain.gain.setValueAtTime(0.18, audioContext.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.35);
+      oscillator.connect(gain);
+      gain.connect(audioContext.destination);
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.35);
+    } catch (_) {}
+  };
+
+  alertsButton.addEventListener('click', () => {
+    alertsEnabled = true;
+    try {
+      const Context = window.AudioContext || window.webkitAudioContext;
+      if (Context) audioContext ||= new Context();
+      audioContext?.resume?.().catch(() => {});
+    } catch (_) {}
+    alertsButton.textContent = 'Alerts enabled';
+    alertsButton.disabled = true;
+  });
 
   const tick = () => {
     const now = Date.now();
@@ -524,11 +634,7 @@ function startParticipantClock(app, session, participantName) {
     const phaseIndex = phase ? phase.index : null;
 
     if (phaseIndex !== lastPhaseIndex) {
-      // Save note from prior phase, load note for new phase
-      if (lastPhaseIndex !== null) {
-        saveNote(session.id, lastPhaseIndex, participantName, notesEl.value);
-      }
-      notesEl.value = phaseIndex !== null ? loadNote(session.id, phaseIndex, participantName) : '';
+      if (lastPhaseIndex !== null && alertsEnabled) playTransitionCue();
       lastPhaseIndex = phaseIndex;
 
       // Flash location block on phase transition
@@ -539,10 +645,11 @@ function startParticipantClock(app, session, participantName) {
 
     renderParticipantView(view, session, participantName, now);
     renderPhaseTimeline(timeline, session, now);
+    updateParticipantCompanion(session, now);
   };
 
   notesEl.addEventListener('input', () => {
-    if (lastPhaseIndex !== null) saveNote(session.id, lastPhaseIndex, participantName, notesEl.value);
+    localStorage.setItem(sessionNoteKey, notesEl.value);
   });
 
   tick();
@@ -592,7 +699,7 @@ function startSetupWalkthrough() {
   const demoSession = compileQuickPlan({
     structures: [{ key: '1-2-4-All' }],
     invitation: 'What ideas or actions do you recommend?',
-    startTime: Math.floor(Date.now() / 1000) - 190,
+    startTime: Math.floor(Date.now() / 1000) - 250,
     participants: ['Alice', 'Bob', 'Carol', 'Dave'],
     locations: ['Room A', 'Room B'],
     plenaryLocation: 'Main Hall',
@@ -762,7 +869,7 @@ function renderSetupPage() {
         <p class="hint">Use passing time when groups reorganize or move. Use the short break when everyone stays together in the same space.</p>
         <div class="timing-settings">
           <label>Passing time (minutes)
-            <input id="passing-time-input" type="number" value="2" min="0" max="30" step="0.5">
+            <input id="passing-time-input" type="number" value="1" min="0" max="30" step="0.5">
           </label>
           <label>Short break (minutes)
             <input id="short-break-input" type="number" value="0.5" min="0" max="10" step="0.5">

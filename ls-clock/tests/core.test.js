@@ -528,6 +528,18 @@ test('P-loc-1: validateSession warns when locationPool has fewer locations than 
   assert.ok(errs.some(e => e.includes('location')), 'should warn about insufficient locations');
 });
 
+test('P-trans-default: quick-plan passing time defaults to one minute', () => {
+  const session = compileQuickPlan({
+    structures: [{ key: '1-2-4-All' }],
+    participants: ['Alice', 'Bob', 'Carol', 'Dave'],
+    locations: ['Room A', 'Room B'],
+    plenaryLocation: 'Main Hall',
+  });
+  const passing = session.phases.filter(phase => phase.transitionType === 'passing');
+  assert.ok(passing.length > 0);
+  assert.ok(passing.every(phase => phase.duration === 60));
+});
+
 // P-trans-3: compiler owns transitionType
 test('P-trans-3: quick-plan compiler creates passing transitions', () => {
   const { compileQuickPlan } = require('../ls-clock-core.js');
@@ -611,7 +623,7 @@ test('P-passing-authority: quick plans use defaults and reject transition mechan
     }
   });
   assert.deepEqual({ defaults: session.transitionTiming, rejected }, {
-    defaults: { passingSeconds: 120, shortBreakSeconds: 30 },
+    defaults: { passingSeconds: 60, shortBreakSeconds: 30 },
     rejected: [true, true, true, true, true],
   });
 });
@@ -689,8 +701,8 @@ test('P-passing-duration: compiled transitions consistently use session-wide cla
     passingDurations: [...new Set(passing.map(phase => phase.duration))],
     shortBreakDurations: [...new Set(shortBreaks.map(phase => phase.duration))],
   }, {
-    transitionTiming: { passingSeconds: 120, shortBreakSeconds: 30 },
-    passingDurations: [120],
+    transitionTiming: { passingSeconds: 60, shortBreakSeconds: 30 },
+    passingDurations: [60],
     shortBreakDurations: [30],
   });
 });
