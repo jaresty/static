@@ -161,12 +161,34 @@ test('P-rooms-1: getLLMPrompt interview checklist asks for rooms and the plenary
     'checklist should ask for the plenary / main meeting room');
 });
 
-// P-rooms-2: editable-on-the-site escape hatch covers locations and plenary
-test('P-rooms-2: getLLMPrompt says rooms/plenary are editable on the site', () => {
+// P-rooms-2: editable-on-the-site escape hatch covers all fields (incl. rooms/plenary)
+test('P-rooms-2: getLLMPrompt says fields are editable on the site', () => {
   const prompt = getLLMPrompt();
   const editSentence = prompt.split('\n').find(line => /edit/i.test(line) && /site/i.test(line)) || '';
-  assert.ok(/location|room/i.test(editSentence) && /plenary|main/i.test(editSentence),
-    'the editable-on-the-site guidance should name locations/rooms and plenary');
+  // Either name rooms/plenary explicitly, or cover them via an "every field" clause
+  const namesRoomsAndPlenary = /location|room/i.test(editSentence) && /plenary|main/i.test(editSentence);
+  const coversEveryField = /every field|any (field|of them)|all fields/i.test(editSentence);
+  assert.ok(namesRoomsAndPlenary || coversEveryField,
+    'the editable-on-the-site guidance should cover rooms and plenary (explicitly or via "every field")');
+});
+
+// P-interview-1: prompt gates URL emission on having the invitation and at least one participant
+test('P-interview-1: getLLMPrompt requires invitation and participants before emitting the URL', () => {
+  const prompt = getLLMPrompt();
+  // An explicit "do not produce/emit the URL until you have ..." gate naming invitation + participant(s)
+  const hasGate = /do not (produce|emit|output|generate)[^.]*url[^.]*(until|before)/i.test(prompt);
+  assert.ok(hasGate, 'prompt should forbid emitting the URL until required fields are gathered');
+  assert.ok(/invitation/i.test(prompt) && /participant/i.test(prompt),
+    'the gate should reference invitation and participants');
+});
+
+// P-interview-2: prompt no longer tells the LLM to skip questions it can infer
+test('P-interview-2: getLLMPrompt drops the "ask only what you cannot infer" skip-license framing', () => {
+  const prompt = getLLMPrompt();
+  assert.ok(!/ask only what you cannot infer/i.test(prompt),
+    'prompt must not tell the LLM to skip questions it can infer');
+  assert.ok(!/ask only what you still need/i.test(prompt),
+    'prompt must not tell the LLM to ask only what it still needs');
 });
 
 test('P-ls-prompt-1: LLM prompt lists every canonical structure by name', () => {
