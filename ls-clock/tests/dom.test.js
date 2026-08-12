@@ -321,7 +321,8 @@ test('floating timer control is omitted when Picture-in-Picture is unsupported',
 });
 
 test('main-room fallback is actionable throughout session pages', async ({ page }) => {
-  const encoded = await page.evaluate(session => encodeSession(session), SESSION);
+  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 90 };
+  const encoded = await page.evaluate(session => encodeSession(session), liveSession);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/#${encoded}`);
   await expect(page.getByRole('link', { name: /main room/i })).toHaveAttribute('href', 'https://zoom.us/main');
@@ -442,6 +443,33 @@ test('opened session overview stays open across clock ticks', async ({ page }) =
   }, { session: SESSION, nowMs: NOW_PAIRS });
   await expect(page.locator('[data-role="overview"]')).toHaveAttribute('open', '');
   await expect(page.locator('[data-role="overview"]')).toHaveClass(/overview-panel/);
+});
+
+test('every process step remains visible when the timeline wraps', async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 844 });
+  await page.addInitScript(() => { Date.now = () => (1_700_000_000 + 90) * 1000; });
+  await page.goto('/');
+  const wrappedSession = {
+    ...SESSION,
+    phases: Array.from({ length: 9 }, (_, index) => ({
+      ...SESSION.phases[index % SESSION.phases.length],
+      index,
+      name: index % 2 ? 'Passing time' : `Activity step ${index + 1}`,
+      startOffset: index * 120,
+      duration: 120,
+    })),
+  };
+  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), wrappedSession);
+  expect(await page.evaluate(() => {
+    const timeline = document.querySelector('[data-role="process-orientation"] .timeline-strip');
+    const items = [...timeline.querySelectorAll('.timeline-item')];
+    const timelineRect = timeline.getBoundingClientRect();
+    return {
+      itemCount: items.length,
+      wraps: new Set(items.map(item => Math.round(item.getBoundingClientRect().top))).size > 1,
+      allVisible: items.every(item => item.getBoundingClientRect().bottom <= timelineRect.bottom),
+    };
+  })).toEqual({ itemCount: 9, wraps: true, allVisible: true });
 });
 
 test('participant hierarchy follows orient, act, capture, prepare, recover', async ({ page }) => {
@@ -1232,6 +1260,20 @@ test('P-preview-1: facilitator preview shows group details', async ({ page }) =>
   await expect(preview.locator('[data-role="preview-groups"]')).toHaveCount(1);
 });
 
+test('completed sessions cannot be joined after loading or reloading the session URL', async ({ page }) => {
+  const completedSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 1800 };
+  const encoded = await page.evaluate(session => encodeSession(session), completedSession);
+  for (let load = 0; load < 2; load += 1) {
+    if (load === 0) await page.goto(`/#${encoded}`);
+    else await page.reload();
+    expect(await page.evaluate(() => ({
+      completion: document.body.textContent.includes('Session complete. Thank you!'),
+      preparedJoin: Boolean(document.querySelector('#join-btn')),
+      lateJoin: Boolean(document.querySelector('#late-join-btn')),
+    }))).toEqual({ completion: true, preparedJoin: false, lateJoin: false });
+  }
+});
+
 test('P-entry-1: pre-start landing orients participants', async ({ page }) => {
   const futureSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) + 10 * 60 };
   const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: futureSession });
@@ -1251,7 +1293,8 @@ test('P-entry-1: pre-start landing orients participants', async ({ page }) => {
 });
 
 test('P-entry-2: full session information is available before joining', async ({ page }) => {
-  const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: SESSION });
+  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 90 };
+  const encoded = await page.evaluate(session => encodeSession(session), liveSession);
   await page.goto(`/#${encoded}`);
   const observed = await page.evaluate(() => {
     const details = document.querySelector('[data-role="landing-session-details"]');
@@ -1310,7 +1353,8 @@ test('P-entry-4: late arrivals use a distinct local assignment path', async ({ p
 });
 
 test('P-entry-6: facilitator view is discoverable from the landing page', async ({ page }) => {
-  const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: SESSION });
+  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 90 };
+  const encoded = await page.evaluate(session => encodeSession(session), liveSession);
   await page.goto(`/#${encoded}`);
   const before = await page.evaluate(() => {
     const link = document.querySelector('[data-role="facilitator-link"]');
@@ -1349,7 +1393,8 @@ test('P-entry-7: participant landing is polished and responsive', async ({ page 
 });
 
 test('P-entry-8: landing controls and errors are accessible', async ({ page }) => {
-  const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: SESSION });
+  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 90 };
+  const encoded = await page.evaluate(session => encodeSession(session), liveSession);
   await page.goto(`/#${encoded}`);
   await page.getByRole('button', { name: 'Join session' }).click();
   await page.locator('[data-role="late-arrival"] summary').click();
@@ -1375,7 +1420,8 @@ test('P-entry-8: landing controls and errors are accessible', async ({ page }) =
 
 // P-name-1: prepared name selector contains the session roster
 test('P-name-1: prepared name selector contains every participant', async ({ page }) => {
-  const encoded = await page.evaluate(({ session }) => encodeSession(session), { session: SESSION });
+  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 90 };
+  const encoded = await page.evaluate(session => encodeSession(session), liveSession);
   await page.goto(`/#${encoded}`);
   const options = page.locator('[data-role="prepared-name"] option');
   await expect(options).toHaveText(['Choose your name', ...SESSION.participants.map(participant => participant.name)]);

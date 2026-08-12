@@ -532,6 +532,22 @@ function renderJoinOrView(session) {
     return;
   }
 
+  const sessionEnd = session.startTime + Math.max(...session.phases.map(phase => phase.startOffset + phase.duration));
+  if (Date.now() / 1000 >= sessionEnd) {
+    app.innerHTML = `<main class="join-screen" data-role="participant-landing">
+      <div class="join-brand">
+        <div class="product-eyebrow">Live timing and guidance for Liberating Structures.</div>
+        <h1 class="app-title">LS Clock</h1>
+        <p class="product-tagline">One shared clock. Every group in sync.</p>
+      </div>
+      <section class="session-hero status-message" data-role="session-complete">
+        <h2>Session complete. Thank you!</h2>
+        <p>This session has ended, so it can no longer be joined.</p>
+      </section>
+    </main>`;
+    return;
+  }
+
   // Participant landing screen
   app.innerHTML = `
     <main class="join-screen" data-role="participant-landing">
