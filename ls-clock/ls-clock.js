@@ -83,7 +83,10 @@ function updateParticipantCompanion(session, participantName, nowMs) {
     pipDocument.body.innerHTML = `<main style="font-family:system-ui,sans-serif;background:#0f1117;color:#e8eaf6;min-height:100vh;margin:0;padding:20px;box-sizing:border-box">
       <div style="color:#aab2dc;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase">LS Clock</div>
       <div style="font-size:40px;font-weight:800;font-variant-numeric:tabular-nums;margin:8px 0">${state.beforeStart ? 'Starts in ' : ''}${escHtml(time)}</div>
-      ${state.beforeStart ? '' : `<div style="color:#aab2dc;font-size:13px;margin-bottom:.35rem">Now · ${escHtml(state.current.phase.name)}</div>`}
+      ${state.beforeStart ? '' : `<section style="border-bottom:1px solid #30364d;margin-bottom:12px;padding-bottom:10px">
+        <strong style="font-size:17px">Now · ${escHtml(state.current.phase.name)}</strong>
+        <p style="color:#dbe2ff;line-height:1.4;margin:.4rem 0 0">${escHtml(state.current.phase.instructions || '')}</p>
+      </section>`}
       <strong style="font-size:18px">${state.beforeStart ? '' : 'Up next · '}${escHtml(phase.name)}</strong>
       <p style="color:#aab2dc;line-height:1.4;margin:.55rem 0">${escHtml(phase.instructions || '')}</p>
       ${destination}
@@ -603,21 +606,31 @@ function startParticipantClock(app, session, participantName) {
   companionControls.className = 'companion-controls';
 
   if ('documentPictureInPicture' in window) {
-    const openCompanionWindow = async () => {
+    const pipButton = document.createElement('button');
+    pipButton.type = 'button';
+    pipButton.textContent = 'Open floating timer';
+    const markCompanionClosed = () => {
+      participantPipWindow = null;
+      pipButton.textContent = 'Open floating timer';
+    };
+    const toggleCompanionWindow = async () => {
+      if (participantPipWindow && !participantPipWindow.closed) {
+        participantPipWindow.close();
+        markCompanionClosed();
+        return;
+      }
       try {
         participantPipWindow = await window.documentPictureInPicture.requestWindow({ width: 360, height: 320 });
+        participantPipWindow.addEventListener('pagehide', markCompanionClosed, { once: true });
         if (window.documentPictureInPicture && !window.documentPictureInPicture.window) {
           try { window.documentPictureInPicture.window = participantPipWindow; } catch (_) {}
         }
+        pipButton.textContent = 'Close floating timer';
         updateParticipantCompanion(session, participantName, Date.now());
-      } catch (_) {}
+      } catch (_) { markCompanionClosed(); }
     };
-    const pipButton = document.createElement('button');
-    pipButton.type = 'button';
-    pipButton.textContent = 'Keep timer visible';
-    pipButton.addEventListener('click', openCompanionWindow);
+    pipButton.addEventListener('click', toggleCompanionWindow);
     companionControls.appendChild(pipButton);
-    openCompanionWindow();
   }
 
   const timeline = document.createElement('div');

@@ -176,54 +176,68 @@ test('participant alerts arm on the first interaction without a dedicated enable
   expect(await page.evaluate(() => window.__audioStarts)).toBe(1);
 });
 
-test('Picture-in-Picture previews pre-start and active assignments', async ({ page }) => {
+test('floating timer stays closed until explicitly opened and toggles predictably', async ({ page }) => {
   await page.addInitScript(() => {
     window.__pipRequested = 0;
+    window.__pipClosed = 0;
+    window.__pipPageHide = null;
     const pipDocument = document.implementation.createHTMLDocument('');
-    const pipWindow = { document: pipDocument, addEventListener() {}, close() {} };
+    const pipWindow = {
+      document: pipDocument,
+      closed: false,
+      addEventListener(type, listener) { if (type === 'pagehide') window.__pipPageHide = listener; },
+      close() { this.closed = true; window.__pipClosed += 1; window.__pipPageHide?.(); },
+    };
     Object.defineProperty(window, 'documentPictureInPicture', {
       configurable: true,
-      value: { requestWindow: async () => { window.__pipRequested += 1; return pipWindow; }, window: null },
+      value: { requestWindow: async () => { window.__pipRequested += 1; pipWindow.closed = false; return pipWindow; }, window: null },
     });
   });
   await page.reload();
   const futureSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) + 600 };
   const encoded = await page.evaluate(session => encodeSession(session), futureSession);
-  await page.goto(`/?pip=default#${encoded}`);
+  await page.goto(`/?pip=explicit#${encoded}`);
   await page.locator('[data-role="prepared-name"]').selectOption('Alice');
   await page.getByRole('button', { name: 'Join session' }).click();
+
+  expect(await page.evaluate(() => window.__pipRequested)).toBe(0);
+  await expect(page).toHaveTitle(/Starts in · LS Clock/);
+  const toggle = page.locator('[data-role="companion-controls"] button');
+  await expect(toggle).toHaveText('Open floating timer');
+  await toggle.click();
   expect(await page.evaluate(() => window.__pipRequested)).toBe(1);
-  expect(await page.evaluate(() => ({
-    text: documentPictureInPicture.window?.document.body.textContent || '',
-    href: documentPictureInPicture.window?.document.querySelector('a')?.href || '',
-  }))).toEqual(expect.objectContaining({
-    text: expect.stringMatching(/Starts in.*Individual.*Seat A.*Alice \(you\)/s),
-  }));
+  await expect(toggle).toHaveText('Close floating timer');
+  expect(await page.evaluate(() => documentPictureInPicture.window?.document.body.textContent || '')).toMatch(/Starts in.*Individual.*Write silently\..*Seat A.*Alice \(you\)/s);
 
-  const liveSession = {
-    ...SESSION,
-    startTime: Math.floor(Date.now() / 1000) - 30,
-    groups: {
-      ...SESSION.groups,
-      1: SESSION.groups[1].map((group, index) => index === 0 ? {
-        ...group,
-        members: group.members.map(member => member.name === 'Alice' ? { ...member, role: 'Host' } : member),
-      } : group),
-    },
-  };
-  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), liveSession);
-  await page.getByRole('button', { name: 'Keep timer visible' }).click();
-  expect(await page.evaluate(() => ({
-    text: documentPictureInPicture.window?.document.body.textContent || '',
-    href: documentPictureInPicture.window?.document.querySelector('a')?.href || '',
-  }))).toEqual({
-    text: expect.stringMatching(/Individual.*Up next.*Pairs.*Meet A.*Alice — Host \(you\).*Bob/s),
-    href: 'https://meet.google.com/aaa',
+  await toggle.click();
+  expect(await page.evaluate(() => window.__pipClosed)).toBe(1);
+  await expect(toggle).toHaveText('Open floating timer');
+
+  await toggle.click();
+  await page.evaluate(() => window.__pipPageHide?.());
+  await expect(toggle).toHaveText('Open floating timer');
+});
+
+test('floating timer separates current guidance from the next assignment', async ({ page }) => {
+  await page.addInitScript(() => {
+    const pipDocument = document.implementation.createHTMLDocument('');
+    const pipWindow = { document: pipDocument, closed: false, addEventListener() {}, close() { this.closed = true; } };
+    Object.defineProperty(window, 'documentPictureInPicture', {
+      configurable: true,
+      value: { requestWindow: async () => pipWindow, window: null },
+    });
   });
+  await page.reload();
+  const liveSession = { ...SESSION, startTime: Math.floor(Date.now() / 1000) - 30 };
+  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), liveSession);
+  await page.getByRole('button', { name: 'Open floating timer' }).click();
+  expect(await page.evaluate(() => documentPictureInPicture.window?.document.body.textContent || '')).toMatch(/Now · Individual.*Write silently\..*Up next · Pairs.*Share with partner\..*Meet A.*Alice \(you\).*Bob/s);
+});
 
+test('floating timer control is omitted when Picture-in-Picture is unsupported', async ({ page }) => {
   await page.evaluate(() => { delete window.documentPictureInPicture; });
   await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), SESSION);
-  await expect(page.getByRole('button', { name: 'Keep timer visible' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /floating timer/i })).toHaveCount(0);
 });
 
 test('main-room fallback is actionable throughout session pages', async ({ page }) => {
