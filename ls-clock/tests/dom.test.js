@@ -1074,6 +1074,48 @@ test('P-llm-toggle: LLM planning uses an accessible button-controlled panel', as
   });
 });
 
+test('AI-assisted planning uses a compact hierarchy with readable disclosure guidance', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'How AI-assisted planning works' }).click();
+  const observed = await page.evaluate(() => {
+    const section = document.querySelector('.llm-section');
+    const heading = section.querySelector('[data-role="llm-heading"]');
+    const copy = section.querySelector('#copy-prompt-btn');
+    const toggle = section.querySelector('[data-role="llm-toggle"]');
+    const panel = section.querySelector('#llm-planning-panel');
+    const steps = panel.querySelector('[data-role="llm-steps"]');
+    const tip = panel.querySelector('[data-role="google-redirect-tip"]');
+    const style = element => element ? getComputedStyle(element) : null;
+    const sectionStyle = style(section);
+    const copyStyle = style(copy);
+    const toggleStyle = style(toggle);
+    const panelStyle = style(panel);
+    const stepsStyle = style(steps);
+    const rect = element => element?.getBoundingClientRect();
+    return {
+      hasHeading: Boolean(heading),
+      order: [heading, copy, toggle, panel].map(element => element ? [...section.querySelectorAll('*')].indexOf(element) : -1),
+      copyMoreProminent: Boolean(copyStyle && toggleStyle) && parseFloat(copyStyle.fontSize) >= parseFloat(toggleStyle.fontSize) && copyStyle.backgroundColor !== toggleStyle.backgroundColor,
+      compactControls: Boolean(copy && toggle) && rect(copy).height <= 52 && rect(toggle).height <= 48,
+      panelLightweight: Boolean(panelStyle && sectionStyle) && panelStyle.borderTopWidth === '1px' && panelStyle.borderLeftWidth === '0px' && panelStyle.backgroundColor === sectionStyle.backgroundColor,
+      readableSteps: Boolean(stepsStyle) && parseFloat(stepsStyle.paddingInlineStart) >= 24 && parseFloat(stepsStyle.lineHeight) >= 22,
+      distinctTip: Boolean(tip) && style(tip).borderLeftWidth !== '0px',
+      fitsViewport: Boolean(section) && rect(section).right <= innerWidth && document.documentElement.scrollWidth <= innerWidth,
+    };
+  });
+  expect(observed).toEqual({
+    hasHeading: true,
+    order: [0, 2, 3, 4],
+    copyMoreProminent: true,
+    compactControls: true,
+    panelLightweight: true,
+    readableSteps: true,
+    distinctTip: true,
+    fitsViewport: true,
+  });
+});
+
 test('planning prompt copies in one click without opening the optional panel', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(() => {
@@ -1327,7 +1369,7 @@ test('P-setup-space-1: setup cards and control groups have breathing room', asyn
       buttonHeight: px(copyButton.minHeight),
     };
   });
-  expect(metrics).toEqual({ manualPadding: 20, quickSetGap: 8, structureRowGap: 12, descriptionMargin: 12, transitionMargin: 12, buttonHeight: 42 });
+  expect(metrics).toEqual({ manualPadding: 20, quickSetGap: 8, structureRowGap: 12, descriptionMargin: 12, transitionMargin: 12, buttonHeight: 44 });
 });
 
 test('P-sequence-descriptions: every selected activity shows its canonical description', async ({ page }) => {

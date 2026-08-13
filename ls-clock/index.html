@@ -72,14 +72,46 @@
     border-radius: var(--radius);
     padding: 1.25rem;
   }
-  #llm-toggle-btn { min-height: 44px; }
-  .llm-section .assistant-content {
-    margin-top: .75rem;
-    padding: 1rem;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+  .llm-section h3 { color: var(--text); font-size: 1rem; margin: 0 0 .25rem; }
+  .llm-intro { color: var(--muted); font-size: .88rem; margin: 0 0 .9rem; }
+  .llm-section > .primary-btn { min-height: 44px; margin: 0; }
+  #llm-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    width: fit-content;
+    min-height: 40px;
+    margin-top: .45rem;
+    padding: .45rem .15rem;
+    color: var(--accent);
+    background: transparent;
+    font-size: .86rem;
   }
+  #llm-toggle-btn:hover { color: #9bb1ff; background: transparent; }
+  #llm-toggle-btn::before { content: '›'; font-size: 1.25rem; line-height: 1; transition: transform .15s; }
+  #llm-toggle-btn[aria-expanded="true"]::before { transform: rotate(90deg); }
+  .llm-section .assistant-content {
+    margin-top: .45rem;
+    padding: .9rem 0 0;
+    background: transparent;
+    border: 0;
+    border-top: 1px solid var(--border);
+  }
+  .llm-steps { color: var(--text); font-size: .86rem; line-height: 1.45rem; margin: 0 0 .75rem; padding-inline-start: 1.5rem; }
+  .llm-steps li + li { margin-top: .25rem; }
+  .llm-privacy { color: var(--muted); font-size: .82rem; line-height: 1.3rem; margin: 0; }
+  .google-redirect-tip {
+    margin-top: .8rem;
+    padding: .65rem .75rem;
+    color: var(--muted);
+    background: rgba(119, 145, 235, .08);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    font-size: .82rem;
+    line-height: 1.3rem;
+  }
+  .google-redirect-tip strong { color: var(--text); }
+  .llm-section .copy-confirm { display: block; margin: .65rem 0 0; }
   .manual-form > summary { cursor: pointer; list-style-position: outside; }
   .manual-form[open] > summary { margin-bottom: 1.25rem; }
   .manual-form > .setup-section {

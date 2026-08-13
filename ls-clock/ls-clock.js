@@ -1000,22 +1000,22 @@ function renderSetupPage() {
       <h2>Set up your session</h2>
       <button type="button" id="load-sample-btn">Load sample setup</button>
 
-      <section class="setup-section llm-section">
-        <div class="setup-actions">
-          <button type="button" id="copy-prompt-btn" class="primary-btn">Copy planning prompt</button>
-          <div id="copy-confirm" class="copy-confirm" role="status" aria-live="polite" style="display:none">Copied!</div>
-        </div>
+      <section class="setup-section llm-section" aria-labelledby="llm-heading">
+        <h3 id="llm-heading" data-role="llm-heading">Optional AI-assisted planning</h3>
+        <p class="llm-intro">Get a guided interview and a ready-to-review setup link.</p>
+        <button type="button" id="copy-prompt-btn" class="primary-btn">Copy planning prompt</button>
         <button type="button" id="llm-toggle-btn" data-role="llm-toggle" aria-expanded="false" aria-controls="llm-planning-panel">How AI-assisted planning works</button>
         <div id="llm-planning-panel" class="assistant-content" hidden>
-          <ol class="hint">
-            <li>Copy the planning prompt above.</li>
+          <ol class="llm-steps" data-role="llm-steps">
+            <li>Copy the planning prompt.</li>
             <li>Paste it into an LLM and answer its questions.</li>
             <li>Open the setup URL it generates, then review and edit every setting before starting.</li>
           </ol>
-          <p class="hint">LS Clock does not send your session information to an LLM. Copying and pasting the prompt is under your control.</p>
-          <p class="hint"><strong>Using Google?</strong> A Google redirect may say the generated URL is invalid even when it works. Copy and paste the complete URL directly into your browser’s address bar instead.</p>
+          <p class="llm-privacy">LS Clock does not send your session information to an LLM. Copying and pasting the prompt is under your control.</p>
+          <aside class="google-redirect-tip" data-role="google-redirect-tip"><strong>Using Google?</strong> A Google redirect may say the generated URL is invalid even when it works. Copy and paste the complete URL directly into your browser’s address bar instead.</aside>
           <div id="plan-error" class="error-msg" style="display:none"></div>
         </div>
+        <div id="copy-confirm" class="copy-confirm" role="status" aria-live="polite" style="display:none">Copied!</div>
       </section>
 
       <section class="setup-section">
