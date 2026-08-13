@@ -798,7 +798,9 @@ test('P-navigation-global: primary views expose Home and Start new session', asy
       return {
         state: name,
         labels: actions.map(action => action.textContent.trim()),
-        cleanTargets: actions.every(action => !new URL(action.href).search && !new URL(action.href).hash),
+        cleanTargets: actions
+          .filter(action => ['Home', 'Start new session'].includes(action.textContent.trim()))
+          .every(action => !new URL(action.href).search && !new URL(action.href).hash),
         accessibleSize: actions.every(action => action.getBoundingClientRect().height >= 44),
       };
     }, state));
@@ -826,13 +828,85 @@ test('P-navigation-global: primary views expose Home and Start new session', asy
   expect({ states, destination }).toEqual({
     states: [
       { state: 'setup', labels: ['Home', 'Start new session'], cleanTargets: true, accessibleSize: true },
-      { state: 'landing', labels: ['Home', 'Start new session', 'Main room'], cleanTargets: true, accessibleSize: true },
-      { state: 'facilitator', labels: ['Home', 'Start new session', 'Main room'], cleanTargets: true, accessibleSize: true },
-      { state: 'live', labels: ['Home', 'Start new session', 'Main room'], cleanTargets: true, accessibleSize: true },
+      { state: 'landing', labels: ['Home', 'Start new session', 'Reuse these settings', 'Main room'], cleanTargets: true, accessibleSize: true },
+      { state: 'facilitator', labels: ['Home', 'Start new session', 'Reuse these settings', 'Main room'], cleanTargets: true, accessibleSize: true },
+      { state: 'live', labels: ['Home', 'Start new session', 'Reuse these settings', 'Main room'], cleanTargets: true, accessibleSize: true },
       { state: 'preview', labels: ['Home', 'Start new session'], cleanTargets: true, accessibleSize: true },
     ],
     destination: { search: '', hash: '', setup: true },
   });
+});
+
+test('reuse these settings is available across session pages and opens a fresh prefilled setup', async ({ page }) => {
+  const now = Math.floor(Date.now() / 1000);
+  const reusableSession = {
+    ...SESSION,
+    structure: '1-2-4-All',
+    startTime: now - 90,
+    transitionTiming: { passingSeconds: 90, shortBreakSeconds: 45 },
+  };
+  const completedSession = { ...reusableSession, startTime: now - 1800 };
+  const encodedLive = await page.evaluate(session => encodeSession(session), reusableSession);
+  const encodedComplete = await page.evaluate(session => encodeSession(session), completedSession);
+  const pages = [
+    `/?view=landing#${encodedLive}`,
+    `/?role=facilitator#${encodedLive}`,
+    `/#${encodedComplete}`,
+  ];
+  const availability = [];
+  for (const url of pages) {
+    await page.goto(url);
+    availability.push(await page.evaluate(() => Boolean([...document.querySelectorAll('a')].find(link => link.textContent.trim() === 'Reuse these settings'))));
+  }
+  await page.goto('/');
+  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), reusableSession);
+  const reuseHref = await page.evaluate(() => [...document.querySelectorAll('a')].find(link => link.textContent.trim() === 'Reuse these settings')?.href || '');
+  availability.push(Boolean(reuseHref));
+  if (reuseHref) await page.goto(reuseHref);
+  const observed = await page.evaluate(({ oldSession, availability }) => ({
+    availability,
+    setup: Boolean(document.querySelector('#structure-select')),
+    structure: document.querySelector('#structure-select')?.value,
+    invitation: document.querySelector('#invitation-input')?.value,
+    participants: document.querySelector('#participants-input')?.value,
+    locations: document.querySelector('#locations-input')?.value,
+    plenary: document.querySelector('#plenary-input')?.value,
+    passing: document.querySelector('#passing-time-input')?.value,
+    shortBreak: document.querySelector('#short-break-input')?.value,
+    noPriorIdentity: !location.hash && !location.search.includes(oldSession.id),
+    freshStart: new Date(document.querySelector('#start-time-input')?.value).getTime() > Date.now(),
+  }), { oldSession: reusableSession, availability });
+  expect(observed).toEqual({
+    availability: [true, true, true, true],
+    setup: true,
+    structure: '1-2-4-All',
+    invitation: 'Test invitation',
+    participants: 'Alice\nBob\nCarol\nDave',
+    locations: '',
+    plenary: 'https://zoom.us/main',
+    passing: '1.5',
+    shortBreak: '0.75',
+    noPriorIdentity: true,
+    freshStart: true,
+  });
+
+  const fishbowlSession = await page.evaluate(() => {
+    const session = compileQuickPlan({
+      structures: [{ key: 'User Experience Fishbowl' }],
+      invitation: 'What can we learn from experienced users?',
+      startTime: Math.floor(Date.now() / 1000) - 90,
+      participants: ['Alice', 'Bob', 'Carol', 'Dave', 'Eve'],
+      locations: ['Room A'],
+      plenaryLocation: 'Main',
+    });
+    assignCanonicalRoles(session.phases, session.groups, session.segments, { fishbowlUserIds: [0, 2, 4] });
+    return session;
+  });
+  await page.goto(`/#${await page.evaluate(session => encodeSession(session), fishbowlSession)}`);
+  const fishbowlReuse = await page.locator('[data-role="reuse-settings-link"]').getAttribute('href');
+  await page.goto(fishbowlReuse);
+  const selectedFishbowlNames = await page.locator('[data-role="fishbowl-role-options"] input:checked + span').allTextContents();
+  expect(selectedFishbowlNames).toEqual(['Alice', 'Carol', 'Eve']);
 });
 
 test('P-brand-clock: primary entry surfaces use the LS Clock identity', async ({ page }) => {
@@ -992,11 +1066,57 @@ test('P-llm-toggle: LLM planning uses an accessible button-controlled panel', as
   });
   expect(states).toEqual({
     button: true,
-    name: 'Plan with an LLM',
+    name: 'How AI-assisted planning works',
     controls: true,
     initial: { expanded: 'false', hidden: true },
     opened: { expanded: 'true', hidden: false },
     closed: { expanded: 'false', hidden: true },
+  });
+});
+
+test('planning prompt copies in one click without opening the optional panel', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => {
+    window.__copiedPrompt = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async value => { window.__copiedPrompt = value; } },
+    });
+  });
+  const button = page.getByRole('button', { name: 'Copy planning prompt' });
+  const before = await page.evaluate(() => ({
+    visible: Boolean(document.querySelector('#copy-prompt-btn')?.offsetParent),
+    panelHidden: document.querySelector('#llm-planning-panel')?.hidden,
+  }));
+  if (before.visible) await button.click();
+  const observed = await page.evaluate(beforeState => ({
+    before: beforeState,
+    copied: window.__copiedPrompt,
+    confirmation: document.querySelector('#copy-confirm')?.textContent.trim(),
+    panelStillHidden: document.querySelector('#llm-planning-panel')?.hidden,
+    disclosureLabel: document.querySelector('[data-role="llm-toggle"]')?.textContent.trim(),
+    disclosureText: document.querySelector('#llm-planning-panel')?.textContent.replace(/\s+/g, ' ').trim(),
+  }), before);
+  expect({
+    visible: observed.before.visible,
+    panelInitiallyHidden: observed.before.panelHidden,
+    copiedCompletePrompt: observed.copied.includes('URL contract') && observed.copied.includes('Interview checklist'),
+    confirmation: observed.confirmation,
+    panelStillHidden: observed.panelStillHidden,
+    disclosureLabel: observed.disclosureLabel,
+    explainsWorkflow: ['Copy', 'paste', 'answer', 'setup URL', 'review'].every(word => observed.disclosureText.includes(word)),
+    explainsPrivacy: observed.disclosureText.includes('LS Clock does not send'),
+    explainsGoogleRedirect: observed.disclosureText.includes('Google') && observed.disclosureText.includes('invalid') && observed.disclosureText.toLowerCase().includes('copy and paste'),
+  }).toEqual({
+    visible: true,
+    panelInitiallyHidden: true,
+    copiedCompletePrompt: true,
+    confirmation: 'Copied!',
+    panelStillHidden: true,
+    disclosureLabel: 'How AI-assisted planning works',
+    explainsWorkflow: true,
+    explainsPrivacy: true,
+    explainsGoogleRedirect: true,
   });
 });
 

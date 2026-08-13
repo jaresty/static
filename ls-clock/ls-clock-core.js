@@ -298,6 +298,9 @@ function quickPlanToURL(plan, baseURL) {
   for (const participant of plan.participants || []) params.append('participant', typeof participant === 'string' ? participant : participant.name);
   for (const location of plan.locations || []) params.append('location', location);
   if (plan.plenaryLocation) params.set('plenary', plan.plenaryLocation);
+  if (plan.transitionTiming?.passingSeconds != null) params.set('passing', String(plan.transitionTiming.passingSeconds));
+  if (plan.transitionTiming?.shortBreakSeconds != null) params.set('shortBreak', String(plan.transitionTiming.shortBreakSeconds));
+  for (const name of plan.fishbowlUserNames || []) params.append('fishbowlUser', name);
   url.search = params.toString();
   url.hash = '';
   return url.toString();
@@ -320,6 +323,18 @@ function quickPlanFromURL(input) {
   const locationsFallback = locations.length ? locations : splitPlural(url.searchParams.get('locations'));
   if (locationsFallback.length) plan.locations = locationsFallback;
   if (url.searchParams.has('plenary')) plan.plenaryLocation = url.searchParams.get('plenary');
+  const hasPassing = url.searchParams.has('passing');
+  const hasShortBreak = url.searchParams.has('shortBreak');
+  const fishbowlUserNames = url.searchParams.getAll('fishbowlUser').map(name => name.trim()).filter(Boolean);
+  if (fishbowlUserNames.length) plan.fishbowlUserNames = fishbowlUserNames;
+  if (hasPassing || hasShortBreak) {
+    const passingSeconds = Number(url.searchParams.get('passing'));
+    const shortBreakSeconds = Number(url.searchParams.get('shortBreak'));
+    plan.transitionTiming = {
+      passingSeconds: hasPassing && Number.isFinite(passingSeconds) ? passingSeconds : DEFAULT_TRANSITION_TIMING.passingSeconds,
+      shortBreakSeconds: hasShortBreak && Number.isFinite(shortBreakSeconds) ? shortBreakSeconds : DEFAULT_TRANSITION_TIMING.shortBreakSeconds,
+    };
+  }
   return plan;
 }
 

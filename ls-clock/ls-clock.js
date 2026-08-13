@@ -26,8 +26,43 @@ function getPhaseLocation(session, phase, group) {
   return group?.location || null;
 }
 
+function getReusableSetupURL(session) {
+  const structures = (session.segments?.length
+    ? session.segments.map(segment => segment.structureKey)
+    : String(session.structure || '').split('→').map(key => key.trim()))
+    .filter(key => STRUCTURES[key])
+    .map(key => ({ key }));
+  const fishbowlSegment = session.segments?.find(segment => segment.structureKey === 'User Experience Fishbowl');
+  const fishbowlUserNames = fishbowlSegment
+    ? [...new Set(Array.from(
+      { length: fishbowlSegment.phaseIndexEnd - fishbowlSegment.phaseIndexStart + 1 },
+      (_, offset) => fishbowlSegment.phaseIndexStart + offset
+    ).flatMap(phaseIndex => (session.groups?.[phaseIndex] || [])
+      .flatMap(group => group.members.filter(member => member.role === 'User').map(member => member.name))))]
+    : [];
+  return quickPlanToURL({
+    structures,
+    invitation: session.invitation,
+    participants: session.participants,
+    locations: (session.locationPool?.locations || []).map(location => location.url || location.label),
+    plenaryLocation: session.plenaryLocation?.url || session.plenaryLocation?.label,
+    transitionTiming: session.transitionTiming,
+    fishbowlUserNames,
+  }, `${window.location.origin}${window.location.pathname}`);
+}
+
 function updateMainRoomLink(session = null) {
   document.querySelector('[data-role="main-room-fallback"]')?.remove();
+  document.querySelector('[data-role="reuse-settings-link"]')?.remove();
+  const navigation = document.querySelector('[data-role="global-navigation"]');
+  const startNew = navigation?.querySelector('.start-new-session');
+  if (session && startNew) {
+    const reuse = document.createElement('a');
+    reuse.dataset.role = 'reuse-settings-link';
+    reuse.textContent = 'Reuse these settings';
+    reuse.href = getReusableSetupURL(session);
+    startNew.insertAdjacentElement('afterend', reuse);
+  }
   if (!session?.plenaryLocation?.url) return;
   const link = document.createElement('a');
   link.dataset.role = 'main-room-fallback';
@@ -35,7 +70,7 @@ function updateMainRoomLink(session = null) {
   link.target = '_blank';
   link.rel = 'noopener';
   link.textContent = 'Main room';
-  document.querySelector('[data-role="global-navigation"]')?.appendChild(link);
+  navigation?.appendChild(link);
 }
 
 function getParticipantAssignment(session, phase, participantName) {
@@ -966,13 +1001,19 @@ function renderSetupPage() {
       <button type="button" id="load-sample-btn">Load sample setup</button>
 
       <section class="setup-section llm-section">
-        <button type="button" id="llm-toggle-btn" data-role="llm-toggle" aria-expanded="false" aria-controls="llm-planning-panel">Plan with an LLM</button>
+        <div class="setup-actions">
+          <button type="button" id="copy-prompt-btn" class="primary-btn">Copy planning prompt</button>
+          <div id="copy-confirm" class="copy-confirm" role="status" aria-live="polite" style="display:none">Copied!</div>
+        </div>
+        <button type="button" id="llm-toggle-btn" data-role="llm-toggle" aria-expanded="false" aria-controls="llm-planning-panel">How AI-assisted planning works</button>
         <div id="llm-planning-panel" class="assistant-content" hidden>
-          <p class="hint">Copy the planning prompt into any LLM, answer its questions, then open the setup link it returns. The link is bookmarkable and the app fills in all activity mechanics.</p>
-          <div class="setup-actions">
-            <button id="copy-prompt-btn" class="primary-btn">Copy planning prompt</button>
-            <div id="copy-confirm" class="copy-confirm" style="display:none">Copied!</div>
-          </div>
+          <ol class="hint">
+            <li>Copy the planning prompt above.</li>
+            <li>Paste it into an LLM and answer its questions.</li>
+            <li>Open the setup URL it generates, then review and edit every setting before starting.</li>
+          </ol>
+          <p class="hint">LS Clock does not send your session information to an LLM. Copying and pasting the prompt is under your control.</p>
+          <p class="hint"><strong>Using Google?</strong> A Google redirect may say the generated URL is invalid even when it works. Copy and paste the complete URL directly into your browser’s address bar instead.</p>
           <div id="plan-error" class="error-msg" style="display:none"></div>
         </div>
       </section>
@@ -1226,6 +1267,11 @@ function renderSetupPage() {
       document.getElementById('participants-input').value = (plan.participants || []).join('\n');
       document.getElementById('locations-input').value = (plan.locations || []).join('\n');
       document.getElementById('plenary-input').value = plan.plenaryLocation || '';
+      if (plan.transitionTiming) {
+        document.getElementById('passing-time-input').value = String(plan.transitionTiming.passingSeconds / 60);
+        document.getElementById('short-break-input').value = String(plan.transitionTiming.shortBreakSeconds / 60);
+      }
+      for (const name of plan.fishbowlUserNames || []) selectedFishbowlNames.add(name);
       renderFishbowlRoleAssignment();
 
       if (typeof plan.startTime === 'number' && plan.participants?.length) {
