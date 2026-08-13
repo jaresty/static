@@ -1211,6 +1211,48 @@ test('P-sample-1: manual setup offers a visible sample action', async ({ page })
   await expect(page.getByRole('button', { name: 'Load sample setup' })).toBeVisible();
 });
 
+test('sample setup action gives visible accessible feedback on every activation', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const button = page.getByRole('button', { name: 'Load sample setup' });
+  await button.click();
+  const feedback = page.locator('[data-role="sample-feedback"]');
+  await expect(feedback).toHaveText('Sample setup loaded');
+  await expect(feedback).toHaveAttribute('data-announcement-version', '1');
+  const first = await page.evaluate(() => {
+    const button = document.querySelector('#load-sample-btn');
+    const status = document.querySelector('[data-role="sample-feedback"]');
+    const buttonRect = button.getBoundingClientRect();
+    const statusRect = status?.getBoundingClientRect();
+    return {
+      text: status?.textContent.trim(),
+      role: status?.getAttribute('role'),
+      live: status?.getAttribute('aria-live'),
+      visible: Boolean(status?.offsetParent),
+      adjacent: Boolean(status && button.parentElement === status.parentElement),
+      nearButton: Boolean(statusRect && statusRect.top < buttonRect.bottom + 48),
+      fitsViewport: Boolean(statusRect && statusRect.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth),
+      participantValue: document.querySelector('#participants-input').value,
+      announcementVersion: status?.dataset.announcementVersion,
+    };
+  });
+  await button.click();
+  await expect(feedback).toHaveAttribute('data-announcement-version', '2');
+  const secondAnnouncementVersion = await feedback.getAttribute('data-announcement-version');
+  expect(first).toEqual({
+    text: 'Sample setup loaded',
+    role: 'status',
+    live: 'polite',
+    visible: true,
+    adjacent: true,
+    nearButton: true,
+    fitsViewport: true,
+    participantValue: 'Alice\nBob\nCarol\nDave',
+    announcementVersion: '1',
+  });
+  expect(secondAnnouncementVersion).toBe('2');
+});
+
 test('P-sample-2: sample action fills every field using the selected structure defaults', async ({ page }) => {
   await page.goto('/');
   await page.locator('#structure-select').selectOption('TRIZ');

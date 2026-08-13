@@ -998,7 +998,10 @@ function renderSetupPage() {
 
     <section class="setup-section manual-form">
       <h2>Set up your session</h2>
-      <button type="button" id="load-sample-btn">Load sample setup</button>
+      <div class="sample-setup-action">
+        <button type="button" id="load-sample-btn">Load sample setup</button>
+        <span data-role="sample-feedback" class="sample-feedback" role="status" aria-live="polite"></span>
+      </div>
 
       <section class="setup-section llm-section" aria-label="AI-assisted planning">
         <div class="llm-shortcut-row">
@@ -1202,6 +1205,13 @@ function renderSetupPage() {
       document.getElementById('locations-input').value = 'Room A\nRoom B';
       document.getElementById('plenary-input').value = 'Main Hall';
       renderFishbowlRoleAssignment();
+      const feedback = document.querySelector('[data-role="sample-feedback"]');
+      const announcementVersion = Number(feedback.dataset.announcementVersion || 0) + 1;
+      feedback.textContent = '';
+      requestAnimationFrame(() => {
+        feedback.textContent = 'Sample setup loaded';
+        feedback.dataset.announcementVersion = String(announcementVersion);
+      });
     });
   }
 
