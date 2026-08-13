@@ -1066,7 +1066,7 @@ test('P-llm-toggle: LLM planning uses an accessible button-controlled panel', as
   });
   expect(states).toEqual({
     button: true,
-    name: 'How AI-assisted planning works',
+    name: 'How it works',
     controls: true,
     initial: { expanded: 'false', hidden: true },
     opened: { expanded: 'true', hidden: false },
@@ -1074,46 +1074,51 @@ test('P-llm-toggle: LLM planning uses an accessible button-controlled panel', as
   });
 });
 
-test('AI-assisted planning uses a compact hierarchy with readable disclosure guidance', async ({ page }) => {
+test('AI-assisted planning stays compact and progressively discloses troubleshooting', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'How AI-assisted planning works' }).click();
-  const observed = await page.evaluate(() => {
-    const section = document.querySelector('.llm-section');
-    const heading = section.querySelector('[data-role="llm-heading"]');
+  const collapsed = await page.locator('.llm-section').evaluate(section => {
     const copy = section.querySelector('#copy-prompt-btn');
-    const toggle = section.querySelector('[data-role="llm-toggle"]');
-    const panel = section.querySelector('#llm-planning-panel');
-    const steps = panel.querySelector('[data-role="llm-steps"]');
-    const tip = panel.querySelector('[data-role="google-redirect-tip"]');
-    const style = element => element ? getComputedStyle(element) : null;
-    const sectionStyle = style(section);
-    const copyStyle = style(copy);
-    const toggleStyle = style(toggle);
-    const panelStyle = style(panel);
-    const stepsStyle = style(steps);
-    const rect = element => element?.getBoundingClientRect();
+    const manualPrimary = document.querySelector('#generate-btn');
     return {
-      hasHeading: Boolean(heading),
-      order: [heading, copy, toggle, panel].map(element => element ? [...section.querySelectorAll('*')].indexOf(element) : -1),
-      copyMoreProminent: Boolean(copyStyle && toggleStyle) && parseFloat(copyStyle.fontSize) >= parseFloat(toggleStyle.fontSize) && copyStyle.backgroundColor !== toggleStyle.backgroundColor,
-      compactControls: Boolean(copy && toggle) && rect(copy).height <= 52 && rect(toggle).height <= 48,
-      panelLightweight: Boolean(panelStyle && sectionStyle) && panelStyle.borderTopWidth === '1px' && panelStyle.borderLeftWidth === '0px' && panelStyle.backgroundColor === sectionStyle.backgroundColor,
-      readableSteps: Boolean(stepsStyle) && parseFloat(stepsStyle.paddingInlineStart) >= 24 && parseFloat(stepsStyle.lineHeight) >= 22,
-      distinctTip: Boolean(tip) && style(tip).borderLeftWidth !== '0px',
-      fitsViewport: Boolean(section) && rect(section).right <= innerWidth && document.documentElement.scrollWidth <= innerWidth,
+      height: section.getBoundingClientRect().height,
+      text: section.innerText.replace(/\s+/g, ' ').trim(),
+      copyIsSecondary: getComputedStyle(copy).backgroundColor !== getComputedStyle(manualPrimary).backgroundColor,
+      panelHidden: section.querySelector('#llm-planning-panel').hidden,
+      fitsViewport: section.getBoundingClientRect().right <= innerWidth && document.documentElement.scrollWidth <= innerWidth,
     };
   });
-  expect(observed).toEqual({
-    hasHeading: true,
-    order: [0, 2, 3, 4],
-    copyMoreProminent: true,
-    compactControls: true,
-    panelLightweight: true,
-    readableSteps: true,
-    distinctTip: true,
-    fitsViewport: true,
+  const howItWorks = page.locator('[data-role="llm-toggle"]');
+  if (await howItWorks.count()) await howItWorks.click();
+  const expanded = await page.locator('.llm-section').evaluate(section => {
+    const troubleshooting = section.querySelector('[data-role="google-troubleshooting"]');
+    return {
+      conciseHelp: section.querySelector('[data-role="llm-help"]')?.textContent.replace(/\s+/g, ' ').trim(),
+      troubleshootingLabel: troubleshooting?.querySelector('summary')?.textContent.trim(),
+      troubleshootingClosed: troubleshooting ? !troubleshooting.open : false,
+      googleTipHidden: !section.querySelector('[data-role="google-redirect-tip"]')?.checkVisibility(),
+    };
   });
+  const troubleshootingToggle = page.getByText('Having trouble opening the link?', { exact: true });
+  if (await troubleshootingToggle.count()) await troubleshootingToggle.click();
+  const googleTipVisible = await page.locator('[data-role="google-redirect-tip"]').isVisible().catch(() => false);
+  expect({ collapsed, expanded, googleTipVisible }).toEqual({
+    collapsed: {
+      height: expect.any(Number),
+      text: 'Want help planning? Copy AI planning prompt How it works',
+      copyIsSecondary: true,
+      panelHidden: true,
+      fitsViewport: true,
+    },
+    expanded: {
+      conciseHelp: 'Paste the copied prompt into an LLM, answer its questions, then review the setup link it creates. LS Clock sends nothing automatically.',
+      troubleshootingLabel: 'Having trouble opening the link?',
+      troubleshootingClosed: true,
+      googleTipHidden: true,
+    },
+    googleTipVisible: true,
+  });
+  expect(collapsed.height).toBeLessThanOrEqual(96);
 });
 
 test('planning prompt copies in one click without opening the optional panel', async ({ page }) => {
@@ -1125,7 +1130,7 @@ test('planning prompt copies in one click without opening the optional panel', a
       value: { writeText: async value => { window.__copiedPrompt = value; } },
     });
   });
-  const button = page.getByRole('button', { name: 'Copy planning prompt' });
+  const button = page.getByRole('button', { name: 'Copy AI planning prompt' });
   const before = await page.evaluate(() => ({
     visible: Boolean(document.querySelector('#copy-prompt-btn')?.offsetParent),
     panelHidden: document.querySelector('#llm-planning-panel')?.hidden,
@@ -1146,8 +1151,8 @@ test('planning prompt copies in one click without opening the optional panel', a
     confirmation: observed.confirmation,
     panelStillHidden: observed.panelStillHidden,
     disclosureLabel: observed.disclosureLabel,
-    explainsWorkflow: ['Copy', 'paste', 'answer', 'setup URL', 'review'].every(word => observed.disclosureText.includes(word)),
-    explainsPrivacy: observed.disclosureText.includes('LS Clock does not send'),
+    explainsWorkflow: ['Paste', 'answer', 'setup link', 'review'].every(word => observed.disclosureText.includes(word)),
+    explainsPrivacy: observed.disclosureText.includes('LS Clock sends nothing automatically'),
     explainsGoogleRedirect: observed.disclosureText.includes('Google') && observed.disclosureText.includes('invalid') && observed.disclosureText.toLowerCase().includes('copy and paste'),
   }).toEqual({
     visible: true,
@@ -1155,7 +1160,7 @@ test('planning prompt copies in one click without opening the optional panel', a
     copiedCompletePrompt: true,
     confirmation: 'Copied!',
     panelStillHidden: true,
-    disclosureLabel: 'How AI-assisted planning works',
+    disclosureLabel: 'How it works',
     explainsWorkflow: true,
     explainsPrivacy: true,
     explainsGoogleRedirect: true,
@@ -1369,7 +1374,7 @@ test('P-setup-space-1: setup cards and control groups have breathing room', asyn
       buttonHeight: px(copyButton.minHeight),
     };
   });
-  expect(metrics).toEqual({ manualPadding: 20, quickSetGap: 8, structureRowGap: 12, descriptionMargin: 12, transitionMargin: 12, buttonHeight: 44 });
+  expect(metrics).toEqual({ manualPadding: 20, quickSetGap: 8, structureRowGap: 12, descriptionMargin: 12, transitionMargin: 12, buttonHeight: 40 });
 });
 
 test('P-sequence-descriptions: every selected activity shows its canonical description', async ({ page }) => {
