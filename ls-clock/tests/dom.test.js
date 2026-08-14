@@ -1105,13 +1105,13 @@ test('AI-assisted planning stays compact and progressively discloses troubleshoo
   expect({ collapsed, expanded, googleTipVisible }).toEqual({
     collapsed: {
       height: expect.any(Number),
-      text: 'Want help planning? Copy AI planning prompt How it works',
+      text: 'Want help planning? Copy setup for AI help How it works',
       copyIsSecondary: true,
       panelHidden: true,
       fitsViewport: true,
     },
     expanded: {
-      conciseHelp: 'Paste the copied prompt into an LLM, answer its questions, then review the setup link it creates. LS Clock sends nothing automatically.',
+      conciseHelp: 'Current form values—including participant names and room URLs—are copied to your clipboard. LS Clock sends nothing automatically. Paste the prompt into an LLM, answer its questions, then review the setup link it creates.',
       troubleshootingLabel: 'Having trouble opening the link?',
       troubleshootingClosed: true,
       googleTipHidden: true,
@@ -1121,7 +1121,8 @@ test('AI-assisted planning stays compact and progressively discloses troubleshoo
   expect(collapsed.height).toBeLessThanOrEqual(96);
 });
 
-test('planning prompt copies in one click without opening the optional panel', async ({ page }) => {
+test('AI planning prompt copies current settings and identifies what is missing', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await page.evaluate(() => {
     window.__copiedPrompt = '';
@@ -1130,40 +1131,51 @@ test('planning prompt copies in one click without opening the optional panel', a
       value: { writeText: async value => { window.__copiedPrompt = value; } },
     });
   });
-  const button = page.getByRole('button', { name: 'Copy AI planning prompt' });
-  const before = await page.evaluate(() => ({
-    visible: Boolean(document.querySelector('#copy-prompt-btn')?.offsetParent),
-    panelHidden: document.querySelector('#llm-planning-panel')?.hidden,
-  }));
-  if (before.visible) await button.click();
-  const observed = await page.evaluate(beforeState => ({
-    before: beforeState,
-    copied: window.__copiedPrompt,
-    confirmation: document.querySelector('#copy-confirm')?.textContent.trim(),
-    panelStillHidden: document.querySelector('#llm-planning-panel')?.hidden,
-    disclosureLabel: document.querySelector('[data-role="llm-toggle"]')?.textContent.trim(),
-    disclosureText: document.querySelector('#llm-planning-panel')?.textContent.replace(/\s+/g, ' ').trim(),
-  }), before);
-  expect({
-    visible: observed.before.visible,
-    panelInitiallyHidden: observed.before.panelHidden,
-    copiedCompletePrompt: observed.copied.includes('URL contract') && observed.copied.includes('Interview checklist'),
-    confirmation: observed.confirmation,
-    panelStillHidden: observed.panelStillHidden,
-    disclosureLabel: observed.disclosureLabel,
-    explainsWorkflow: ['Paste', 'answer', 'setup link', 'review'].every(word => observed.disclosureText.includes(word)),
-    explainsPrivacy: observed.disclosureText.includes('LS Clock sends nothing automatically'),
-    explainsGoogleRedirect: observed.disclosureText.includes('Google') && observed.disclosureText.includes('invalid') && observed.disclosureText.toLowerCase().includes('copy and paste'),
-  }).toEqual({
-    visible: true,
-    panelInitiallyHidden: true,
-    copiedCompletePrompt: true,
-    confirmation: 'Copied!',
+  await page.locator('#structure-select').selectOption('TRIZ');
+  await page.getByRole('button', { name: '+ Add another structure' }).click();
+  await page.locator('.structure-select-item').nth(1).selectOption('1-2-4-All');
+  await page.locator('#invitation-input').fill('How might we improve onboarding (together)?');
+  await page.locator('#participants-input').fill('Ada Lovelace\nGrace Hopper');
+  await page.locator('#locations-input').fill('');
+  await page.locator('#plenary-input').fill('https://meet.example/main-room');
+  await page.locator('#passing-time-input').fill('1.5');
+  await page.locator('#short-break-input').fill('0.75');
+  const buttonLabel = await page.locator('#copy-prompt-btn').textContent();
+  await page.locator('#copy-prompt-btn').click();
+  const observed = await page.evaluate(buttonLabel => {
+    const copied = window.__copiedPrompt;
+    const section = document.querySelector('.llm-section');
+    const disclosureText = document.querySelector('#llm-planning-panel').textContent.replace(/\s+/g, ' ').trim();
+    return {
+      buttonLabel: buttonLabel.trim(),
+      confirmation: document.querySelector('#copy-confirm').textContent.trim(),
+      panelStillHidden: document.querySelector('#llm-planning-panel').hidden,
+      staticPromptUnderLimit: getLLMPrompt(`${location.origin}${location.pathname}`).length < 3000,
+      contractBeforeContext: copied.indexOf('## URL contract') >= 0 && copied.indexOf('## URL contract') < copied.indexOf('## Current setup'),
+      hasEveryKnownValue: ['TRIZ', '1-2-4-All', 'How might we improve onboarding (together)?', 'Ada Lovelace', 'Grace Hopper', 'https://meet.example/main-room', 'passing=90', 'shortBreak=45'].every(value => copied.includes(value)),
+      marksMissingLocations: /Locations:\s*MISSING/.test(copied),
+      preservesKnownValues: /preserve every known value/i.test(copied),
+      asksForMissingValues: /ask only for missing/i.test(copied),
+      handlesParticipantsSafely: /normalize.*pasted.*attendee/i.test(copied) && /never invent.*participant/i.test(copied),
+      requiresStrictURL: copied.includes('RFC 3986') && copied.includes('( as %28') && copied.includes(') as %29') && copied.includes('Output ONLY the complete setup URL'),
+      privacyDisclosure: /participant names/i.test(disclosureText) && /room URLs/i.test(disclosureText) && /clipboard/i.test(disclosureText) && /sends nothing automatically/i.test(disclosureText),
+      fitsViewport: section.getBoundingClientRect().right <= innerWidth && document.documentElement.scrollWidth <= innerWidth,
+    };
+  }, buttonLabel);
+  expect(observed).toEqual({
+    buttonLabel: 'Copy setup for AI help',
+    confirmation: 'Prompt copied with current settings',
     panelStillHidden: true,
-    disclosureLabel: 'How it works',
-    explainsWorkflow: true,
-    explainsPrivacy: true,
-    explainsGoogleRedirect: true,
+    staticPromptUnderLimit: true,
+    contractBeforeContext: true,
+    hasEveryKnownValue: true,
+    marksMissingLocations: true,
+    preservesKnownValues: true,
+    asksForMissingValues: true,
+    handlesParticipantsSafely: true,
+    requiresStrictURL: true,
+    privacyDisclosure: true,
+    fitsViewport: true,
   });
 });
 

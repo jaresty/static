@@ -83,6 +83,7 @@
     background: transparent;
     border: 1px solid var(--border);
     font-size: .82rem;
+    white-space: nowrap;
   }
   .llm-shortcut-row button:hover { background: rgba(119, 145, 235, .08); }
   #llm-toggle-btn { color: var(--accent); border-color: transparent; }
@@ -238,6 +239,7 @@
   .facilitator-entry a { color: #b9c8ff; font-weight: 650; }
 
   @media (max-width: 600px) {
+    .llm-shortcut-row strong { flex-basis: 100%; }
     .join-screen { padding: 1rem 0 2rem; }
     .join-brand .app-title { font-size: 2rem; }
     .session-hero { padding: 24px; }

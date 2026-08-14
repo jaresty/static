@@ -1006,18 +1006,18 @@ function renderSetupPage() {
       <section class="setup-section llm-section" aria-label="AI-assisted planning">
         <div class="llm-shortcut-row">
           <strong>Want help planning?</strong>
-          <button type="button" id="copy-prompt-btn">Copy AI planning prompt</button>
+          <button type="button" id="copy-prompt-btn">Copy setup for AI help</button>
           <button type="button" id="llm-toggle-btn" data-role="llm-toggle" aria-expanded="false" aria-controls="llm-planning-panel">How it works</button>
         </div>
         <div id="llm-planning-panel" class="assistant-content" hidden>
-          <p data-role="llm-help">Paste the copied prompt into an LLM, answer its questions, then review the setup link it creates. LS Clock sends nothing automatically.</p>
+          <p data-role="llm-help">Current form values—including participant names and room URLs—are copied to your clipboard. LS Clock sends nothing automatically. Paste the prompt into an LLM, answer its questions, then review the setup link it creates.</p>
           <details class="google-troubleshooting" data-role="google-troubleshooting">
             <summary>Having trouble opening the link?</summary>
             <p data-role="google-redirect-tip">Google may say a generated URL is invalid even when it works. Copy and paste the complete URL directly into your browser’s address bar instead.</p>
           </details>
           <div id="plan-error" class="error-msg" style="display:none"></div>
         </div>
-        <div id="copy-confirm" class="copy-confirm" role="status" aria-live="polite" style="display:none">Copied!</div>
+        <div id="copy-confirm" class="copy-confirm" role="status" aria-live="polite" style="display:none">Prompt copied with current settings</div>
       </section>
 
       <section class="setup-section">
@@ -1246,7 +1246,19 @@ function renderSetupPage() {
   if (generateBtn) generateBtn.addEventListener('click', generateURL);
   document.getElementById('copy-prompt-btn').addEventListener('click', () => {
     const appURL = `${window.location.origin}${window.location.pathname}`;
-    copyText(getLLMPrompt(appURL), document.getElementById('copy-prompt-btn'));
+    const lines = id => document.getElementById(id).value.split('\n').map(value => value.trim()).filter(Boolean);
+    const currentSetup = {
+      structures: [...document.querySelectorAll('.structure-select-item')].map(select => select.value),
+      invitation: document.getElementById('invitation-input').value.trim(),
+      participants: lines('participants-input'),
+      locations: lines('locations-input'),
+      plenaryLocation: document.getElementById('plenary-input').value.trim(),
+      transitionTiming: {
+        passingSeconds: Math.max(0, Number(document.getElementById('passing-time-input').value || 0)) * 60,
+        shortBreakSeconds: Math.max(0, Number(document.getElementById('short-break-input').value || 0)) * 60,
+      },
+    };
+    copyText(getLLMPrompt(appURL, currentSetup), document.getElementById('copy-prompt-btn'));
     const confirmEl = document.getElementById('copy-confirm');
     confirmEl.style.display = 'inline';
     setTimeout(() => confirmEl.style.display = 'none', 2000);

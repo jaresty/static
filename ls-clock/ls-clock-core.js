@@ -40,19 +40,34 @@ function getNoteKey(sessionId, phaseIndex, participantName) {
   return `ls-clock:note:${sessionId}:${phaseIndex}:${participantName}`;
 }
 
-function getLLMPrompt(appURL = 'APP_URL') {
+function getLLMPrompt(appURL = 'APP_URL', currentSetup = null) {
   const structureGuide = Object.entries(STRUCTURES)
     .map(([key, structure]) => `- ${key}: ${structure.description}`)
     .join('\n');
+  const listOrMissing = values => values?.length ? values.map(value => JSON.stringify(value)).join(', ') : 'MISSING';
+  const valueOrMissing = value => value ? JSON.stringify(value) : 'MISSING';
+  const currentSetupBlock = currentSetup ? `
+
+## Current setup — preserve every known value
+Structures: ${listOrMissing(currentSetup.structures)}
+Invitation: ${valueOrMissing(currentSetup.invitation)}
+Participants: ${listOrMissing(currentSetup.participants)}
+Locations: ${listOrMissing(currentSetup.locations)}
+Plenary: ${valueOrMissing(currentSetup.plenaryLocation)}
+Transition URL parameters: ${currentSetup.transitionTiming ? `passing=${currentSetup.transitionTiming.passingSeconds} shortBreak=${currentSetup.transitionTiming.shortBreakSeconds}` : 'MISSING'}
+Preserve every known value exactly unless the facilitator explicitly requests a change. Ask only for missing information. For participants, invite the facilitator to paste an attendee list, normalize pasted attendee names, and never invent a participant. Include the transition URL parameters unchanged in the final URL.` : '';
+  const interviewHeading = currentSetup
+    ? '## Interview checklist — use only for fields marked MISSING'
+    : '## Interview checklist — ask all four';
   return `Plan a Liberating Structures session for LS Activity Clock. Interview the facilitator, choose only registered structures, confirm, then return a setup URL representing the plan. The app owns phases, timing, groups, roles, transitions, and instructions.
 
 ## URL contract — no answered field may be omitted
 Base: ${appURL}
 The query MUST contain structure=, invitation=, participant= for every person, location= for every breakout room, and plenary= for the main room. Repeat structure= in order; repeat participant= and location= per value.
 Template: ${appURL}?structure=KEY&invitation=QUESTION&participant=NAME1&participant=NAME2&location=ROOM1&location=ROOM2&plenary=MAIN_ROOM
-RFC 3986-encode values: ( as %28 and ) as %29. Output ONLY the complete setup URL; no prose or markdown. A structure-only URL is invalid.
+RFC 3986-encode values: ( as %28 and ) as %29. Output ONLY the complete setup URL; no prose or markdown. A structure-only URL is invalid.${currentSetupBlock}
 
-## Interview checklist — ask all four
+${interviewHeading}
 1. What outcome or question becomes the invitation?
 2. Who participates?
 3. Which room URLs can every participant enter without the host?
