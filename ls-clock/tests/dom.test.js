@@ -460,21 +460,28 @@ test('midpoint cue suggests switching or synthesizing without assigning turns', 
   await expect(cue).not.toContainText(/Alice|Bob|must|your turn/i);
 });
 
-test('notes retain text, focus, and selection across clock ticks', async ({ page }) => {
+test('notes retain uninterrupted focus, identity, text, and selection across clock ticks', async ({ page }) => {
   await page.addInitScript(() => { Date.now = () => (1_700_000_000 + 90) * 1000; });
   await page.reload();
   await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), SESSION);
   const notes = page.locator('[data-role="notes"] textarea');
   await notes.fill('A thought in progress');
   await notes.focus();
-  await notes.evaluate(element => element.setSelectionRange(2, 9));
+  await notes.evaluate(element => {
+    element.setSelectionRange(2, 9);
+    window.__notesNode = element;
+    window.__notesBlurCount = 0;
+    element.addEventListener('blur', () => { window.__notesBlurCount += 1; });
+  });
   await page.waitForTimeout(1100);
   await expect(notes).toHaveValue('A thought in progress');
   expect(await notes.evaluate(element => ({
+    sameNode: element === window.__notesNode,
+    blurCount: window.__notesBlurCount,
     focused: document.activeElement === element,
     start: element.selectionStart,
     end: element.selectionEnd,
-  }))).toEqual({ focused: true, start: 2, end: 9 });
+  }))).toEqual({ sameNode: true, blurCount: 0, focused: true, start: 2, end: 9 });
 });
 
 test('every process step remains visible when the timeline wraps', async ({ page }) => {
@@ -791,7 +798,7 @@ test('P-short-break-guidance: short breaks say the group and location stay the s
   expect({ shortBreak: text.includes('Short break'), stayGuidance: text.includes('Your group and location stay the same.') }).toEqual({ shortBreak: true, stayGuidance: true });
 });
 
-test('P-passing-guidance: passing time shows the next step, room, and upcoming group', async ({ page }) => {
+test('P-passing-guidance: passing into individual work omits a fake destination', async ({ page }) => {
   const session = await page.evaluate(() => compileQuickPlan({
     structures: [{ key: '1-2-4-All' }],
     startTime: Math.floor(Date.now() / 1000) - 70,
@@ -803,8 +810,12 @@ test('P-passing-guidance: passing time shows the next step, room, and upcoming g
   await page.goto(`/#${encoded}`);
   await page.locator('[data-role="prepared-name"]').selectOption('Alice');
   await page.getByRole('button', { name: 'Join session' }).click();
-  const text = await page.locator('[data-role="transition"]').textContent();
-  expect({ nextStep: text.includes('Individual'), destination: text.includes('No meeting space needed'), upcomingGroup: text.includes('Alice') }).toEqual({ nextStep: true, destination: true, upcomingGroup: true });
+  const transition = page.locator('[data-role="transition"]');
+  await expect(transition.locator('[data-role="transition-action"]')).toHaveText('Work individually');
+  await expect(transition.locator('[data-role="next-step"]')).toContainText('Individual');
+  await expect(transition.locator('[data-role="next-group"]')).toContainText('Alice');
+  await expect(transition.locator('[data-role="next-location"]')).toHaveCount(0);
+  await expect(transition).not.toContainText(/move to|no meeting space needed/i);
 });
 
 test('P-trans-1: transition phase shows data-role="transition" and next-location', async ({ page }) => {

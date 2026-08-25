@@ -166,12 +166,36 @@ function appendLocationLink(container, location, prefix = '') {
 function renderParticipantView(container, session, participantName, nowMs, notesSection = null) {
   const phase = getActivePhase(session, nowMs);
   const overviewWasOpen = Boolean(container.querySelector('[data-role="overview"]')?.open);
-  const notesEditor = notesSection?.querySelector('textarea');
-  const restoreNotesFocus = document.activeElement === notesEditor;
-  const notesSelection = restoreNotesFocus
-    ? { start: notesEditor.selectionStart, end: notesEditor.selectionEnd, direction: notesEditor.selectionDirection }
-    : null;
-  container.innerHTML = '';
+  const liveContainer = container;
+  const notesStayMounted = Boolean(notesSection && notesSection.parentNode === liveContainer);
+  const renderContainer = document.createElement('div');
+  const notesMarker = document.createComment('participant-notes');
+  const appendNotes = () => { if (notesSection) renderContainer.appendChild(notesMarker); };
+  const commitRender = () => {
+    if (!notesSection) {
+      liveContainer.replaceChildren(...renderContainer.childNodes);
+      return;
+    }
+    if (!notesStayMounted) {
+      notesMarker.replaceWith(notesSection);
+      liveContainer.replaceChildren(...renderContainer.childNodes);
+      return;
+    }
+    for (const child of [...liveContainer.childNodes]) {
+      if (child !== notesSection) child.remove();
+    }
+    let beforeNotes = true;
+    for (const child of [...renderContainer.childNodes]) {
+      if (child === notesMarker) {
+        beforeNotes = false;
+      } else if (beforeNotes) {
+        liveContainer.insertBefore(child, notesSection);
+      } else {
+        liveContainer.appendChild(child);
+      }
+    }
+  };
+  container = renderContainer;
 
   if (!phase) {
     const elapsed = nowMs / 1000 - session.startTime;
@@ -192,13 +216,15 @@ function renderParticipantView(container, session, participantName, nowMs, notes
       msg.textContent = 'Session complete. Thank you!';
     }
     container.appendChild(msg);
-    if (notesSection) container.appendChild(notesSection);
+    appendNotes();
+    commitRender();
     return;
   }
 
   // Transition or break phase — groupSize 0
   if (phase.groupSize === 0) {
     const isPassing = phase.transitionType === 'passing';
+    let nextActivityIsSolo = false;
     const breakEl = document.createElement('div');
     breakEl.setAttribute('data-role', isPassing ? 'transition' : 'break');
     breakEl.className = isPassing ? 'transition-block' : 'break-block';
@@ -215,10 +241,13 @@ function renderParticipantView(container, session, participantName, nowMs, notes
       const sameLocation = Boolean(priorLocation && nextLocation
         && (priorLocation.url || priorLocation.label) === (nextLocation.url || nextLocation.label));
       if (nextPhase) {
+        nextActivityIsSolo = nextPhase.groupSize === 1;
         const actionEl = document.createElement('div');
         actionEl.setAttribute('data-role', 'transition-action');
-        actionEl.className = `transition-action ${sameLocation ? 'transition-stay' : 'transition-move'}`;
-        actionEl.textContent = sameLocation ? 'Stay in this room' : `Move to ${nextLocation?.label || 'your next location'}`;
+        actionEl.className = `transition-action ${nextActivityIsSolo ? 'transition-solo' : sameLocation ? 'transition-stay' : 'transition-move'}`;
+        actionEl.textContent = nextActivityIsSolo
+          ? 'Work individually'
+          : sameLocation ? 'Stay in this room' : `Move to ${nextLocation?.label || 'your next location'}`;
         breakEl.appendChild(actionEl);
         const nextStepEl = document.createElement('div');
         nextStepEl.setAttribute('data-role', 'next-step');
@@ -230,7 +259,7 @@ function renderParticipantView(container, session, participantName, nowMs, notes
           nextGroupEl.textContent = `With: ${nextGroup.members.map(member => formatMemberLabel(member, participantName)).join(', ')}`;
           breakEl.appendChild(nextGroupEl);
         }
-        if (nextLocation) {
+        if (nextLocation && !nextActivityIsSolo) {
           const nextLocEl = document.createElement('div');
           nextLocEl.setAttribute('data-role', 'next-location');
           nextLocEl.className = 'next-location';
@@ -261,17 +290,20 @@ function renderParticipantView(container, session, participantName, nowMs, notes
     instrEl.className = 'phase-instructions current-task';
     instrEl.setAttribute('aria-label', 'Current task');
     instrEl.innerHTML = `<span data-role="current-task-label" class="current-task-label">Current task</span><p></p>`;
-    instrEl.querySelector('p').textContent = isPassing && breakEl.querySelector('.transition-stay')
-      ? 'Keep this room open. Your next step will begin here.'
-      : phase.instructions;
+    instrEl.querySelector('p').textContent = nextActivityIsSolo
+      ? 'Get ready to work on your own. No room change is needed.'
+      : isPassing && breakEl.querySelector('.transition-stay')
+        ? 'Keep this room open. Your next step will begin here.'
+        : phase.instructions;
     breakEl.appendChild(breakTitle);
     breakEl.appendChild(countdownEl);
     breakEl.appendChild(instrEl);
     container.appendChild(breakEl);
-    if (notesSection) container.appendChild(notesSection);
+    appendNotes();
 
     // Overview panel
     container.appendChild(buildOverviewPanel(session, phase, overviewWasOpen));
+    commitRender();
     return;
   }
 
@@ -381,13 +413,7 @@ function renderParticipantView(container, session, participantName, nowMs, notes
   instrEl.setAttribute('aria-label', 'Current task');
   instrEl.innerHTML = `<span data-role="current-task-label" class="current-task-label">Current task</span><p>${escHtml(phase.instructions)}</p>`;
   container.appendChild(instrEl);
-  if (notesSection) {
-    container.appendChild(notesSection);
-    if (restoreNotesFocus) {
-      notesEditor.focus({ preventScroll: true });
-      notesEditor.setSelectionRange(notesSelection.start, notesSelection.end, notesSelection.direction);
-    }
-  }
+  appendNotes();
 
   // 5. Preview the next activity assignment
   const phasePosition = session.phases.findIndex(candidate => candidate.index === phase.index);
@@ -449,6 +475,7 @@ function renderParticipantView(container, session, participantName, nowMs, notes
 
   // 6. Overview panel (expandable)
   container.appendChild(buildOverviewPanel(session, phase, overviewWasOpen));
+  commitRender();
 
 }
 
