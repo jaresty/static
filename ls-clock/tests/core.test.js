@@ -94,6 +94,26 @@ test('P5: decodeSession — returns null on invalid input', () => {
   assert.equal(decodeSession('not-valid-base64!!!'), null);
 });
 
+test('P-invite-compact: self-contained invites are URL-safe, smaller, and preserve every room', () => {
+  const session = compileQuickPlan({
+    structures: [{ key: '1-2-4-All' }],
+    invitation: 'How should we improve online collaboration?',
+    startTime: 1_700_000_000,
+    participants: ['Alice', 'Bob', 'Carol', 'Dave', 'Eve'],
+    locations: ['https://meet.example/a', 'https://meet.example/b', 'https://meet.example/c'],
+    plenaryLocation: 'https://meet.example/main',
+  });
+  const encoded = encodeSession(session);
+  const legacy = Buffer.from(JSON.stringify(session), 'utf8').toString('base64');
+  assert.doesNotMatch(encoded, /[+/=]/, 'invite fragment should use URL-safe characters');
+  assert.ok(encoded.length < legacy.length * 0.75, `expected compact invite; got ${encoded.length} vs ${legacy.length}`);
+  assert.deepEqual(decodeSession(encoded), session);
+  assert.deepEqual(
+    decodeSession(encoded).locationPool.locations.map(location => location.url || location.label),
+    session.locationPool.locations.map(location => location.url || location.label)
+  );
+});
+
 // P6: getNoteKey
 test('P6: getNoteKey — includes sessionId, phaseIndex, name', () => {
   const key = getNoteKey('test-session', 1, 'Alice');
@@ -271,8 +291,8 @@ test('P-plan-3a: compiler expands an ordered structure sequence canonically', ()
     { name: 'Whole Group', duration: 600, groupSize: 999 },
     { name: 'Introduction', duration: 60, groupSize: 999 },
     { name: 'Individual', duration: 60, groupSize: 1 },
-    { name: 'Pairs', duration: 120, groupSize: 2 },
-    { name: 'Quartets', duration: 300, groupSize: 4 },
+    { name: 'Pairs', duration: 240, groupSize: 2 },
+    { name: 'Quartets', duration: 480, groupSize: 4 },
     { name: 'Whole Group', duration: 420, groupSize: 999 },
   ]);
 });
@@ -448,19 +468,33 @@ test('P-plan-url-2: LLM prompt requests a one-click setup URL', () => {
   }, { includesAppURL: true, requestsSetupURL: true, asksForPastedJSON: false, describesJSONObject: false });
 });
 
-// P-ls-sequence-1: authoritative 1-2-4-All sequence
-test('P-ls-sequence-1: 1-2-4-All includes the 1-minute introduction and 1/2/5/7 flow', () => {
+// P-ls-sequence-1: online-friendly 1-2-4-All sequence
+test('P-ls-sequence-1: 1-2-4-All gives online pairs 4 minutes and quartets 8 minutes', () => {
   const { STRUCTURES } = require('../ls-clock-core.js');
   assert.deepEqual(
     STRUCTURES['1-2-4-All'].phases.map(({ name, duration, startOffset }) => ({ name, duration, startOffset })),
     [
       { name: 'Introduction', duration: 60, startOffset: 0 },
       { name: 'Individual', duration: 60, startOffset: 60 },
-      { name: 'Pairs', duration: 120, startOffset: 120 },
-      { name: 'Quartets', duration: 300, startOffset: 240 },
-      { name: 'Whole Group', duration: 420, startOffset: 540 },
+      { name: 'Pairs', duration: 240, startOffset: 120 },
+      { name: 'Quartets', duration: 480, startOffset: 360 },
+      { name: 'Whole Group', duration: 420, startOffset: 840 },
     ]
   );
+  assert.equal(STRUCTURES['1-2-4-All'].phases.find(phase => phase.name === 'Pairs').midpointCue, true);
+  assert.equal(STRUCTURES['1-2-4-All'].phases.find(phase => phase.name === 'Quartets').midpointCue, true);
+});
+
+test('P-group-balance: non-solo breakout phases never strand a remainder participant', () => {
+  const { assignGroups } = require('../ls-clock-core.js');
+  const participants = ['A', 'B', 'C', 'D', 'E'].map((name, id) => ({ name, id }));
+  const groups = assignGroups(participants, [
+    { index: 0, groupSize: 2, inheritLocations: false },
+    { index: 1, groupSize: 4, inheritLocations: true },
+  ], { locations: [{ type: 'physical', label: 'Room A' }, { type: 'physical', label: 'Room B' }], strategy: 'round-robin' });
+  assert.deepEqual(groups[0].map(group => group.members.length), [3, 2]);
+  assert.deepEqual(groups[1].map(group => group.members.length), [5]);
+  assert.ok(Object.values(groups).flat().every(group => group.members.length >= 2));
 });
 
 // P9: new structures present + Custom absent

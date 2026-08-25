@@ -24,12 +24,93 @@ function getCountdownClass(secondsRemaining) {
   return 'normal';
 }
 
+function toBase64URL(value) {
+  return btoa(unescape(encodeURIComponent(value)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function fromBase64URL(value) {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - base64.length % 4) % 4);
+  return decodeURIComponent(escape(atob(padded)));
+}
+
+function compactSession(session) {
+  const { groups, participants, locationPool, plenaryLocation, ...sessionFields } = session;
+  const locations = [];
+  const locationIndexes = new Map();
+  const locationIndex = location => {
+    if (!location) return -1;
+    const key = JSON.stringify(location);
+    if (!locationIndexes.has(key)) {
+      locationIndexes.set(key, locations.length);
+      locations.push(location);
+    }
+    return locationIndexes.get(key);
+  };
+  const participantIndex = new Map(participants.map((participant, index) => [participant.id, index]));
+  const packedGroups = Object.fromEntries(Object.entries(groups || {}).map(([phaseIndex, phaseGroups]) => [
+    phaseIndex,
+    phaseGroups.map(group => {
+      const groupFields = { ...group };
+      delete groupFields.phaseIndex;
+      delete groupFields.groupIndex;
+      delete groupFields.members;
+      delete groupFields.location;
+      const members = group.members.map(member => {
+        const index = participantIndex.get(member.id);
+        const extras = { ...member };
+        delete extras.id;
+        delete extras.name;
+        return Object.keys(extras).length ? [index, extras] : index;
+      });
+      return [members, locationIndex(group.location), Object.keys(groupFields).length ? groupFields : 0];
+    }),
+  ]));
+  return {
+    v: 2,
+    s: sessionFields,
+    p: participants,
+    l: locations,
+    o: (locationPool?.locations || []).map(locationIndex),
+    m: locationIndex(plenaryLocation),
+    r: locationPool?.strategy,
+    g: packedGroups,
+  };
+}
+
+function expandSession(payload) {
+  const participants = payload.p;
+  const locationAt = index => index < 0 ? null : payload.l[index];
+  const groups = Object.fromEntries(Object.entries(payload.g || {}).map(([phaseIndex, phaseGroups]) => [
+    phaseIndex,
+    phaseGroups.map(([members, location, groupFields], groupIndex) => ({
+      phaseIndex: Number(phaseIndex),
+      groupIndex,
+      members: members.map(member => {
+        const [index, extras] = Array.isArray(member) ? member : [member, null];
+        return extras ? { ...participants[index], ...extras } : { ...participants[index] };
+      }),
+      location: locationAt(location),
+      ...(groupFields || {}),
+    })),
+  ]));
+  return {
+    ...payload.s,
+    participants,
+    groups,
+    plenaryLocation: locationAt(payload.m),
+    locationPool: { locations: (payload.o || []).map(locationAt), strategy: payload.r },
+  };
+}
+
 function encodeSession(session) {
-  return btoa(unescape(encodeURIComponent(JSON.stringify(session))));
+  return `2.${toBase64URL(JSON.stringify(compactSession(session)))}`;
 }
 
 function decodeSession(encoded) {
   try {
+    if (encoded.startsWith('2.')) return expandSession(JSON.parse(fromBase64URL(encoded.slice(2))));
     return JSON.parse(decodeURIComponent(escape(atob(encoded))));
   } catch {
     return null;
@@ -82,11 +163,17 @@ Use keys exactly. Briefly justify choices by purpose during the interview. Do no
 Start the interview.`;
 }
 
+function getBreakoutGroupCount(participantCount, groupSize) {
+  let count = Math.ceil(participantCount / groupSize);
+  if (count > 1 && participantCount % groupSize === 1) count -= 1;
+  return count;
+}
+
 function getRequiredMeetingSpaceCount(participantCount, phases) {
   return (phases || []).reduce((required, phase) => {
     const groupSize = Number(phase.groupSize);
     if (groupSize <= 1 || groupSize >= 999) return required;
-    return Math.max(required, Math.ceil(participantCount / groupSize));
+    return Math.max(required, getBreakoutGroupCount(participantCount, groupSize));
   }, 0);
 }
 
@@ -122,8 +209,14 @@ function assignGroups(participants, phases, locationPool) {
     }
 
     const chunks = [];
-    for (let i = 0; i < participants.length; i += phase.groupSize) {
-      chunks.push(participants.slice(i, i + phase.groupSize));
+    const groupCount = getBreakoutGroupCount(participants.length, phase.groupSize);
+    const baseSize = Math.floor(participants.length / groupCount);
+    const largerGroups = participants.length % groupCount;
+    let participantIndex = 0;
+    for (let groupIndex = 0; groupIndex < groupCount; groupIndex++) {
+      const size = baseSize + (groupIndex < largerGroups ? 1 : 0);
+      chunks.push(participants.slice(participantIndex, participantIndex + size));
+      participantIndex += size;
     }
 
     chunks.forEach((members, gi) => {
@@ -157,14 +250,14 @@ const STRUCTURES = {
   '1-2-4-All': {
     name: '1-2-4-All',
     url: 'https://www.liberatingstructures.com/1-1-2-4-all/',
-    description: 'Engage everyone simultaneously in generating questions, ideas, and suggestions. About 15 minutes. Alone → pairs → quartets → whole group.',
+    description: 'Engage everyone simultaneously in generating questions, ideas, and suggestions. About 21 minutes. Alone → pairs → quartets → whole group.',
     invitation: 'What ideas or actions do you recommend?',
     phases: [
       { index: 0, name: 'Introduction', duration: 60,  startOffset: 0,   groupSize: 999, instructions: 'Share the invitation and identify the shared challenge.', inheritLocations: false },
       { index: 1, name: 'Individual',   duration: 60,  startOffset: 60,  groupSize: 1,   instructions: 'Work alone. Write your ideas.',                        inheritLocations: false },
-      { index: 2, name: 'Pairs',        duration: 120, startOffset: 120, groupSize: 2,   instructions: "Share and build on each other's ideas.",               inheritLocations: true  },
-      { index: 3, name: 'Quartets',     duration: 300, startOffset: 240, groupSize: 4,   instructions: 'Identify the most interesting ideas.',                  inheritLocations: true  },
-      { index: 4, name: 'Whole Group',  duration: 420, startOffset: 540, groupSize: 999, instructions: 'Share key insights with the whole group.',              inheritLocations: false },
+      { index: 2, name: 'Pairs',        duration: 240, startOffset: 120, groupSize: 2,   instructions: "Share and build on each other's ideas.",               inheritLocations: true, midpointCue: true },
+      { index: 3, name: 'Quartets',     duration: 480, startOffset: 360, groupSize: 4,   instructions: 'Identify the most interesting ideas.',                  inheritLocations: true, midpointCue: true },
+      { index: 4, name: 'Whole Group',  duration: 420, startOffset: 840, groupSize: 999, instructions: 'Share key insights with the whole group.',              inheritLocations: false },
     ]
   },
   'What-So-What-Now-What': {

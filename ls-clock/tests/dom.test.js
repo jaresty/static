@@ -445,6 +445,38 @@ test('opened session overview stays open across clock ticks', async ({ page }) =
   await expect(page.locator('[data-role="overview"]')).toHaveClass(/overview-panel/);
 });
 
+test('midpoint cue suggests switching or synthesizing without assigning turns', async ({ page }) => {
+  const midpointSession = {
+    ...SESSION,
+    phases: SESSION.phases.map(phase => phase.name === 'Pairs' ? { ...phase, midpointCue: true } : phase),
+  };
+  await page.evaluate(({ session, nowMs }) => {
+    renderParticipantView(document.getElementById('app'), session, 'Alice', nowMs);
+  }, { session: midpointSession, nowMs: (SESSION.startTime + 121) * 1000 });
+  const cue = page.locator('[data-role="midpoint-cue"]');
+  await expect(cue).toBeVisible();
+  await expect(cue).toContainText(/halfway/i);
+  await expect(cue).toContainText(/switching speakers|synthesis/i);
+  await expect(cue).not.toContainText(/Alice|Bob|must|your turn/i);
+});
+
+test('notes retain text, focus, and selection across clock ticks', async ({ page }) => {
+  await page.addInitScript(() => { Date.now = () => (1_700_000_000 + 90) * 1000; });
+  await page.reload();
+  await page.evaluate(session => startParticipantClock(document.getElementById('app'), session, 'Alice'), SESSION);
+  const notes = page.locator('[data-role="notes"] textarea');
+  await notes.fill('A thought in progress');
+  await notes.focus();
+  await notes.evaluate(element => element.setSelectionRange(2, 9));
+  await page.waitForTimeout(1100);
+  await expect(notes).toHaveValue('A thought in progress');
+  expect(await notes.evaluate(element => ({
+    focused: document.activeElement === element,
+    start: element.selectionStart,
+    end: element.selectionEnd,
+  }))).toEqual({ focused: true, start: 2, end: 9 });
+});
+
 test('every process step remains visible when the timeline wraps', async ({ page }) => {
   await page.setViewportSize({ width: 720, height: 844 });
   await page.addInitScript(() => { Date.now = () => (1_700_000_000 + 90) * 1000; });
@@ -1686,7 +1718,7 @@ test('P-ls-desc-2: selected structure shows its approximate duration', async ({ 
   await page.goto('/');
   await page.locator('#structure-select').selectOption('1-2-4-All');
   const description = page.locator('[data-role="structure-description"]');
-  expect(await description.textContent()).toContain('About 15 minutes');
+  expect(await description.textContent()).toContain('About 21 minutes');
 });
 
 test('P-ls-desc-3: selected structure shows its group configuration', async ({ page }) => {

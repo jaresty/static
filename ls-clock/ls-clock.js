@@ -166,6 +166,11 @@ function appendLocationLink(container, location, prefix = '') {
 function renderParticipantView(container, session, participantName, nowMs, notesSection = null) {
   const phase = getActivePhase(session, nowMs);
   const overviewWasOpen = Boolean(container.querySelector('[data-role="overview"]')?.open);
+  const notesEditor = notesSection?.querySelector('textarea');
+  const restoreNotesFocus = document.activeElement === notesEditor;
+  const notesSelection = restoreNotesFocus
+    ? { start: notesEditor.selectionStart, end: notesEditor.selectionEnd, direction: notesEditor.selectionDirection }
+    : null;
   container.innerHTML = '';
 
   if (!phase) {
@@ -360,6 +365,15 @@ function renderParticipantView(container, session, participantName, nowMs, notes
   countdownEl.textContent = formatTime(remainSec);
   container.appendChild(countdownEl);
 
+  const phaseElapsedSec = nowMs / 1000 - session.startTime - phase.startOffset;
+  if (phase.midpointCue && phaseElapsedSec >= phase.duration / 2) {
+    const midpointEl = document.createElement('div');
+    midpointEl.setAttribute('data-role', 'midpoint-cue');
+    midpointEl.className = 'status-message midpoint-cue';
+    midpointEl.textContent = 'Halfway — consider switching speakers or moving toward synthesis.';
+    container.appendChild(midpointEl);
+  }
+
   // 4. Phase instructions
   const instrEl = document.createElement('section');
   instrEl.setAttribute('data-role', 'instructions');
@@ -367,7 +381,13 @@ function renderParticipantView(container, session, participantName, nowMs, notes
   instrEl.setAttribute('aria-label', 'Current task');
   instrEl.innerHTML = `<span data-role="current-task-label" class="current-task-label">Current task</span><p>${escHtml(phase.instructions)}</p>`;
   container.appendChild(instrEl);
-  if (notesSection) container.appendChild(notesSection);
+  if (notesSection) {
+    container.appendChild(notesSection);
+    if (restoreNotesFocus) {
+      notesEditor.focus({ preventScroll: true });
+      notesEditor.setSelectionRange(notesSelection.start, notesSelection.end, notesSelection.direction);
+    }
+  }
 
   // 5. Preview the next activity assignment
   const phasePosition = session.phases.findIndex(candidate => candidate.index === phase.index);
