@@ -425,3 +425,173 @@ test('static artifact passes without runtime dependencies and exposes keyboard-a
   assert.match(script, /ArrowUp|ArrowDown/);
   assert.match(html, /@media \(max-width: 560px\)[\s\S]*?\.board-wrap\s*\{[^}]*min-height:\s*0[^}]*aspect-ratio:\s*\.78/is);
 });
+
+test('[P 1a] a live workshop starts with zero options', async () => {
+  const { createWorkshop } = await loadCore();
+  const session = createWorkshop({ ...frame, items: '', live: true });
+  assert.deepEqual(session.items, []);
+  assert.deepEqual(session.pending, []);
+  assert.equal(session.candidateId, null);
+  assert.equal(session.phase, 'placement');
+});
+
+test('[P 1a] a live workshop starts with one option', async () => {
+  const { createWorkshop } = await loadCore();
+  const session = createWorkshop({ ...frame, items: 'Only one', live: true });
+  assert.equal(session.items.length, 1);
+  assert.deepEqual(session.pending, ['item-1']);
+});
+
+test('[P 1b] a live workshop with listed options leaves every option unplaced', async () => {
+  const { createWorkshop } = await loadCore();
+  const session = createWorkshop({ ...frame, live: true });
+  assert.deepEqual(session.items.map(({ text }) => text), ['Improve search', 'Add keyboard shortcuts', 'Clarify onboarding']);
+  assert.deepEqual(session.pending, ['item-1', 'item-2', 'item-3']);
+  assert.deepEqual(session.positions, {});
+  assert.equal(session.candidateId, 'item-1');
+});
+
+test('[P 5] a workshop that is not live still requires at least 2 options', async () => {
+  const { createWorkshop } = await loadCore();
+  assert.throws(() => createWorkshop({ ...frame, items: '' }), /at least 2/i);
+  assert.throws(() => createWorkshop({ ...frame, items: 'Only one' }), /at least 2/i);
+});
+
+test('[P 2a] adding appends an unplaced option and leaves existing positions untouched', async () => {
+  const { createWorkshop, placeAt, addItem } = await loadCore();
+  const before = placeAt(createWorkshop({ ...frame, live: true }), { x: 0.2, y: 0.3 });
+  const after = addItem(before, '  Reduce page load  ');
+  assert.equal(after.items.at(-1).text, 'Reduce page load');
+  assert.equal(after.items.length, before.items.length + 1);
+  assert.ok(after.pending.includes(after.items.at(-1).id));
+  assert.equal(after.positions[after.items.at(-1).id], undefined);
+  assert.deepEqual(after.positions['item-1'], { x: 0.2, y: 0.3 });
+  assert.equal(before.items.length, 3);
+});
+
+test('[P 2a] every added option gets an id no other option has', async () => {
+  const { createWorkshop, addItem } = await loadCore();
+  let session = createWorkshop({ ...frame, items: '', live: true });
+  for (const title of ['A', 'B', 'C']) session = addItem(session, title);
+  assert.equal(new Set(session.items.map(({ id }) => id)).size, 3);
+});
+
+test('[P 2b] adding selects the new option', async () => {
+  const { createWorkshop, addItem } = await loadCore();
+  const after = addItem(createWorkshop({ ...frame, live: true }), 'Reduce page load');
+  assert.equal(after.candidateId, after.items.at(-1).id);
+  assert.equal(after.phase, 'placement');
+});
+
+test('[P 2b] adding after everything is placed returns to placement', async () => {
+  const { createWorkshop, placeAt, addItem } = await loadCore();
+  let session = createWorkshop({ ...frame, live: false });
+  for (const point of [{ x: 0.5, y: 0.5 }, { x: 0.8, y: 0.2 }, { x: 0.65, y: 0.85 }]) session = placeAt(session, point);
+  assert.equal(session.phase, 'review');
+  const after = addItem(session, 'Late idea');
+  assert.equal(after.phase, 'placement');
+  assert.equal(after.candidateId, after.items.at(-1).id);
+});
+
+test('[P 3] blank and duplicate options are rejected', async () => {
+  const { createWorkshop, addItem } = await loadCore();
+  const session = createWorkshop({ ...frame, live: true });
+  assert.throws(() => addItem(session, '   '), /option/i);
+  assert.throws(() => addItem(session, 'improve SEARCH'), /unique/i);
+});
+
+test('[P 1a] a live workshop has no limit on the number of options', async () => {
+  const { createWorkshop, addItem } = await loadCore();
+  const titles = (count) => Array.from({ length: count }, (_, index) => `Idea ${index}`).join('\n');
+  const session = createWorkshop({ ...frame, items: titles(25), live: true });
+  assert.equal(session.items.length, 25);
+  assert.equal(addItem(session, 'One more').items.length, 26);
+});
+
+test('[P 5] a workshop that is not live is still capped at 20 options', async () => {
+  const { createWorkshop } = await loadCore();
+  const titles = Array.from({ length: 21 }, (_, index) => `Idea ${index}`).join('\n');
+  assert.throws(() => createWorkshop({ ...frame, items: titles }), /20/);
+  assert.equal(createWorkshop({ ...frame, items: titles.split('\n').slice(0, 20).join('\n') }).items.length, 20);
+});
+
+test('[P 3] undoing an add removes the option again', async () => {
+  const { createWorkshop, addItem, undo } = await loadCore();
+  const session = createWorkshop({ ...frame, live: true });
+  const restored = undo(addItem(session, 'Reduce page load'));
+  assert.deepEqual(restored.items, session.items);
+  assert.deepEqual(restored.pending, session.pending);
+  assert.equal(restored.candidateId, session.candidateId);
+});
+
+test('[P 4] a live session stays on the board after the last option is placed', async () => {
+  const { createWorkshop, placeAt } = await loadCore();
+  let session = createWorkshop({ ...frame, live: true });
+  for (const point of [{ x: 0.5, y: 0.5 }, { x: 0.8, y: 0.2 }, { x: 0.65, y: 0.85 }]) session = placeAt(session, point);
+  assert.equal(session.phase, 'placement');
+  assert.equal(session.candidateId, null);
+  assert.deepEqual(session.pending, []);
+});
+
+test('[P 5] a session that is not live still goes to review after the last placement', async () => {
+  const session = await completedSession();
+  assert.equal(session.phase, 'review');
+});
+
+async function readApp() {
+  const { readFile } = await import('node:fs/promises');
+  return {
+    html: await readFile(new URL('./index.html', import.meta.url), 'utf8'),
+    script: await readFile(new URL('./app.js', import.meta.url), 'utf8'),
+  };
+}
+
+test('[P 1a] solo setup starts a live workshop and does not require options', async () => {
+  const { script } = await readApp();
+  assert.match(script, /live:\s*document\.body\.dataset\.mode === 'solo'/);
+  assert.match(script, /enterSolo\(\) \{[\s\S]*?this\.elements\.items\.required = false;/);
+  assert.match(script, /enterFacilitatorSetup\(\) \{[\s\S]*?this\.elements\.items\.required = true;/);
+});
+
+test('[P 2b] solo placement view has an add-option form that adds, selects and focuses the board', async () => {
+  const { html, script } = await readApp();
+  assert.match(html, /<form[^>]*id="add-option-form"[^>]*hidden/);
+  assert.match(html, /id="add-option-input"/);
+  assert.match(html, /id="placement-board"[^>]*tabindex="-1"/);
+  assert.match(script, /import \{[^}]*\baddItem\b[^}]*\} from '\.\/core\.mjs'/);
+  assert.match(script, /addOption\(event\) \{[\s\S]*?addItem\(this\.session,[\s\S]*?this\.save\(\);[\s\S]*?this\.elements\['placement-board'\]\.focus\(\)/);
+  assert.match(script, /'add-option-form'\]\.addEventListener\('submit'/);
+});
+
+test('[P 3] a rejected add shows its message and keeps the typed title', async () => {
+  const { html, script } = await readApp();
+  assert.match(html, /id="add-option-error"[^>]*role="alert"/);
+  assert.match(script, /addOption\(event\) \{[\s\S]*?catch \(error\) \{[\s\S]*?add-option-error'\]\.textContent = error\.message/);
+});
+
+test('[P 4] an empty live board does not break placement rendering or Enter handling', async () => {
+  const { script } = await readApp();
+  assert.match(script, /renderPlacement\(\) \{[\s\S]*?candidate\?\.text/);
+  assert.match(script, /commitPlacement\(\) \{\s*if \(!this\.session\.candidateId\) return;/);
+  assert.match(script, /!saved\?\.items\?\.length && !saved\?\.live/);
+});
+
+test('[P 4] a live board offers review and a way back to placing', async () => {
+  const { html, script } = await readApp();
+  assert.match(html, /id="review-and-export"[^>]*hidden/);
+  assert.match(html, /id="back-to-placing"[^>]*hidden/);
+  assert.match(script, /'review-and-export'\]\.addEventListener\('click'/);
+  assert.match(script, /'back-to-placing'\]\.addEventListener\('click'/);
+});
+
+test('[P 5] the add-option form is only shown for live sessions', async () => {
+  const { script } = await readApp();
+  assert.match(script, /'add-option-form'\]\.hidden = !this\.session\.live;/);
+});
+
+test('[P 6] the options hint states a limit only in facilitator setup', async () => {
+  const { html, script } = await readApp();
+  assert.match(html, /id="items-hint"/);
+  assert.match(script, /enterSolo\(\) \{[\s\S]*?'items-hint'\]\.textContent = 'Optional · one per line · no limit';/);
+  assert.match(script, /enterFacilitatorSetup\(\) \{[\s\S]*?'items-hint'\]\.textContent = 'One per line; keep it under 20';/);
+});

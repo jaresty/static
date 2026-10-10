@@ -1,4 +1,5 @@
 import {
+  addItem,
   coordinates,
   createWorkshop,
   exportWorkshop,
@@ -75,6 +76,7 @@ const facilitatorApp = {
       'collection-view', 'collection-grid', 'response-import-panel', 'response-links', 'response-pills', 'collect-responses', 'clear-responses', 'collection-status', 'response-count', 'response-list', 'disagreement-list', 'previous-disagreement', 'next-disagreement', 'undo-resolution', 'reset-all-resolutions', 'show-response-names', 'convergence-board', 'resolution-inspector', 'convergence-summary', 'include-resolution-adjustments', 'export-resolution', 'copy-resolution-export', 'resolution-export-output', 'resolution-export-status',
       'include-handoff-names', 'copy-facilitator-view', 'copy-facilitator-handoff', 'download-facilitator-backup', 'facilitator-share-output', 'facilitator-share-status',
       'setup-view', 'workspace-mode-label', 'setup-submit', 'setup-share-panel', 'setup-share-output', 'copy-setup-slack', 'copy-setup-link', 'answer-own-invitation', 'setup-share-status',
+      'items-hint', 'add-option-form', 'add-option-input', 'add-option-error', 'review-and-export', 'back-to-placing',
       'placement-view', 'review-view', 'setup-form', 'prompt', 'activity-description', 'x-label', 'x-low', 'x-high',
       'y-label', 'y-low', 'y-high', 'items', 'option-details', 'item-count', 'setup-error', 'example-button', 'resume-banner',
       'resume-summary', 'resume-button', 'discard-button', 'placement-round', 'placement-progress', 'placement-prompt', 'placement-activity-description', 'placement-board',
@@ -162,6 +164,9 @@ const facilitatorApp = {
     this.elements['placement-reset'].addEventListener('click', () => this.reset());
     this.elements['new-workshop'].addEventListener('click', () => this.reset());
     this.elements['review-undo'].addEventListener('click', () => this.undo());
+    this.elements['add-option-form'].addEventListener('submit', (event) => this.addOption(event));
+    this.elements['review-and-export'].addEventListener('click', () => this.setPhase('review'));
+    this.elements['back-to-placing'].addEventListener('click', () => this.setPhase('placement'));
     this.elements['export-format'].addEventListener('change', () => this.renderExport());
     this.elements['copy-button'].addEventListener('click', () => this.copy());
     this.elements['download-button'].addEventListener('click', () => this.download());
@@ -301,6 +306,8 @@ const facilitatorApp = {
     this.elements['workspace-mode-label'].textContent = 'SOLO WORKSPACE';
     this.elements['privacy-note'].textContent = 'Everything stays in this browser';
     this.elements['setup-submit'].textContent = 'Start placing';
+    this.elements.items.required = false;
+    this.elements['items-hint'].textContent = 'Optional · one per line · no limit';
     this.elements['setup-share-panel'].hidden = true;
     this.show('setup');
   },
@@ -312,6 +319,8 @@ const facilitatorApp = {
     this.elements['workspace-mode-label'].textContent = 'FACILITATOR SETUP';
     this.elements['privacy-note'].textContent = 'Shared links contain setup data';
     this.elements['setup-submit'].textContent = 'Create setup link';
+    this.elements.items.required = true;
+    this.elements['items-hint'].textContent = 'One per line; keep it under 20';
     this.elements['setup-share-panel'].hidden = true;
     this.show('setup');
   },
@@ -600,6 +609,7 @@ const facilitatorApp = {
         yLow: this.elements['y-low'].value,
         yHigh: this.elements['y-high'].value,
         items: this.setupItems(),
+        live: document.body.dataset.mode === 'solo',
       });
       if (document.body.dataset.mode === 'facilitator-setup') {
         const url = encodeSetupUrl(nextSession, new URL(location.pathname, location.origin).toString());
@@ -914,7 +924,7 @@ const facilitatorApp = {
   },
 
   renderPlacement() {
-    const candidate = this.item(this.session.candidateId);
+    const candidate = this.item(this.session.candidateId) ?? null;
     if (document.body.dataset.mode === 'response') this.elements['placement-round'].textContent = 'YOUR RESPONSE';
     const placedCount = Object.keys(this.session.positions).length;
     if (document.body.dataset.mode !== 'response') this.elements['placement-round'].textContent = `Round ${this.session.round} · place on the grid`;
@@ -928,15 +938,44 @@ const facilitatorApp = {
     this.setAxisLabels('placement');
     this.renderPlacedItems(this.elements['placement-board']);
     this.renderPlacementTray();
-    this.elements['candidate-card'].textContent = candidate.text;
-    this.setOptionalText(this.elements['candidate-description'], candidate.description);
+    this.elements['candidate-card'].textContent = candidate?.text ?? 'Nothing waiting to be placed';
+    this.setOptionalText(this.elements['candidate-description'], candidate?.description);
+    this.elements['place-option'].disabled = !candidate;
     this.elements['placement-coordinates'].textContent = this.describePosition(this.draftPosition);
     this.elements['placement-undo'].disabled = this.session.history.length === 0;
+    this.elements['add-option-form'].hidden = !this.session.live;
+    this.elements['review-and-export'].hidden = !this.session.live;
     this.show('placement');
-    this.elements['placement-tray'].querySelector(`[data-item-id="${candidate.id}"]`)?.focus();
+    if (candidate) this.elements['placement-tray'].querySelector(`[data-item-id="${candidate.id}"]`)?.focus();
+    else if (this.session.live) this.elements['add-option-input'].focus();
+  },
+
+  addOption(event) {
+    event.preventDefault();
+    const input = this.elements['add-option-input'];
+    try {
+      this.session = addItem(this.session, input.value);
+    } catch (error) {
+      this.elements['add-option-error'].textContent = error.message;
+      return;
+    }
+    this.elements['add-option-error'].textContent = '';
+    input.value = '';
+    this.draftPosition = { x: 0.5, y: 0.5 };
+    this.save();
+    this.announce(`${this.item(this.session.candidateId).text} added. Click the board to place it.`);
+    this.render();
+    this.elements['placement-board'].focus();
+  },
+
+  setPhase(phase) {
+    this.session = { ...this.session, phase };
+    this.save();
+    this.render();
   },
 
   commitPlacement() {
+    if (!this.session.candidateId) return;
     const candidate = this.item(this.session.candidateId).text;
     this.session = placeAt(this.session, this.draftPosition);
     this.draftPosition = { x: 0.5, y: 0.5 };
@@ -953,6 +992,7 @@ const facilitatorApp = {
     this.setAxisLabels('board');
     this.renderPlacedItems(this.elements.board);
     this.elements['review-undo'].disabled = this.session.history.length === 0;
+    this.elements['back-to-placing'].hidden = !this.session.live;
     const selected = this.selectedId ? this.item(this.selectedId) : null;
     this.elements['item-description-inspector'].hidden = !selected;
     if (selected) {
@@ -1599,7 +1639,7 @@ const facilitatorApp = {
   load() {
     try {
       const saved = this.migrate(JSON.parse(appStorage.getItem(this.storageKey)));
-      if (!saved?.prompt || !saved?.items?.length) return;
+      if (!saved?.prompt || (!saved?.items?.length && !saved?.live)) return;
       this.session = saved;
       this.elements['resume-banner'].hidden = false;
       this.elements['resume-summary'].textContent = `${saved.items.length} options · round ${saved.round}`;

@@ -376,7 +376,7 @@
             </div>
           </fieldset>
           <div class="field">
-            <label for="items">Options <span class="hint">One per line; keep it under 20</span></label>
+            <label for="items">Options <span class="hint" id="items-hint">One per line; keep it under 20</span></label>
             <textarea id="items" required placeholder="Improve search&#10;Add keyboard shortcuts&#10;Clarify onboarding"></textarea>
             <div class="meta"><span>2–20 unique options</span><span id="item-count">0 options</span></div>
             <div class="option-details" id="option-details" aria-label="Optional details for each option"></div>
@@ -409,7 +409,7 @@
       <div class="placement-layout">
         <section class="panel board-panel">
           <p class="eyebrow">Drag directly on both axes</p>
-          <div class="board-wrap" id="placement-board" role="region" aria-label="2×2 placement board; click to place the selected option" data-placement-board>
+          <div class="board-wrap" id="placement-board" role="region" tabindex="-1" aria-label="2×2 placement board; click to place the selected option" data-placement-board>
             <span class="axis-title axis-title-x" id="placement-x-title"></span>
             <span class="axis-title axis-title-y" id="placement-y-title"></span>
             <span class="axis-label axis-x-low" id="placement-x-low"></span><span class="axis-label axis-x-high" id="placement-x-high"></span>
@@ -418,6 +418,11 @@
           <p class="hint">Drag an option from the tray or select it and click the board. Existing options can be repositioned at any time.</p>
         </section>
         <aside class="panel placement-controls">
+          <form id="add-option-form" hidden>
+            <label class="eyebrow" for="add-option-input">Add an option</label>
+            <div class="button-row" style="margin:0 0 6px"><input id="add-option-input" autocomplete="off" placeholder="Type an option, press Enter"><button class="button button-secondary" type="submit">Add</button></div>
+            <p class="status" id="add-option-error" role="alert"></p>
+          </form>
           <p class="eyebrow">To place</p>
           <div class="placement-tray" id="placement-tray" aria-label="Options waiting to be placed" data-unplaced-tray></div>
           <p class="eyebrow">Selected option</p>
@@ -427,6 +432,7 @@
           <p class="coordinate-readout" id="placement-coordinates">Center · use arrow keys for precise movement</p>
           <button class="button button-accent" id="place-option" type="button" style="width:100%; margin-top:16px">Confirm this position</button>
           <div class="button-row"><button class="button button-secondary" id="placement-undo" type="button">Undo</button><button class="button button-quiet" id="placement-reset" type="button">Start over</button></div>
+          <button class="button button-secondary" id="review-and-export" type="button" style="width:100%; margin-top:16px" hidden>Review &amp; export</button>
         </aside>
       </div>
     </section>
@@ -447,7 +453,7 @@
           <h3>Review together</h3>
           <p class="hint">The map is the result. Adjust any card if the group sees something differently, or export it below.</p>
           <div class="item-description-inspector" id="item-description-inspector" hidden><strong id="item-description-title"></strong><p id="item-description-text"></p></div>
-          <div class="button-row"><button class="button button-secondary" id="review-undo" type="button">Undo last change</button></div>
+          <div class="button-row"><button class="button button-secondary" id="review-undo" type="button">Undo last change</button><button class="button button-accent" id="back-to-placing" type="button" hidden>Back to placing</button></div>
         </aside>
       </div>
       <section class="panel export-panel" id="response-share-panel" hidden>

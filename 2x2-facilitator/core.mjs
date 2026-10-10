@@ -5,7 +5,7 @@ function clean(value) {
   return String(value ?? '').trim();
 }
 
-function parseItems(value) {
+function parseItems(value, minItems = 2, maxItems = 20) {
   const sources = Array.isArray(value)
     ? value
     : String(value ?? '').split(/\r?\n/).map((text) => ({ text }));
@@ -13,8 +13,8 @@ function parseItems(value) {
     .map((item) => (typeof item === 'string' ? { text: item } : item))
     .map((item) => ({ text: clean(item?.text), description: clean(item?.description) }))
     .filter(({ text }) => Boolean(text));
-  if (items.length < 2) throw new Error('Add at least 2 options.');
-  if (items.length > 20) throw new Error('Keep the workshop to 20 options or fewer.');
+  if (items.length < minItems) throw new Error(`Add at least ${minItems} options.`);
+  if (items.length > maxItems) throw new Error(`Keep the workshop to ${maxItems} options or fewer.`);
   if (new Set(items.map(({ text }) => text.toLocaleLowerCase())).size !== items.length) {
     throw new Error('Every option must be unique.');
   }
@@ -51,10 +51,12 @@ export function createWorkshop(input) {
   if (!prompt) throw new Error('Write a decision prompt.');
   if (!xLabel || !yLabel) throw new Error('Name both axes.');
 
-  const items = parseItems(input.items);
+  const live = input.live === true;
+  const items = parseItems(input.items, live ? 0 : 2, live ? Infinity : 20);
   const pending = items.map(({ id }) => id);
   return {
     version: 1,
+    ...(live ? { live } : {}),
     round: Number(input.round) || 1,
     prompt,
     activityDescription: clean(input.activityDescription),
@@ -69,7 +71,7 @@ export function createWorkshop(input) {
     pending,
     candidateId: pending[0] ?? null,
     focusIds: [],
-    phase: pending.length ? 'placement' : 'review',
+    phase: pending.length || live ? 'placement' : 'review',
     history: [],
   };
 }
@@ -84,7 +86,23 @@ export function placeAt(session, { x, y }) {
   next.positions[session.candidateId] = { x, y };
   next.pending = next.pending.filter((itemId) => itemId !== session.candidateId);
   next.candidateId = next.pending[0] ?? null;
-  next.phase = next.candidateId ? 'placement' : 'review';
+  next.phase = next.candidateId || session.live ? 'placement' : 'review';
+  return next;
+}
+
+export function addItem(session, text) {
+  const title = clean(text);
+  if (!title) throw new Error('Write an option to add.');
+  if (!session.live && session.items.length >= 20) throw new Error('Keep the workshop to 20 options or fewer.');
+  if (session.items.some((item) => item.text.toLocaleLowerCase() === title.toLocaleLowerCase())) {
+    throw new Error('Every option must be unique.');
+  }
+  const next = snapshot(session);
+  const id = `item-${Math.max(0, ...session.items.map((item) => Number(item.id.slice(5)))) + 1}`;
+  next.items.push({ id, text: title, description: '' });
+  next.pending.push(id);
+  next.candidateId = id;
+  next.phase = 'placement';
   return next;
 }
 
