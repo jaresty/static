@@ -1,0 +1,32 @@
+// Additional restoration checks. Execute through agent-browser eval -b.
+(async()=>{
+ const q=s=>document.querySelector(s),results=[],check=(name,ok)=>{results.push({name,pass:!!ok});if(!ok)throw Error(name);};
+ const wait=async p=>{for(let i=0;i<150;i++){if(p())return;await new Promise(r=>setTimeout(r,20));}throw Error('Timed out waiting for foundation UI');};
+ const click=s=>q(s).click(),set=(s,v)=>{q(s).value=v;q(s).dispatchEvent(new Event('input',{bubbles:true}));};
+ const originalConfirm=window.confirm;window.confirm=()=>true;
+ async function apply(){click('#apply');await wait(()=>q('#review-panel').hidden);}
+ async function propose(doc){set('#document',JSON.stringify(doc));click('#preview-import');await wait(()=>!q('#review-panel').hidden);}
+ try{
+  click('#close-modal');click('#blank');await wait(()=>!q('#review-panel').hidden);
+  const blank=JSON.parse(q('#review-json').textContent);check('New blank is reviewed valid minimal stock-flow',blank.entities.length===1&&blank.entities[0].type==='stock'&&blank.version===1&&q('#modal').open);await apply();
+  click('#blank');await wait(()=>!q('#review-panel').hidden);await apply();check('unchanged reviewed apply closes modal without blank overlay',!q('#modal').open&&q('#history').max==='0');
+  click('#connect-form');set('#flow-draft [name=source]','');set('#flow-draft [name=target]','stock_1');set('#flow-draft [name=expression]','1');q('#flow-draft').requestSubmit();await wait(()=>!q('#review-panel').hidden);
+  check('environment transfer is reviewed before application',q('#selection').options.length===1&&JSON.parse(q('#review-json').textContent).entities.find(e=>e.type==='flow').source===null);await apply();click('#step');
+  check('environment transfer computes and stays presentation-only',q('#stock-values').textContent.includes('0.25')&&q('#graph').graph.cy.nodes('.environment').length===1);click('#show-json');const portable=JSON.parse(q('#document').value);check('environment/control nodes are absent from JSON',portable.entities.length===2&&Object.keys(portable.view?.positions||{}).every(id=>portable.entities.some(e=>e.id===id)));
+  const parallel={version:1,title:'Parallel material and information',time:{unit:'hour',dt:1,horizon:20},entities:[{id:'s',type:'stock',name:'Source',unit:'L',initial:100},{id:'t',type:'stock',name:'Target',unit:'L',initial:0},{id:'f',type:'flow',name:'Transfer',unit:'L/hour',source:'s',target:'t',expression:'s'}]};
+  await propose(parallel);await apply();await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);const pair=q('#graph').graph.cy.edges().filter(e=>e.source().id()==='s'&&e.target().id()==='f');check('parallel material and information edges use distinct Bezier paths',pair.length===2&&pair.some(e=>e.hasClass('material'))&&pair.some(e=>e.hasClass('information'))&&JSON.stringify(pair[0].controlPoints())!==JSON.stringify(pair[1].controlPoints()));
+  const model={version:1,title:'Many stocks',time:{unit:'hour',dt:1,horizon:20},entities:Array.from({length:13},(_,i)=>({id:'s_'+i,type:'stock',name:'Stock '+i,unit:i===12?'USD':'L',initial:i}))};
+  const before=q('#selection').options.length;await propose(model);check('import review leaves current work unchanged',q('#selection').options.length===before);await apply();
+  const plots=q('#charts').plots,series=plots.reduce((n,p)=>n+p.series.length-1,0);check('chart budget explicitly discloses omission',series===12&&q('.chart-coverage').textContent.includes('1 omitted')&&q('.chart-coverage').textContent.includes('Stock 12 [s_12]')&&q('#stock-values').rows.length===13&&q('#stock-values').textContent.includes('USD'));
+  check('bounded uPlots carry actual unit/time axes',plots.every(p=>p.axes[0].label==='Time · hour'&&p.axes[1].label==='L'&&p.data.length===p.series.length));
+  check('time axis uses dt not single-point fallback',plots.every(p=>p.scales.x.min===0&&p.scales.x.max===1));
+  click('#step');click('#step');click('#step');await wait(()=>q('#charts').plots.every(p=>p.scales.x.max===3));check('time axis follows actual latest run time',q('#charts').plots.every(p=>p.scales.x.max===3));set('#history','1');set('#title','Held cursor title');q('#title').dispatchEvent(new Event('change',{bubbles:true}));check('document-bar title retains paused inspection',q('#history').max==='3'&&q('#history').value==='1'&&!(q('#run').getAttribute('aria-pressed')==='true'));
+  click('[data-ai=Build]');check('Build opens original-style modal preview workflow',q('#modal').open&&q('#modal-title').textContent==='Build with AI'&&!q('#prompt').value);click('#generate-ai');await wait(()=>q('#prompt').value.includes('sourceFingerprint'));const build=JSON.parse(q('#prompt').value);check('Build prompt includes restricted grammar and exact schema',build.schema.properties.entities&&build.rules.includes('delay(stock_id, integer_steps)')&&build.sourceFingerprint.length===64);
+  set('#ai-return',JSON.stringify(build.currentModel));click('#close-modal');set('#title','Cosmetic freshness change');q('#title').dispatchEvent(new Event('change',{bubbles:true}));click('#review-ai');await wait(()=>q('#status').textContent.includes('Stale'));check('Build freshness includes cosmetics',q('#status').textContent.includes('Stale'));
+  const unsafe=structuredClone(model);unsafe.entities[0].name='<img src=x onerror="window.labelExecuted=true">';await propose(unsafe);await apply();check('imported markup labels remain literal text',!window.labelExecuted&&!q('#graph img')&&q('#graph').graph.cy.getElementById('s_0').data('label').includes('<img'));
+  for(const view of ['canvas','inspector','charts']){click(`button[data-view=${view}]`);await new Promise(requestAnimationFrame);const visible=['canvas','inspector','timeline'].filter(panel=>getComputedStyle(q('.'+panel+'-panel')).display!=='none');check('workspace view '+view+' fits320 contract',innerWidth>760||visible.length===1&&visible[0]===({canvas:'canvas',inspector:'inspector',charts:'timeline'})[view]);check('no page overflow in '+view,document.documentElement.scrollWidth<=innerWidth);}
+  click('#about');check('semantic help remains discoverable',q('#modal').open&&q('#help-panel').textContent.includes('Information delay is not material transit')&&q('#help-panel').textContent.includes('proportionally'));click('#close-modal');
+  check('no runtime external/CDN/provider resources',performance.getEntriesByType('resource').every(e=>new URL(e.name).origin===location.origin));
+  return {viewport:{width:innerWidth,height:innerHeight},results};
+ }finally{window.confirm=originalConfirm;}
+})()
