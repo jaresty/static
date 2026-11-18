@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="description" content="An experimental, illustrative workload model: follow unfinished work, arrivals, completions and hypothetical stress.">
+<title>Experimental workload model · Causal Playground</title>
+<link rel="stylesheet" href="./styles.css">
+<script type="module" src="./app.mjs"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to workload model</a>
+<header><a class="brand" href="../../">S/ <span>Static Works</span></a><nav aria-label="Back to"><a href="../understanding.html">Guide</a><a href="../">Playground</a></nav></header>
+<main id="main" tabindex="-1">
+<section class="intro">
+<p class="eyebrow">Causal Playground / Separate experiment</p>
+<h1>Work comes in.<br>What happens next<span>?</span></h1>
+<p class="lead">Follow unfinished work through an overload and a recovery. Change the assumptions. Keep track of every unit.</p>
+<p class="notice"><strong>Experimental workload model.</strong> These stress and productivity assumptions are hypothetical and uncalibrated—not predictions about people. This fixed template is separate from the playground’s unchanged abstract influence engine. No document conversion.</p>
+</section>
+<div class="workspace">
+<aside class="panel" aria-labelledby="controls-title">
+<p class="eyebrow">01 / Set the conditions</p><h2 id="controls-title">Try a scenario</h2>
+<div class="presets" role="group" aria-label="Illustrative scenarios">
+<button type="button" data-preset="recovery" aria-pressed="true">Recovery</button><button type="button" data-preset="empty" aria-pressed="false">Empty</button><button type="button" data-preset="drain" aria-pressed="false">Drain</button><button type="button" data-preset="overload" aria-pressed="false">Overload</button><button type="button" data-preset="shock" aria-pressed="false">One-time shock</button><button type="button" data-preset="sustained" aria-pressed="false">Sustained arrivals</button>
+</div>
+<p class="hint" id="scenario-note">Recovery: arrivals fall from 12 to 4 work/day at day 20. The work already waiting must still be completed.</p>
+<form id="controls">
+<fieldset><legend>Starting state · one time only</legend>
+<label for="B0">Initial unfinished work <span>work units · 0–200</span></label><input id="B0" name="B0" type="number" min="0" max="200" step="any" value="0" required>
+<label for="S0">Initial stress index <span>0–1 · not a measured stress scale</span></label><input id="S0" name="S0" type="number" min="0" max="1" step="any" value="0" required>
+</fieldset>
+<fieldset><legend>Arrivals · continuing work</legend>
+<label for="A0">Initial arrival rate <span>work/day · 0–20</span></label><input id="A0" name="A0" type="number" min="0" max="20" step="any" value="12" required>
+<label class="check"><input id="change" name="change" type="checkbox" checked> Change arrival rate later</label>
+<div id="schedule-fields">
+<label for="changeDay">Change at day <span>whole day · 1–119</span></label><input id="changeDay" name="changeDay" type="number" min="1" max="119" step="1" value="20" required>
+<label for="A1">New sustained arrival rate <span>work/day · 0–20</span></label><input id="A1" name="A1" type="number" min="0" max="20" step="any" value="4" required>
+</div></fieldset>
+<fieldset><legend>Ability to complete work</legend>
+<label for="K">Nominal capacity <span>work/day · 1–20</span></label><input id="K" name="K" type="number" min="1" max="20" step="any" value="10" required>
+<label class="check"><input id="impairment" name="impairment" type="checkbox" checked> Stress reduces productivity (α = 0.5)</label>
+<p class="hint">Off: α = 0, so productivity stays at 1. Stress still evolves. No other parameters change.</p>
+</fieldset>
+<button class="primary" type="submit">Run 120 days</button>
+<p class="hint">Edits apply only when you run. Presets run immediately. No data is sent or saved.</p>
+</form>
+<p id="error" role="alert"></p>
+</aside>
+<div class="results" id="results" aria-busy="false">
+<section class="panel" aria-labelledby="outcome-title">
+<p class="eyebrow">02 / Follow the work</p><h2 id="outcome-title">120 days, accounted for</h2>
+<p id="run-status" role="status" aria-live="polite">Preparing illustrative recovery…</p>
+<div class="stats" id="totals"></div>
+<p id="resolution" class="resolution"></p>
+<p class="hint">Resolution is estimated from h versus h/2 at every quarter-day, not guaranteed error or validation of the model. <a href="#method">Method &amp; limits ↓</a></p>
+</section>
+<section class="panel charts" aria-labelledby="charts-title">
+<h2 id="charts-title">Three views, separate scales</h2>
+<p class="hint">All horizontal axes are days (0–120). Backlog and rates have independent vertical scales starting at zero. Stress/productivity share only their dimensionless 0–1 index scale. Full numeric alternatives below.</p>
+<div id="charts"></div>
+</section>
+<section class="panel" aria-labelledby="inspection-title">
+<p class="eyebrow">03 / Inspect a moment</p><h2 id="inspection-title">State, rates &amp; ledger</h2>
+<label for="day">Selected day <span>quarter-day samples · keyboard editable</span></label><input id="day" type="number" min="0" max="120" step="0.25" value="40">
+<div id="inspection"></div>
+<details id="table-details"><summary>Numeric time-series table · every quarter-day</summary>
+<p class="hint">States are at the named time. A and C are instantaneous right-continuous rates at that state—not rates integrated over the preceding interval. The inspector separately shows that last internal interval. Use arrow keys to scroll the focused table region.</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Workload time-series numeric alternative"><table><caption>Quarter-day states and current rates</caption><thead><tr><th scope="col">Day</th><th scope="col">B work</th><th scope="col">A work/day</th><th scope="col">C work/day</th><th scope="col">S index</th><th scope="col">P index</th><th scope="col">Arrivals ∑ work</th><th scope="col">Completions ∑ work</th></tr></thead><tbody id="table-body"></tbody></table></div>
+</details>
+</section>
+</div></div>
+<section class="panel explanation" id="method" aria-labelledby="method-title">
+<p class="eyebrow">04 / Read the assumptions</p><h2 id="method-title">A small model, not a law of work</h2>
+<div class="explanation-grid"><div>
+<h3>Two states; two flows</h3>
+<p><strong>B</strong> is unfinished homogeneous, divisible work. <strong>S</strong> is a hypothetical dimensionless stress index. Arrivals <strong>A</strong>, completions <strong>C</strong> and nominal capacity <strong>K</strong> are in work/day. Workload pressure <strong>W</strong> and productivity <strong>P</strong> are auxiliaries, not extra states.</p>
+<pre aria-label="Fixed illustrative equations">W = B / (K × Tw)
+target S = W / (1 + W)
+dS/dt = (target S − S) / τ
+P = 1 − α × S
+C = min(K × P, B / Tc)
+dB/dt = A − C
+
+Tc = 1 day · Tw = 2 days · τ = 2 days
+α = 0.5 (on) or 0 (off); default K = 10</pre>
+<p>Initial backlog is a <strong>one-time shock</strong>, never counted as an arrival. A sustained arrival rate adds work every day. Compare the two presets: 20 initial work with A=4 versus no initial work with A=12. This is a comparison of inputs to these formulas, not a curve contest with the existing engine.</p>
+</div><div>
+<h3>Why recovery does not mean zero</h3>
+<p>With continuing A=4, K=10 and α=.5, B=4 gives W=.2, S=1/6 and P=11/12. Effective capacity is 55/6 work/day, so C=min(55/6,4)=4. Arrivals balance completions at <strong>4 unfinished work units</strong>. This follows from the chosen B/Tc service law; it is not observed workplace behavior.</p>
+<h3>Numerical method &amp; precision</h3>
+<p>Explicit Euler uses old-state rates: Bnext=B+h(A−C), Snext=S+h(target−S)/τ. Internal h=1/4096 day; comparison h/2=1/8192 day. Display samples are 0.25 day apart. Changes are right-continuous and aligned using integer step indices. A change at day 20 affects the interval starting at 20, not the interval ending there.</p>
+<p>For this template, h≤min(Tc,τ) preserves nonnegative backlog and a convex stress update; this is <strong>not a universal accuracy guarantee</strong>. There is no upper backlog cap, clipping or correction that discards work. Display rounding is not used in the ledger. A finite h gives an approximation; very small backlog is not a promise of integer-job completion.</p>
+<p>Inputs are bounded; horizon is fixed at 120 days. Each run computes 1,474,560 internal steps across two grids and retains 481 samples per grid. The indicator reports maximum common-sample differences against predeclared thresholds (.1 work, .002 stress). A failure is disclosed, not retuned. Selected exact-case and refinement tests support this bounded choice, not every possible input or unsampled instant.</p>
+<p>No heterogeneity, deadlines, staffing, learning, uncertainty, calibration or predictive validity. Stress impairment is an illustrative hypothesis. <strong>Numerical agreement does not validate domain assumptions.</strong></p>
+</div></div>
+</section>
+<footer><a href="../understanding.html">← Understanding the playground</a><a href="../">Open existing playground</a><a href="./README.md">Numerical contract &amp; test commands</a></footer>
+<noscript><p class="notice">JavaScript is required for the interactive demo. The equations and limitations above remain readable.</p></noscript>
+</main>
+</body></html>
