@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="description" content="Understand the current Causal Playground: baselines, influences, delays, calculations, and what the traces do not prove.">
+<title>Understanding this simulation · Causal Playground</title>
+<link rel="stylesheet" href="./styles.css">
+<style>
+.guide{max-width:850px;font-size:16px;line-height:1.6;overflow-wrap:anywhere}.guide h1{font-size:clamp(32px,6vw,48px)}.guide h2{font-family:Georgia,serif;font-size:27px;font-weight:500;margin:36px 0 12px}.guide h3{font-size:18px;margin-top:24px}.guide nav,.guide .callout{background:var(--white);border:1px solid var(--line);border-radius:10px;padding:16px 22px;margin:24px 0}.guide nav ol{margin:8px 0;padding-left:24px}.guide li{margin:8px 0}.guide dt{font-weight:700;margin-top:18px}.guide dd{margin:4px 0 0}.guide pre{font-size:14px;max-height:none;overflow-wrap:anywhere}.guide section{scroll-margin-top:20px}.guide footer{font-size:14px}.skip-link{position:absolute;left:12px;top:-100px;background:var(--white);padding:10px;z-index:1}.skip-link:focus{top:10px}@media(max-width:760px){.guide{padding:24px 16px}.guide nav{padding:12px 16px}.masthead{flex-wrap:wrap;gap:12px}}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#understanding">Skip to guide</a>
+<header class="masthead"><a href="../" class="brand">S/ <span>Static Works</span></a><a href="./" target="_blank" rel="noopener">Open playground in a new tab ↗</a></header>
+<main class="guide" id="understanding" tabindex="-1">
+<p class="eyebrow">Causal Playground / A reading companion</p>
+<h1>Understanding this simulation<span>.</span></h1>
+<p class="subtitle">Read the ripples. Inspect the arithmetic. Keep the hypothesis separate from the world.</p>
+<p>Start with a practical question: <em>if these influences and settings were true, what would this rule do?</em> Add variables, connect them, set a starting disturbance, and step forward. The traces answer that conditional question—not whether the world actually works this way.</p>
+<div class="callout"><strong>What is custom here?</strong> The current engine, <code>bounded-influence-v1</code>, is a <strong>custom discrete-time, bounded, baseline-relative influence model</strong>. It is related to signed recurrent influence models, but is <strong>not canonical fuzzy cognitive map inference</strong> and is <strong>not stock/flow system dynamics</strong>. Its exact rule is below. This is a provisional modeling design, not a settled theory.</div>
+<nav aria-label="Guide contents"><strong>Read in order, or jump to a question</strong><ol>
+<li><a href="#meaning">What do the graph and numbers mean?</a></li>
+<li><a href="#settings">What do the settings do?</a></li>
+<li><a href="#calculation">What happens in one step?</a></li>
+<li><a href="#surprises">Why might a trace surprise me?</a></li>
+<li><a href="#inspect">How can I inspect or ask AI about a result?</a></li>
+<li><a href="#theory">How does this relate to other modeling traditions?</a></li>
+</ol></nav>
+<section id="meaning" aria-labelledby="meaning-title">
+<h2 id="meaning-title">1 / A graph is a hypothesis, not a simulation rule</h2>
+<p>An arrow says that you hypothesize an influence from its source to its target. A loop sketches feedback. <strong>Graph signs alone do not determine dynamics.</strong> The same signed graph can produce different traces when gains, baselines, starting values, responsiveness, or delays change. The engine supplies extra assumptions that a qualitative diagram does not specify.</p>
+<p>Every variable is an <strong>abstract level from 0–100</strong>. A stress value of 60 is not “60% stressed,” a probability, or a physical quantity. The model does not conserve people, money, energy, or material. Names and a step label such as “week” help you read your hypothesis; they do not calibrate units or time.</p>
+<p>A plus sign is not “good,” and a minus sign is not “bad.” They describe the direction of an influence relative to a source's baseline, not its desirability. Graph position, arrow animation, and chart shape are not evidence of material flow.</p>
+</section>
+<section id="settings" aria-labelledby="settings-title">
+<h2 id="settings-title">2 / Read the settings before reading the trace</h2>
+<dl>
+<dt>Baseline</dt><dd>The node's reference level. Incoming influence uses the source's deviation from its own baseline. A node also has recovery toward its own baseline; baseline is not necessarily the eventual resting value when other nodes keep pushing.</dd>
+<dt>Initial / pre-zero level</dt><dd>The value held for every tick before zero. It also starts tick zero unless a pulse replaces it. Setting initial to 70 describes a different past from starting at 50 and pulsing to 70.</dd>
+<dt>Tick-zero pulse</dt><dd>Replaces the observed value at tick 0; it does not add an amount, hold the level, or rewrite prehistory. Later values follow the equations. Only tick-zero pulses are supported, not arbitrary scheduled interventions.</dd>
+<dt>Polarity (+ or −)</dt><dd>A positive edge transmits a same-direction deviation: above-baseline source pushes up; <strong>below-baseline source pushes down</strong>. A negative edge reverses that direction. A source exactly at baseline contributes zero through either sign.</dd>
+<dt>Gain (0–4)</dt><dd>Scales the source deviation. Gain 1 passes one deviation point before target responsiveness; gain may exceed 1. It is not a percentage or a probability. Gain 0 makes that edge contribute nothing.</dd>
+<dt>Responsiveness per step (greater than 0, at most 1)</dt><dd>The <strong>target's responsiveness scales both its baseline recovery and every incoming term</strong>. Increasing it does not just make incoming arrows stronger: it also changes recovery. The source's responsiveness is not multiplied into that edge term, though it affects the source's own trajectory.</dd>
+<dt>Delay in steps (integer 0–100)</dt><dd>A fixed history offset, not a gradual adjustment or wall-clock wait. For transition t → t+1, an edge with delay d reads source tick t−d. Delay 0 reads t, never t+1. At t=0, delay 2 reads tick −2 (the initial value); at t=2 it reads tick 0 (including a pulse).</dd>
+<dt>Speed, zoom, and layout</dt><dd>Playback speed changes wall-clock pacing only. Graph zoom, Fit, and moving nodes change presentation, not the math. A descriptive step label is not a numerical timestep control.</dd>
+</dl>
+</section>
+<section id="calculation" aria-labelledby="calculation-title">
+<h2 id="calculation-title">3 / One step, exactly</h2>
+<p>The implementation in <a href="./simulation.mjs">simulation.mjs</a> updates <strong>synchronously</strong>: every node reads committed history, all next values are calculated, then tick t+1 is committed. No arrow gets to read a partially updated neighbor. Incoming terms are summed in relationship-ID order.</p>
+<p>For node i, let x be level, b baseline, r responsiveness. For an edge e from j to i, let s be +1 or −1, g gain, and d its integer delay. The exact rule is:</p>
+<pre aria-label="Exact update equation">contribution(e,t) = r_i × s_e × g_e × (x_j(t − d_e) − b_j)
+recovery(i,t)     = r_i × (b_i − x_i(t))
+rawNext(i,t)      = x_i(t) + recovery(i,t) + Σ incoming contribution(e,t)
+x_i(t+1)         = min(100, max(0, rawNext(i,t)))
+boundaryAdjustment(i,t) = x_i(t+1) − rawNext(i,t)
+
+For k &lt; 0: x_j(k) = initial_j.
+At tick 0: x_j(0) = pulse value if present, otherwise initial_j.</pre>
+<h3>A hand-worked transition: workload → stress</h3>
+<p>Assume workload is 70 with baseline 50 at the tick read by a zero-delay positive edge of gain 0.5. Stress is 60 with baseline 50 and responsiveness 0.1. Assume this is stress's only incoming edge.</p>
+<pre>Source deviation = 70 − 50 = 20
+Incoming         = 0.1 × (+1) × 0.5 × 20 = +1
+Recovery         = 0.1 × (50 − 60) = −1
+Raw next stress  = 60 − 1 + 1 = 60
+Next stress      = clamp(60, 0, 100) = 60
+Boundary adjustment = 0</pre>
+<p>The edge really did push stress up by one point, but recovery canceled it. No visible change does not mean “no influence.” This one unchanged transition also does not prove stress will stay there: workload can change on its own next step.</p>
+</section>
+<section id="surprises" aria-labelledby="surprises-title">
+<h2 id="surprises-title">4 / Four useful surprises</h2>
+<ul>
+<li><strong>Everything at baseline stays still.</strong> If all initial values equal their baselines and no pulse moves a value away, every recovery and source deviation is zero, including prehistory. Arrows alone cannot start motion.</li>
+<li><strong>A reinforcing cycle can still decay.</strong> Because recovery is part of the rule, it can dominate positive feedback. For two nodes initially 60 with baselines 50, responsiveness 0.1, and reciprocal positive zero-delay gains 0.5, each gets −1 recovery and +0.5 incoming: next 59.5. A reinforcing sign pattern is not a guarantee of growth or instability.</li>
+<li><strong>A flat line at a bound is not evidence of equilibrium.</strong> Clamping can discard continuing raw influence. If raw next is 120, the stored value is 100 and boundary adjustment is −20. Look for “At bound” and a nonzero boundary adjustment; the flat trace can hide pressure rather than a balance of terms.</li>
+<li><strong>Ticks are an assumption, not continuous time.</strong> Per-step responsiveness and fixed delays can create oscillations and other discrete timestep artifacts. Do not infer a real-world cycle from a repeating trace. A faster Play setting only draws the same ticks sooner; it does not reduce the timestep or test a continuous-time limit.</li>
+</ul>
+<p>Changing a parameter is an experiment <em>inside this rule</em>. It can reveal sensitivity to an assumption, but cannot validate that assumption. These examples are illustrative, not calibrated empirical findings.</p>
+</section>
+<section id="inspect" aria-labelledby="inspect-title">
+<h2 id="inspect-title">5 / Inspect before explaining</h2>
+<ol>
+<li><strong>Step at least once.</strong> Select a node, or a relationship to inspect its target. The Inspector shows baseline recovery, incoming contributions, boundary adjustment, net change, and next level. Values displayed there are rounded to three decimals.</li>
+<li><strong>Read the transition heading.</strong> At a historical tick t, the explanation is t → t+1. At the latest tick, it shows the preceding computed transition. Click the chart or scrub to select a tick; hovering alone does not pause playback. Dashed chart lines are baselines.</li>
+<li><strong>Click a contribution.</strong> Its detail reveals the actual delayed source tick, source value, and source baseline. Negative source ticks explicitly mean pre-zero initial history, not the tick-zero pulse.</li>
+<li><strong>Reconcile the change.</strong> Recovery + incoming terms + boundary adjustment equals next minus current. Check cancellation and clipping before inventing a story about a flat or changing trace.</li>
+</ol>
+<h3>Explain with AI is read-only evidence handoff</h3>
+<p>The app does not contact a provider. Generate context, preview it, then choose whether to copy it into your external AI chat or download the analysis packet. The packet carries computed trace/contribution evidence, delayed source ticks, engine rules, identities, and coverage/omission metadata; it is not necessarily the full run. The snapshot does not update when the run changes.</p>
+<p>Ask the AI to distinguish <strong>observed engine values</strong>, <strong>mathematical consequences of these assumptions</strong>, and <strong>real-world hypotheses</strong>. It should cite supplied evidence and admit missing coverage. An unrun experiment is a suggestion, not a result. Explanation cannot edit the model; changes use the separate Modify/review flow. Neither a convincing AI explanation nor a simulated trace establishes causal proof or a reliable real-world prediction.</p>
+</section>
+<section id="theory" aria-labelledby="theory-title">
+<h2 id="theory-title">6 / Related ideas, without choosing the next theory</h2>
+<p><strong>Qualitative influence diagrams</strong> are useful for discussing hypothesized directions and feedback. Here the graph serves that role, but numerical behavior comes from the additional custom rule and parameters. A causal loop diagram alone does not specify a runnable simulation.</p>
+<p><strong>Fuzzy cognitive maps (FCMs)</strong> offer related signed, weighted concept networks and multiple inference variants. That resemblance does not identify this engine with a canonical FCM update. Its baseline-relative inputs, explicit recovery, fixed history reads, and hard bounds must be understood on their own terms.</p>
+<p><strong>Leaky-integrator recurrent dynamics</strong> provide another related mathematical reading: retained state plus relaxation and recurrent input. This is a conceptual connection, not a claim that the current rule is the leaky-ESN equation or implements its training or analysis.</p>
+<p><strong>A future stock/flow model</strong> would instead need explicit stocks, rates, units, and equations that define accumulation and the relationships among quantities. Merely renaming a level “stock” or an arrow “flow” would not supply those semantics. That is an open design direction, not a recommendation, commitment, or implied switch. The present equations remain unchanged and provisional.</p>
+<h3>Optional reading / what each source supports</h3>
+<ul>
+<li><a href="https://www.vensim.com/documentation/usr04.html">Vensim: Causal Loop Diagrams</a> — the distinction between a causal loop diagram and a simulation model; not a specification of this engine.</li>
+<li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9575875/">FCM research article (PMC9575875)</a> — documents FCM variants; it does not document this exact custom rule.</li>
+<li><a href="https://www.ai.rug.nl/minds/uploads/leakyESN.pdf">Leaky-integrator echo state network paper (PDF)</a> — related recurrent dynamics; not the exact rule used here.</li>
+</ul>
+<p>These are ordinary optional external links, not runtime dependencies. For this app's authoritative current rule and limits, see <a href="./model.mjs">model.mjs</a>, <a href="./simulation.mjs">simulation.mjs</a>, and the <a href="./README.md">technical README</a>.</p>
+</section>
+<footer><a href="#understanding">Back to top</a><a href="./" target="_blank" rel="noopener">Open playground in a new tab ↗</a><a href="./README.md">Technical reference &amp; portable format</a></footer>
+</main>
+</body>
+</html>

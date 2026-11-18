@@ -2,6 +2,12 @@
 
 A self-contained static causal-system editor and player. Serve the repository with any HTTP static server and open `causal-playground/`. GitHub Pages project subpaths work; no build step, database, account, telemetry, API key or runtime CDN is required. Recent Chromium, Firefox and Safari with native CompressionStream/DecompressionStream and Web Crypto are required. Open over HTTPS or localhost, not `file://`.
 
+## Start with the reading guide
+
+[Understanding this simulation](./understanding.html) explains the current behavior in practical order: graph meaning, settings, the exact equation and a worked example, surprising traces, contribution inspection, and related modeling traditions. It is also linked from **How this works** and the app footer; those links open a new tab to keep the current run open. The guide loads no JavaScript or network dependencies.
+
+This is a **custom discrete-time, bounded, baseline-relative influence model**, related to but not canonical fuzzy cognitive map inference and not stock/flow system dynamics. Graph signs alone do not determine its dynamics. The design is provisional; the guide's discussion of explicit stocks, rates, units and equations is an open future direction, not a model switch. The technical rule below remains the engine contract.
+
 ## Model meaning
 
 Every variable is an abstract level from 0 to 100, not a conserved stock or physical unit. For transition t → t+1:
