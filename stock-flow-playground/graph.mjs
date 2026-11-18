@@ -1,7 +1,14 @@
 // Foundation: causal-playground/graph.js (52c1fa0), adapted at the model boundary.
 // Cytoscape/edgehandles state is presentation-only; only entity drag coordinates leave here.
 import {parse} from './model.mjs';
-export function defaultPositions(model){const out={},groups=[['stock',140],['flow',300],['parameter',440],['auxiliary',560]];for(const [type,y]of groups){const list=model.entities.filter(e=>e.type===type).sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0);list.forEach((e,i)=>out[e.id]={x:140+i*240,y});}return out;}
+export function defaultPositions(model){
+ const out={},sorted=type=>model.entities.filter(e=>e.type===type).sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0);
+ // Compact information row above material stocks/flows. Saved coordinates still win.
+ [...sorted('parameter'),...sorted('auxiliary')].forEach((e,i)=>out[e.id]={x:140+i*240,y:80});
+ sorted('stock').forEach((e,i)=>out[e.id]={x:140+i*240,y:220});
+ sorted('flow').forEach((e,i)=>out[e.id]={x:260+i*240,y:370});
+ return out;
+}
 export function createGraph(container,{select,move,connect}){
  const cy=cytoscape({container,layout:{name:'preset'},minZoom:0.2,maxZoom:2,style:[
  {selector:'node',style:{shape:'round-rectangle',width:166,height:76,'background-color':'#fffdf7','border-width':2,'border-color':'#b8b4a7',label:'data(label)','text-wrap':'wrap','text-max-width':150,'font-size':13,'font-family':'system-ui','text-valign':'center',color:'#252e2b'}},
@@ -33,7 +40,7 @@ export function createGraph(container,{select,move,connect}){
    for(const spec of [...nodes,...edges]){let old=cy.getElementById(spec.data.id);if(old.nonempty()&&old.isEdge()&&(old.data('source')!==spec.data.source||old.data('target')!==spec.data.target)){old.remove();old=cy.getElementById(spec.data.id);}if(old.empty())cy.add(spec);else{old.data(spec.data);if(spec.position&&!old.grabbed())old.position(spec.position);}}
    cy.elements('.entity, .model-edge').unselect();if(selected)cy.getElementById(selected).select();
   });syncing=false;
- },fit(){cy.resize();cy.fit(cy.elements('.entity, .environment'),60);},resize(){cy.resize();},zoom(factor){cy.zoom({level:Math.max(.2,Math.min(2,cy.zoom()/factor)),renderedPosition:{x:container.clientWidth/2,y:container.clientHeight/2}});},drawMode(){draw=!draw;if(draw)eh.enableDrawMode();else{eh.stop();eh.disableDrawMode();cy.elements('.eh-ghost, edge.eh-preview').remove();cy.elements().removeClass('eh-source eh-target eh-preview eh-preview-active');}return draw;}};
+ },fit(){cy.resize();cy.fit(cy.elements('.entity, .environment'),Math.min(60,container.clientWidth*.08));},resize(){cy.resize();},zoom(factor){cy.zoom({level:Math.max(.2,Math.min(2,cy.zoom()/factor)),renderedPosition:{x:container.clientWidth/2,y:container.clientHeight/2}});},drawMode(){draw=!draw;if(draw)eh.enableDrawMode();else{eh.stop();eh.disableDrawMode();cy.elements('.eh-ghost, edge.eh-preview').remove();cy.elements().removeClass('eh-source eh-target eh-preview eh-preview-active');}return draw;}};
  // Explicit read-only observation seam for functional library/gesture checks, never serialized.
  container.graph=api;return api;
 }

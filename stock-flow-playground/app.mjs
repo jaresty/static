@@ -19,7 +19,7 @@ function save(){if(autosaveBlocked){$('autosave').textContent='Autosave paused �
 function confirmDynamics(next){return !changesDynamics(model,next)||run.rows.length<=1||confirm('This changes dynamics and resets the existing run/history. Continue?');}
 function adopt(next,dynamic,message){model=clone(next);if(dynamic)reset();else run.model=clone(model);review=null;$('review-panel').hidden=true;if(activePanel?.id==='review-panel')closeModal();render();status(message||(dynamic?'Model updated; run reset.':'Presentation updated; run retained. Playback unchanged.'));save();}
 function commit(next,message){
- validate(next);const dynamic=changesDynamics(model,next);if(!confirmDynamics(next)){status('Dynamics change cancelled; run retained.');render();return false;}
+ try{validate(next);}catch(error){if(/endpoint stock units must match exactly|flow unit must be/.test(error.message))throw Error(`${error.message}. Current work is unchanged. For coordinated unit relabeling, choose Import → Show current JSON, edit the complete document so all connected stock and flow units and the time unit agree, then Validate & preview import → inspect the candidate → Apply reviewed model. Labels do not convert numeric values.`);throw error;}const dynamic=changesDynamics(model,next);if(!confirmDynamics(next)){status('Dynamics change cancelled; run retained.');render();return false;}
  if(!commitHistory(history,next)){status('No document change; run retained.');return true;}adopt(history.current,dynamic,message);return true;
 }
 function reset(){pause();run=createRun(model);index=0;}
@@ -29,7 +29,7 @@ function render(){
  const settings=$('settings').elements;settings.title.value=model.title;settings.timeUnit.value=model.time.unit;settings.dt.value=model.time.dt;settings.horizon.value=model.time.horizon;
  $('selection').replaceChildren();for(const e of model.entities)option($('selection'),e.id,`${e.name} · ${e.type} [${e.id}]`);
  if(!model.entities.some(e=>e.id===selected))selected=model.entities[0].id;$('selection').value=selected;
- renderEntity();graph();inspect();$('undo').disabled=!history.past.length;$('redo').disabled=!history.future.length;
+ renderEntity();inspect();$('undo').disabled=!history.past.length;$('redo').disabled=!history.future.length;
 }
 function renderEntity(){const e=model.entities.find(e=>e.id===selected),f=$('entity').elements;f.id.value=e.id;f.name.value=e.name;f.unit.value=e.unit;
  const numeric=e.type==='stock'||e.type==='parameter';$('numeric-label').hidden=!numeric;$('numeric-label').firstChild.textContent=e.type==='stock'?'Initial amount':'Parameter value';f.number.value=e.initial??e.value??0;f.number.required=numeric;
