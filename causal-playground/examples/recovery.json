@@ -1,0 +1,64 @@
+{
+  "format": "causal-playground",
+  "schemaVersion": 1,
+  "engine": "bounded-influence-v1",
+  "title": "Room to recover",
+  "description": "",
+  "stepLabel": "step",
+  "nodes": [
+    {
+      "id": "a",
+      "name": "Pressure",
+      "initial": 50,
+      "baseline": 50,
+      "responsiveness": 0.15
+    },
+    {
+      "id": "b",
+      "name": "Strain",
+      "initial": 50,
+      "baseline": 50,
+      "responsiveness": 0.15
+    }
+  ],
+  "relationships": [
+    {
+      "id": "a-b",
+      "name": "Pressure creates strain",
+      "from": "a",
+      "to": "b",
+      "polarity": "+",
+      "gain": 0.6,
+      "delaySteps": 2
+    }
+  ],
+  "interventions": [
+    {
+      "id": "pulse-a",
+      "kind": "pulse",
+      "node": "a",
+      "tick": 0,
+      "value": 70
+    }
+  ],
+  "assumptions": [
+    "Values are abstract levels, not physical units.",
+    "Gains and delays are illustrative hypotheses, not calibrated predictions."
+  ],
+  "view": {
+    "positions": {
+      "a": {
+        "x": 160,
+        "y": 190
+      },
+      "b": {
+        "x": 490,
+        "y": 190
+      }
+    },
+    "chartNodes": [
+      "a",
+      "b"
+    ]
+  }
+}

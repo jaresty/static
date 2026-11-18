@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "causal-playground"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "engine": {
+      "const": "bounded-influence-v1"
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 160
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "stepLabel": {
+      "type": "string",
+      "maxLength": 30
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "initial": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "baseline": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "responsiveness": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "initial",
+          "baseline",
+          "responsiveness"
+        ]
+      },
+      "maxItems": 100
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "polarity": {
+            "enum": [
+              "+",
+              "-"
+            ]
+          },
+          "gain": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "delaySteps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "from",
+          "to",
+          "polarity",
+          "gain",
+          "delaySteps"
+        ]
+      },
+      "maxItems": 500
+    },
+    "interventions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "kind": {
+            "const": "pulse"
+          },
+          "node": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "tick": {
+            "const": 0
+          },
+          "value": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "node",
+          "tick",
+          "value"
+        ]
+      },
+      "maxItems": 100
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 1000
+      },
+      "maxItems": 100
+    },
+    "view": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "positions": {
+          "type": "object",
+          "maxProperties": 100,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": -10000,
+                "maximum": 10000
+              },
+              "y": {
+                "type": "number",
+                "minimum": -10000,
+                "maximum": 10000
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
+          }
+        },
+        "chartNodes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "maxItems": 100,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "positions",
+        "chartNodes"
+      ]
+    }
+  },
+  "required": [
+    "format",
+    "schemaVersion",
+    "engine",
+    "title",
+    "description",
+    "stepLabel",
+    "nodes",
+    "relationships",
+    "interventions",
+    "assumptions",
+    "view"
+  ]
+}

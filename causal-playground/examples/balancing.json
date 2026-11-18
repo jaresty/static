@@ -1,0 +1,52 @@
+{
+  "format": "causal-playground",
+  "schemaVersion": 1,
+  "engine": "bounded-influence-v1",
+  "title": "A delayed correction",
+  "description": "",
+  "stepLabel": "step",
+  "nodes": [
+    {
+      "id": "a",
+      "name": "Demand",
+      "initial": 50,
+      "baseline": 50,
+      "responsiveness": 0.15
+    }
+  ],
+  "relationships": [
+    {
+      "id": "a-a",
+      "name": "Delayed correction",
+      "from": "a",
+      "to": "a",
+      "polarity": "-",
+      "gain": 2,
+      "delaySteps": 6
+    }
+  ],
+  "interventions": [
+    {
+      "id": "pulse-a",
+      "kind": "pulse",
+      "node": "a",
+      "tick": 0,
+      "value": 70
+    }
+  ],
+  "assumptions": [
+    "Values are abstract levels, not physical units.",
+    "Gains and delays are illustrative hypotheses, not calibrated predictions."
+  ],
+  "view": {
+    "positions": {
+      "a": {
+        "x": 160,
+        "y": 190
+      }
+    },
+    "chartNodes": [
+      "a"
+    ]
+  }
+}
