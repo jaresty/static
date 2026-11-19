@@ -1,4 +1,5 @@
 import {example,validate,canonical,parse} from './model.mjs';
+import {startingSituation,resultAt} from './scenario.mjs';
 import {createRun,step,stockLedger} from './engine.mjs';
 import {createHistory,commit as commitHistory,undo as undoHistory,redo as redoHistory,changesDynamics} from './document.mjs';
 import {createGraph,defaultPositions} from './graph.mjs';
@@ -7,7 +8,15 @@ import {importDocument,encodeShare,decodeShare,aiPrompt,fingerprint,reviewDraft,
 const $=id=>document.getElementById(id), clone=x=>structuredClone(x), storageKey='stock-flow-playground.v1';
 let model=clone(example),history=createHistory(model),run=createRun(model),selected='upper',index=0,timer=null,review=null,handoff=null,autosaveBlocked=false;
 const workspaceGraph=createGraph($('graph'),{select:id=>{selected=id;$('selection').value=id;renderEntity();graph();showView('inspector');},move:(id,pos)=>{const next=clone(model);next.view??={positions:{}};next.view.positions[id]=pos;commit(next);},connect:(source,target)=>flowDraft(source,target)});
-const charts=createCharts($('charts'),i=>inspectTime(i));
+const charts=createCharts($('charts'),i=>inspectTime(i),showResult,$('numeric-coverage'));
+function showResult(preview=null){
+ const panel=$('step-result');if(preview==null)panel.style.minHeight="";else if(!panel.style.minHeight)panel.style.minHeight=panel.offsetHeight+"px";
+ const tick=preview??index,row=run.rows[tick],result=resultAt(model,run.rows,tick);
+ $('sf-result-heading').textContent=(preview==null?'':'Preview · ')+result.heading;
+ $('sf-result-primary').textContent=result.primary;
+ $('sf-result-details').replaceChildren(...result.details.map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));
+ workspaceGraph.render(model,selected,row);showAccounting(tick);
+}
 let activePanel=null,aiMode='Build';
 function closeModal(){if(activePanel){activePanel.hidden=true;$('dialog-storage').append(activePanel);activePanel=null;}$('modal').close();}
 function openPanel(id,title){const panel=$(id);if(activePanel&&activePanel!==panel){activePanel.hidden=true;$('dialog-storage').append(activePanel);}activePanel=panel;panel.hidden=false;$('modal-body').replaceChildren(panel);$('modal-title').textContent=title;$('modal-status').textContent='';if(!$('modal').open)$('modal').showModal();}
@@ -25,6 +34,7 @@ function commit(next,message){
 function reset(){pause();run=createRun(model);index=0;}
 function option(select,value,label){const o=document.createElement('option');o.value=value;o.textContent=label;select.append(o);}
 function render(){
+ $('starting-situation').textContent=startingSituation(model);
  if(document.activeElement!==$('title'))$('title').value=model.title;
  const settings=$('settings').elements;settings.title.value=model.title;settings.timeUnit.value=model.time.unit;settings.dt.value=model.time.dt;settings.horizon.value=model.time.horizon;
  $('selection').replaceChildren();for(const e of model.entities)option($('selection'),e.id,`${e.name} · ${e.type} [${e.id}]`);
@@ -40,21 +50,23 @@ function renderEntity(){const e=model.entities.find(e=>e.id===selected),f=$('ent
 function graph(){workspaceGraph.render(model,selected,run.rows[index]);}
 const fmt=n=>Number(n).toLocaleString(undefined,{maximumFractionDigits:6});
 function updateClock(){const row=run.rows[index];$('time').textContent=`${timer!==null?'Running':index<run.rows.length-1?'Inspecting':'Paused'} · t = ${fmt(row.t)} ${model.time.unit} · tick ${index} / ${run.rows.length-1}`;}
-function inspect(){const row=run.rows[index];$('history').max=run.rows.length-1;$('history').value=index;updateClock();
- graph();
+function inspect(){$('history').max=run.rows.length-1;$('history').value=index;updateClock();
+ showResult();chart();
+}
+function showAccounting(tick){const row=run.rows[tick];
  $('stock-values').replaceChildren();const oldLedger=$('ledger-stock').value;$('ledger-stock').replaceChildren();
  for(const e of model.entities.filter(e=>e.type==='stock')){const tr=document.createElement('tr');for(const value of [e.name,fmt(row.stocks[e.id]),e.unit]){const td=document.createElement('td');td.textContent=value;tr.append(td);}$('stock-values').append(tr);option($('ledger-stock'),e.id,e.name);}
  if([...$('ledger-stock').options].some(o=>o.value===oldLedger))$('ledger-stock').value=oldLedger;
- ledger();const values=Object.entries(row.values).filter(([id])=>model.entities.find(e=>e.id===id)?.type!=='stock').map(([id,v])=>`${id} = ${fmt(v)} ${model.entities.find(e=>e.id===id).unit}`);$('computed').textContent=values.length?values.join(' · '):'Initial row: auxiliaries/rates have not been evaluated. Parameters: '+model.entities.filter(e=>e.type==='parameter').map(e=>`${e.id} = ${e.value} ${e.unit}`).join(' · ');if(row.delayedReads?.length)$('computed').textContent+=' · DELAYED OBSERVATIONS: '+row.delayedReads.map(d=>`${d.expression}: delay(${d.stock},${d.steps}) = ${fmt(d.value)} from tick ${d.sourceTick}, time ${fmt(d.sourceTime)} ${model.time.unit}${d.prehistory?' (initial prehistory)':''}`).join(' · ');chart();
+ ledger(tick);const values=Object.entries(row.values).filter(([id])=>model.entities.find(e=>e.id===id)?.type!=='stock').map(([id,v])=>`${id} = ${fmt(v)} ${model.entities.find(e=>e.id===id).unit}`);$('computed').textContent=values.length?values.join(' · '):'Initial row: auxiliaries/rates have not been evaluated. Parameters: '+model.entities.filter(e=>e.type==='parameter').map(e=>`${e.id} = ${e.value} ${e.unit}`).join(' · ');if(row.delayedReads?.length)$('computed').textContent+=' · DELAYED OBSERVATIONS: '+row.delayedReads.map(d=>`${d.expression}: delay(${d.stock},${d.steps}) = ${fmt(d.value)} from tick ${d.sourceTick}, time ${fmt(d.sourceTime)} ${model.time.unit}${d.prehistory?' (initial prehistory)':''}`).join(' · ');
 }
-function ledger(){const row=run.rows[index],id=$('ledger-stock').value;if(!id)return;const l=stockLedger(run,index,id);$('ledger').textContent=`${fmt(l.initial)} initial + ${fmt(l.inflow)} cumulative inflow − ${fmt(l.outflow)} cumulative outflow = ${fmt(l.balance)}; actual stock ${fmt(l.value)}. Only floating-point roundoff may differ.`;
- $('transition').replaceChildren();if(index===0){$('transition').textContent='Initial state: no transition yet.';return;}
+function ledger(tick=index){const row=run.rows[tick],id=$('ledger-stock').value;if(!id)return;const l=stockLedger(run,tick,id);$('ledger').textContent=`${fmt(l.initial)} initial + ${fmt(l.inflow)} cumulative inflow − ${fmt(l.outflow)} cumulative outflow = ${fmt(l.balance)}; actual stock ${fmt(l.value)}. Only floating-point roundoff may differ.`;
+ $('transition').replaceChildren();if(tick===0){$('transition').textContent='Initial state: no transition yet.';return;}
  const heading=document.createElement('p');heading.textContent=`Transition ${fmt(row.t-row.dt)} → ${fmt(row.t)} (${model.time.unit}), dt ${fmt(row.dt)}. Rates computed from the old state. Incoming material cannot fund outgoing transfers until next step.`;$('transition').append(heading);
  for(const f of row.flows.filter(f=>f.source===id||f.target===id)){const p=document.createElement('p');p.textContent=`${f.id}: ${f.source??'environment'} → ${f.target??'environment'}; ${f.expression} = requested ${fmt(f.requested)}, applied ${fmt(f.applied)} ${model.entities.find(e=>e.id===f.id).unit}. Amount ${fmt(f.amount)}. ${f.limited?'LIMITED: proportional source factor '+fmt(f.factor):'No source limiting.'} Current old-state references (delayed reads listed separately): `+(parse(f.expression).refs.map(r=>`${r}=${fmt(row.values[r])}`).join(', ')||'constant');$('transition').append(p);}
  for(const d of row.delayedReads||[]){const p=document.createElement('p');p.textContent=`Actual information read for ${d.expression}: delay(${d.stock}, ${d.steps}) = ${fmt(d.value)}, source tick ${d.sourceTick}, time ${fmt(d.sourceTime)} ${model.time.unit}${d.prehistory?' (initial prehistory)':''}. This is not material transit; availability is current old stock.`;$('transition').append(p);}
 }
 // Original charts.js interaction boundary: hover is passive; explicit click inspects.
-function inspectTime(i){pause();index=Math.max(0,Math.min(run.rows.length-1,i));inspect();status('Historical inspection paused playback.');}
+function inspectTime(i){charts.clearPreview();pause();index=Math.max(0,Math.min(run.rows.length-1,i));inspect();status('Historical inspection paused playback.');}
 function chart(){charts.render(model,run,index);}
 function download(text,name,type='application/json'){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function showReview(r){review=r;$('review-changes').textContent=r.changes.join(' · ');$('review-json').textContent=JSON.stringify(r.candidate,null,2);openPanel('review-panel','Review proposed model');status('Validated candidate ready for explicit review. Current model unchanged.');}
@@ -65,7 +77,7 @@ $('add').onclick=safe(()=>{const m=clone(model),type=$('new-type').value;let n=1
 $('remove').onclick=safe(()=>{const m=clone(model);m.entities=m.entities.filter(e=>e.id!==selected);if(m.view)delete m.view.positions[selected];commit(m,'Entity removed; run reset. Referenced entities cannot be removed until dependencies/endpoints are changed.');});
 $('reset').onclick=()=>{reset();inspect();status('Run reset; model unchanged.');};$('step').onclick=safe(()=>{pause();if(step(run)){index=run.rows.length-1;inspect();status('One transition computed.');}else status('Horizon reached.');});
 $('run').onclick=()=>{if(timer!==null){pause();return;}$('run').setAttribute('aria-pressed','true');$('run').textContent='Ⅱ Pause';timer=setInterval(()=>{try{if(!step(run)){pause();status('Horizon reached.');}index=run.rows.length-1;inspect();}catch(e){pause();status(e.message,true);}},Number($('speed').value));updateClock();};
-$('history').oninput=()=>inspectTime(Number($('history').value));$('ledger-stock').onchange=ledger;
+$('history').oninput=()=>inspectTime(Number($('history').value));$('ledger-stock').onchange=()=>ledger();
 for(const direction of ['undo','redo'])$(direction).onclick=()=>{const target=direction==='undo'?history.past.at(-1):history.future.at(-1);if(!target||!confirmDynamics(target))return;const dynamic=changesDynamics(model,target);(direction==='undo'?undoHistory:redoHistory)(history);adopt(history.current,dynamic,`${direction} applied; ${dynamic?'run reset':'presentation only; run retained; playback unchanged'}.`);};
 $('example').onclick=safe(async()=>showReview(await reviewDraft(JSON.stringify(example),model,await fingerprint(model))));$('export').onclick=()=>download(JSON.stringify(model,null,2),'stock-flow.json');$('show-json').onclick=()=>{$('document').value=JSON.stringify(model,null,2);};
 $('file').onchange=safe(async()=>{const file=$('file').files[0];if(!file)return;if(file.size>65536)throw Error('File exceeds 65536 bytes');$('document').value=await file.text();status('File loaded for preview; not applied.');});

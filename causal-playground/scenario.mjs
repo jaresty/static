@@ -18,5 +18,8 @@ export function resultAt(model, run, tick) {
     const r = records[id], fmt = x => Number(x.toFixed(3));
     return `${model.nodes.find(n => n.id === id).name}: ${fmt(r.current)} → ${fmt(r.next)}${r.net === 0 ? ' (unchanged)' : fmt(r.current) === fmt(r.next) ? ' (small change, rounded)' : ''}`;
   });
-  return { heading: `Result · ${model.stepLabel || 'step'} ${tick}`, text: `${changed.length} of ${model.nodes.length} levels changed.${ids.length > rows.length ? ` Showing ${rows.length}; inspect any variable for details.` : ''}`, rows };
+  const names = new Map(model.nodes.map(n=>[n.id,n.name]));
+  const watched = ids.slice(0,2).sort((a,b)=>Number(records[b].net!==0)-Number(records[a].net!==0));
+  const headline = watched.map(id=>{const r=records[id],fmt=x=>Number(x.toFixed(3));return r.net===0?`${names.get(id)} stayed at ${fmt(r.next)}.`:`${names.get(id)} ${r.net>0?"rose":"fell"} from ${fmt(r.current)} to ${fmt(r.next)}${fmt(r.current)===fmt(r.next)?" (rounded)":""}.`;}).join(" ");
+  return { heading: `Result · ${model.stepLabel || 'step'} ${tick}`, text: headline || "No levels to inspect.", detail: `${changed.length} of ${model.nodes.length} levels changed.${ids.length > rows.length ? ` Showing ${rows.length}; inspect any variable for details.` : ''}`, rows };
 }

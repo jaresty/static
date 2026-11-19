@@ -17,7 +17,7 @@
   click('+ Relationship');selects=$('inspector').querySelectorAll('select');selects[0].value=nodeId;selects[1].value=nodeId;selects[2].value='-';fill('#inspector input[type=text]','Self correction');click('Add relationship');check('self-loop created with negative sign',[...$('objects').options].some(x=>x.textContent==='Arrow · Self correction'));
   for(let i=0;i<8;i++)$('step').click();check('computed playback reached tick 8',$('clock').textContent.includes('tick 8'));
   choose('node:b');check('actual delayed contribution shown',$('contributions').textContent.includes('source tick'));
-  $('scrub').value=2;$('scrub').dispatchEvent(new Event('input',{bubbles:true}));check('historical canvas/chart inspection',$('clock').textContent.includes('Viewing tick 2')&&$('transition-title').textContent.includes('2 to 3'));
+  $('scrub').value=2;$('scrub').dispatchEvent(new Event('input',{bubbles:true}));check('historical canvas/chart inspection',$('clock').textContent.includes('Viewing tick 2')&&$('transition-title').textContent.includes('1 to 2'));
   click('Explain this node with AI');click('Generate context');await wait(()=>$('prompt-output').value.includes('causal-playground-analysis'));const prompt=$('prompt-output').value;const packet=JSON.parse(prompt.split('UNTRUSTED ANALYSIS PACKET\n')[1].split('\nEND PACKET')[0]);
   check('Explain exports actual selected evidence',packet.focus.node==='b'&&packet.exact.some(x=>x.tick===2)&&packet.transitions.length>0&&packet.coverage.includedNodes.length===1);
   check('Explain remains read-only and discloses omissions',prompt.includes('READ ONLY')&&Object.hasOwn(packet.coverage,'omittedContributions'));
