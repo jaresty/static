@@ -24,7 +24,7 @@ test('R3 corrupt cumulative ledger rejects atomically at multiple scales',()=>{
  }
 });
 // Minimal DOM/uPlot test double isolates lifecycle and disclosure; real uPlot is browser-tested.
-class Element {constructor(){this.children=[];this.clientWidth=700;this.dataset={};}append(...xs){this.children.push(...xs);}replaceChildren(...xs){this.children=xs;}setAttribute(){}addEventListener(){} }
+class Element {constructor(){this.children=[];this.clientWidth=700;this.dataset={};this.style={setProperty(){}};}append(...xs){this.children.push(...xs);}replaceChildren(...xs){this.children=xs;}get tBodies(){return [this];}insertRow(){return this;}insertCell(){const cell=new Element();this.append(cell);return cell;}setAttribute(){}addEventListener(){} }
 test('R1 current omission coverage follows 12→13→14→13 and omitted rename without plot rebuild',()=>{
  const oldDocument=globalThis.document,oldPlot=globalThis.uPlot;
  globalThis.document={createElement:()=>new Element()};let made=0;
