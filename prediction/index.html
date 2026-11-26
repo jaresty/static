@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Prediction">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#06222e">
+<title>Prediction</title>
+<style>
+/* VOICE: clinical, calm, private notebook
+   IDEA: a sealed ledger book — entries are inked, never erased
+   PICTURE: the working log itself; calibration bars as the one chart
+   COLOUR+TYPE: ice ground, deep ink, one hot pink accent; system fonts (no outside requests)
+   LAYOUT: single column, tabs on top, thumb-sized controls */
+:root{color-scheme:light dark;--bg:light-dark(#dff1f7,#06222e);--ink:light-dark(#06222e,#e3f3f8);--card:light-dark(#ffffff,#0d3242);--line:light-dark(#b9dbe6,#1f4b5d);--mute:light-dark(#4a6a77,#8fb3c1);--acc:#ff2e7e}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow-x:clip;padding-bottom:env(safe-area-inset-bottom)}
+header{padding:20px max(5vw,16px) 0;max-width:720px;margin:auto}
+h1{font-size:34px;line-height:1.05;margin:0 0 4px;letter-spacing:-.02em}
+.sub{color:var(--mute);margin:0 0 14px;font-size:14px}
+nav{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+nav button{flex:none;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:22px;padding:10px 16px;font:inherit;font-size:15px;min-height:44px}
+nav button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+nav .n{display:inline-block;background:var(--acc);color:#fff;border-radius:10px;padding:0 7px;font-size:12px;margin-left:4px}
+nav .n[hidden]{display:none}
+main{max-width:720px;margin:auto;padding:16px max(5vw,16px) 40px}
+section{display:none}section.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
+label{display:block;font-size:14px;color:var(--mute);margin:12px 0 4px}
+input,textarea,select{width:100%;font:inherit;font-size:16px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+textarea{resize:vertical;min-height:64px}
+input[type=date]::-webkit-datetime-edit,input[type=date]::-webkit-datetime-edit-fields-wrapper{padding:0}
+input[type=date]::-webkit-datetime-edit-month-field,input[type=date]::-webkit-datetime-edit-day-field,input[type=date]::-webkit-datetime-edit-year-field{padding-block:0}
+input[type=range]{padding:0;accent-color:var(--acc);border:0;background:none;min-height:44px}
+.conf{font-size:32px;font-weight:700;font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:10px;border:0;background:var(--ink);color:var(--bg);font:inherit;font-weight:600;cursor:pointer}
+.btn.acc{background:var(--acc);color:#fff}.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.claim{font-weight:600;font-size:17px}
+.meta{color:var(--mute);font-size:13px}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:8px;border:1px solid var(--line);margin-right:4px}
+.tag.yes{background:#1d8a5a;color:#fff;border:0}.tag.no{background:var(--acc);color:#fff;border:0}.tag.partly{background:#c98a10;color:#fff;border:0}
+.empty{color:var(--mute);text-align:center;padding:28px 8px}
+.bar{position:relative;height:26px;background:var(--bg);border-radius:6px;overflow:hidden;margin:4px 0 2px}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--ink);opacity:.85}
+.bar b{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--acc)}
+.kv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;text-align:center}
+.kv div{background:var(--bg);border-radius:10px;padding:10px 4px}.kv strong{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:8px 4px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}td:first-child,th:first-child{text-align:left;white-space:normal}
+#toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:22px;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.on{opacity:1}
+@media(prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Prediction</h1>
+  <p class="sub">Your predictions, sealed. Stored only on this device.</p>
+  <nav id="nav">
+    <button data-t="log" class="on">Log</button>
+    <button data-t="due">Due<span class="n" id="dueN" hidden></span></button>
+    <button data-t="record">Record</button>
+    <button data-t="cal">Calibration</button>
+    <button data-t="data">Data</button>
+  </nav>
+</header>
+<main>
+<section id="log" class="on">
+  <form class="card" id="form">
+    <label for="fDecision">Decision (one sentence)</label>
+    <textarea id="fDecision" required placeholder="Stretch the team instead of hiring a contractor."></textarea>
+    <label for="fClaim">Prediction (checkable)</label>
+    <input id="fClaim" required placeholder="Migration ships by Mar 15">
+    <label for="fConf">Confidence</label>
+    <div class="conf"><span id="confOut">70</span>%</div>
+    <input type="range" id="fConf" min="1" max="99" value="70">
+    <label for="fDue">Check-in date</label>
+    <input type="date" id="fDue" required>
+    <label for="fDomain">Domain</label>
+    <input id="fDomain" list="domains" required placeholder="Timelines">
+    <datalist id="domains"></datalist>
+    <div class="row"><button class="btn acc" type="submit">Lock entry</button></div>
+    <p class="meta">Once locked, an entry can't be edited. That's the point.</p>
+  </form>
+</section>
+<section id="due"><div id="dueList"></div></section>
+<section id="record"><div id="recList"></div></section>
+<section id="cal"><div id="calOut"></div></section>
+<section id="data">
+  <div class="card">
+    <p class="claim">Back up your ledger</p>
+    <p class="meta">Browser storage can be cleared by the system. Export now and then and keep the file somewhere you trust.</p>
+    <div class="row">
+      <button class="btn" id="exp">Download backup</button>
+      <button class="btn ghost" id="copy">Copy as text</button>
+    </div>
+    <label for="imp">Restore from a backup file (merges, never deletes)</label>
+    <input type="file" id="imp" accept="application/json,.json">
+    <p class="meta" id="stat"></p>
+  </div>
+</section>
+</main>
+<div id="toast" role="status"></div>
+<script>
+{
+const K='ledger.v1';
+let S={entries:[]};let storageOK=true;
+try{const r=localStorage.getItem(K);if(r)S=JSON.parse(r);if(!Array.isArray(S.entries))S={entries:[]}}catch(e){storageOK=false}
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){storageOK=false;toast('Could not save — storage unavailable')}};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+const plus=n=>{const d=new Date();d.setDate(d.getDate()+n);return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+const score=o=>o==='yes'?1:o==='partly'?.5:0;
+const THRESH=20;
+let tt;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2200)}
+
+function show(t){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id===t));render()}
+$('nav').addEventListener('click',e=>{const b=e.target.closest('button');if(b)show(b.dataset.t)});
+
+$('fConf').addEventListener('input',e=>$('confOut').textContent=e.target.value);
+$('fDue').value=plus(30);
+
+$('form').addEventListener('submit',e=>{
+  e.preventDefault();
+  const en={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),created:new Date().toISOString(),
+    decision:$('fDecision').value.trim(),claim:$('fClaim').value.trim(),conf:+$('fConf').value,
+    due:$('fDue').value,domain:$('fDomain').value.trim(),outcome:null,note:'',resolved:null};
+  if(!en.decision||!en.claim||!en.due||!en.domain)return;
+  S.entries.push(en);save();
+  $('fDecision').value='';$('fClaim').value='';$('fDue').value=plus(30);
+  toast('Locked. Check-in '+en.due);render();
+});
+
+function render(){
+  const E=S.entries;
+  const doms=[...new Set(E.map(x=>x.domain))].sort();
+  $('domains').innerHTML=doms.map(d=>`<option value="${esc(d)}">`).join('');
+  const due=E.filter(x=>!x.outcome&&x.due<=today());
+  $('dueN').hidden=!due.length;$('dueN').textContent=due.length;
+
+  $('dueList').innerHTML=due.length?due.map(x=>`
+    <div class="card" data-id="${esc(x.id)}">
+      <p class="meta">Due ${esc(x.due)} · ${esc(x.domain)}</p>
+      <p class="claim">${esc(x.claim)}</p>
+      <p class="meta">Did it happen? Answer before you see your reasoning.</p>
+      <div class="row">
+        <button class="btn" data-o="yes">Yes</button>
+        <button class="btn ghost" data-o="partly">Partly</button>
+        <button class="btn acc" data-o="no">No</button>
+      </div>
+    </div>`).join(''):'<p class="empty">Nothing due. Upcoming check-ins show up here on their date.</p>';
+
+  $('recList').innerHTML=E.length?[...E].reverse().map(x=>`
+    <div class="card">
+      <p class="meta">${esc(x.created.slice(0,10))} · ${esc(x.domain)} · ${x.outcome?`<span class="tag ${x.outcome}">${x.outcome}</span>`:`<span class="tag">open · ${esc(x.due)}</span>`}</p>
+      <p class="claim">${esc(x.claim)} — ${x.conf}%</p>
+      <p>${esc(x.decision)}</p>
+      ${x.note?`<p class="meta">Note: ${esc(x.note)}</p>`:''}
+    </div>`).join(''):'<p class="empty">No entries yet. Log your first decision.</p>';
+
+  renderCal();
+  $('stat').textContent=`${E.length} entries · ${E.filter(x=>x.outcome).length} resolved${storageOK?'':' · ⚠ storage unavailable in this view'}`;
+}
+
+let calDom='All';
+function renderCal(){
+  const R=S.entries.filter(x=>x.outcome);
+  if(R.length<THRESH){$('calOut').innerHTML=`<div class="card"><p class="claim">Collecting data (${R.length}/${THRESH})</p><p class="meta">Scores stay hidden until you have ${THRESH} resolved predictions. Three results can't tell you anything yet.</p><div class="bar"><i style="width:${R.length/THRESH*100}%"></i></div></div>`;return}
+  const doms=['All',...new Set(R.map(x=>x.domain))];
+  if(!doms.includes(calDom))calDom='All';
+  const set=calDom==='All'?R:R.filter(x=>x.domain===calDom);
+  const brier=a=>a.reduce((s,x)=>s+(x.conf/100-score(x.outcome))**2,0)/a.length;
+  const hit=a=>a.reduce((s,x)=>s+score(x.outcome),0)/a.length;
+  const avg=a=>a.reduce((s,x)=>s+x.conf,0)/a.length;
+  const buckets=[];for(let lo=0;lo<100;lo+=10){const b=set.filter(x=>x.conf>=lo&&x.conf<lo+10);if(b.length)buckets.push({lo,n:b.length,c:avg(b),h:hit(b)*100})}
+  const perDom=doms.slice(1).map(d=>{const a=R.filter(x=>x.domain===d);return{d,n:a.length,c:avg(a),h:hit(a)*100,b:brier(a)}});
+  $('calOut').innerHTML=`
+  <div class="card">
+    <label for="calSel">Domain</label>
+    <select id="calSel">${doms.map(d=>`<option ${d===calDom?'selected':''}>${esc(d)}</option>`).join('')}</select>
+    <div class="kv" style="margin-top:12px">
+      <div><strong>${set.length}</strong><span class="meta">resolved</span></div>
+      <div><strong>${Math.round(avg(set))}%</strong><span class="meta">avg confidence</span></div>
+      <div><strong>${Math.round(hit(set)*100)}%</strong><span class="meta">came true</span></div>
+    </div>
+    <p class="meta">Brier score ${brier(set).toFixed(3)} (lower is better; 0.25 = always saying 50%).</p>
+  </div>
+  <div class="card">
+    <p class="claim">Said vs. happened</p>
+    <p class="meta">Dark bar = how often it came true. Pink mark = what you said. Well calibrated means they line up.</p>
+    ${buckets.map(b=>`<div style="margin-top:10px"><span class="meta">${b.lo}–${b.lo+9}% · ${b.n} prediction${b.n>1?'s':''} · came true ${Math.round(b.h)}%</span><div class="bar"><i style="width:${b.h}%"></i><b style="left:calc(${b.c}% - 1px)"></b></div></div>`).join('')}
+  </div>
+  <div class="card"><p class="claim">By domain</p>
+    <table><tr><th>Domain</th><th>n</th><th>Said</th><th>True</th><th>Brier</th></tr>
+    ${perDom.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.n}</td><td>${Math.round(r.c)}%</td><td>${Math.round(r.h)}%</td><td>${r.b.toFixed(2)}</td></tr>`).join('')}</table>
+  </div>`;
+  $('calSel').addEventListener('change',e=>{calDom=e.target.value;renderCal()});
+}
+
+$('dueList').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-o]');if(!b)return;
+  const card=b.closest('.card');const x=S.entries.find(y=>y.id===card.dataset.id);if(!x||x.outcome)return;
+  x.outcome=b.dataset.o;x.resolved=new Date().toISOString();save();
+  card.innerHTML=`<p class="meta">${esc(x.domain)} · <span class="tag ${x.outcome}">${x.outcome}</span></p>
+    <p class="claim">${esc(x.claim)} — you said ${x.conf}%</p>
+    <p>Your decision: ${esc(x.decision)}</p>
+    <label>One-line note (optional)</label><input class="note" placeholder="Shipped Apr 2 — vendor delay">
+    <div class="row"><button class="btn" data-done>Done</button></div>`;
+  card.dataset.done='1';
+});
+$('dueList').addEventListener('click',e=>{
+  if(!e.target.matches('[data-done]'))return;
+  const card=e.target.closest('.card');const x=S.entries.find(y=>y.id===card.dataset.id);
+  if(x){x.note=card.querySelector('.note').value.trim();save()}
+  toast('Recorded');render();
+});
+
+$('exp').addEventListener('click',()=>{
+  try{const blob=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ledger-backup-'+today()+'.json';document.body.appendChild(a);a.click();a.remove();toast('Backup downloaded')}catch(e){toast('Download blocked — use Copy as text')}
+});
+$('copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(JSON.stringify(S));toast('Copied')}catch(e){toast('Copy not allowed here')}});
+$('imp').addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{const d=JSON.parse(await f.text());const have=new Set(S.entries.map(x=>x.id));let n=0;
+    for(const x of d.entries||[]){if(x&&x.id&&!have.has(x.id)){S.entries.push(x);n++}}
+    S.entries.sort((a,b)=>a.created<b.created?-1:1);save();render();toast(`Restored ${n} entries`)}catch(err){toast('Not a valid backup file')}
+  e.target.value='';
+});
+
+render();
+}
+</script>
+</body>

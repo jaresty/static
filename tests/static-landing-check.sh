@@ -39,7 +39,7 @@ class P(HTMLParser):
             value=dict(attrs).get('href')
             if value: self.hrefs.add(value)
 p=P(); p.feed(path.read_text())
-required={'./ohara-living-diagram/','./causal-playground/','./2x2-facilitator/','./pairwise-ranker/','./simulators/code-review-pipeline.html','./simulators/split-pr-simulation.html'}
+required={'./ohara-living-diagram/','./causal-playground/','./2x2-facilitator/','./pairwise-ranker/','./prediction/','./simulators/code-review-pipeline.html','./simulators/split-pr-simulation.html'}
 raise SystemExit(0 if required.issubset(p.hrefs) else 1)
 PY
 }
