@@ -40,6 +40,8 @@ input[type=range]{padding:0;accent-color:var(--acc);border:0;background:none;min
 .btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:10px;border:0;background:var(--ink);color:var(--bg);font:inherit;font-weight:600;cursor:pointer}
 .btn.acc{background:var(--acc);color:#fff}.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.chips:empty{display:none}
+.chips button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:22px;padding:0 14px;min-height:44px;font:inherit;font-size:14px;cursor:pointer}
 :focus-visible{outline:3px solid var(--acc);outline-offset:2px}
 .claim{font-weight:600;font-size:17px}
 .meta{color:var(--mute);font-size:13px}
@@ -81,8 +83,9 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:8px 4px;b
     <input type="range" id="fConf" min="1" max="99" value="70">
     <label for="fDue">Check-in date</label>
     <input type="date" id="fDue" required>
-    <label for="fDomain">Domain</label>
-    <input id="fDomain" list="domains" required placeholder="Timelines">
+    <label for="fDomain">Domain (optional)</label>
+    <input id="fDomain" list="domains" placeholder="General">
+    <div class="chips" id="chips"></div>
     <datalist id="domains"></datalist>
     <div class="row"><button class="btn acc" type="submit">Lock entry</button></div>
     <p class="meta">Once locked, an entry can't be edited. That's the point.</p>
@@ -117,7 +120,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const today=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
 const plus=n=>{const d=new Date();d.setDate(d.getDate()+n);return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
 const score=o=>o==='yes'?1:o==='partly'?.5:0;
-const THRESH=20;
+const THRESH=20,DOM_THRESH=15;
 let tt;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2200)}
 
 function show(t){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id===t));render()}
@@ -125,13 +128,14 @@ $('nav').addEventListener('click',e=>{const b=e.target.closest('button');if(b)sh
 
 $('fConf').addEventListener('input',e=>$('confOut').textContent=e.target.value);
 $('fDue').value=plus(30);
+$('chips').addEventListener('click',e=>{const b=e.target.closest('button');if(b)$('fDomain').value=b.dataset.d});
 
 $('form').addEventListener('submit',e=>{
   e.preventDefault();
   const en={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),created:new Date().toISOString(),
     decision:$('fDecision').value.trim(),claim:$('fClaim').value.trim(),conf:+$('fConf').value,
-    due:$('fDue').value,domain:$('fDomain').value.trim(),outcome:null,note:'',resolved:null};
-  if(!en.decision||!en.claim||!en.due||!en.domain)return;
+    due:$('fDue').value,domain:$('fDomain').value.trim()||'General',outcome:null,note:'',resolved:null};
+  if(!en.decision||!en.claim||!en.due)return;
   S.entries.push(en);save();
   $('fDecision').value='';$('fClaim').value='';$('fDue').value=plus(30);
   toast('Locked. Check-in '+en.due);render();
@@ -141,6 +145,9 @@ function render(){
   const E=S.entries;
   const doms=[...new Set(E.map(x=>x.domain))].sort();
   $('domains').innerHTML=doms.map(d=>`<option value="${esc(d)}">`).join('');
+  const uses={};E.forEach(x=>{if(x.domain!=='General')uses[x.domain]=(uses[x.domain]||0)+1});
+  const top=Object.keys(uses).sort((a,b)=>uses[b]-uses[a]||a.localeCompare(b)).slice(0,3);
+  $('chips').innerHTML=top.map(d=>`<button type="button" data-d="${esc(d)}">${esc(d)}</button>`).join('');
   const due=E.filter(x=>!x.outcome&&x.due<=today());
   $('dueN').hidden=!due.length;$('dueN').textContent=due.length;
 
@@ -172,7 +179,10 @@ let calDom='All';
 function renderCal(){
   const R=S.entries.filter(x=>x.outcome);
   if(R.length<THRESH){$('calOut').innerHTML=`<div class="card"><p class="claim">Collecting data (${R.length}/${THRESH})</p><p class="meta">Scores stay hidden until you have ${THRESH} resolved predictions. Three results can't tell you anything yet.</p><div class="bar"><i style="width:${R.length/THRESH*100}%"></i></div></div>`;return}
-  const doms=['All',...new Set(R.map(x=>x.domain))];
+  const resolvedIn=d=>R.filter(x=>x.domain===d).length;
+  const allDoms=[...new Set(R.map(x=>x.domain))];
+  const waiting=allDoms.filter(d=>resolvedIn(d)<DOM_THRESH);
+  const doms=['All',...allDoms.filter(d=>resolvedIn(d)>=DOM_THRESH)];
   if(!doms.includes(calDom))calDom='All';
   const set=calDom==='All'?R:R.filter(x=>x.domain===calDom);
   const brier=a=>a.reduce((s,x)=>s+(x.conf/100-score(x.outcome))**2,0)/a.length;
@@ -197,8 +207,9 @@ function renderCal(){
     ${buckets.map(b=>`<div style="margin-top:10px"><span class="meta">${b.lo}–${b.lo+9}% · ${b.n} prediction${b.n>1?'s':''} · came true ${Math.round(b.h)}%</span><div class="bar"><i style="width:${b.h}%"></i><b style="left:calc(${b.c}% - 1px)"></b></div></div>`).join('')}
   </div>
   <div class="card"><p class="claim">By domain</p>
-    <table><tr><th>Domain</th><th>n</th><th>Said</th><th>True</th><th>Brier</th></tr>
-    ${perDom.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.n}</td><td>${Math.round(r.c)}%</td><td>${Math.round(r.h)}%</td><td>${r.b.toFixed(2)}</td></tr>`).join('')}</table>
+    ${perDom.length?`<table><tr><th>Domain</th><th>n</th><th>Said</th><th>True</th><th>Brier</th></tr>
+    ${perDom.map(r=>`<tr><td>${esc(r.d)}</td><td>${r.n}</td><td>${Math.round(r.c)}%</td><td>${Math.round(r.h)}%</td><td>${r.b.toFixed(2)}</td></tr>`).join('')}</table>`:''}
+    ${waiting.length?`<p class="meta">A domain's scores appear once it has ${DOM_THRESH} resolved predictions: ${waiting.map(d=>`${esc(d)} ${resolvedIn(d)}/${DOM_THRESH}`).join(' · ')}</p>`:''}
   </div>`;
   $('calSel').addEventListener('change',e=>{calDom=e.target.value;renderCal()});
 }

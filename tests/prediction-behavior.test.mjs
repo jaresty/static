@@ -153,30 +153,55 @@ test('calibration stays hidden until 20 predictions are resolved', async () => {
   assert.equal(await page.locator('#calSel').count(), 0);
 });
 
-// 10 × 80% yes (Work), 5 × 60% partly and 5 × 30% no (Home):
-// avg confidence 62.5 → 63%, came true (10 + 2.5) / 20 → 63%,
-// Brier (10·0.04 + 5·0.01 + 5·0.09) / 20 = 0.045; Home alone (0.05 + 0.45) / 10 = 0.050.
+// 13 × 90% yes and 2 × 50% partly (Work), 6 × 20% no (Home); 21 resolved:
+// avg confidence 1390/21 → 66%, came true 14/21 → 67%,
+// Brier (13·0.01 + 0 + 6·0.04) / 21 = 0.0176 → 0.018; Work alone 0.13/15 → 0.009.
 const scored = [
-  ...Array.from({ length: 10 }, () => entry({ conf: 80, outcome: 'yes', domain: 'Work' })),
-  ...Array.from({ length: 5 }, () => entry({ conf: 60, outcome: 'partly', domain: 'Home' })),
-  ...Array.from({ length: 5 }, () => entry({ conf: 30, outcome: 'no', domain: 'Home' })),
+  ...Array.from({ length: 13 }, () => entry({ conf: 90, outcome: 'yes', domain: 'Work' })),
+  ...Array.from({ length: 2 }, () => entry({ conf: 50, outcome: 'partly', domain: 'Work' })),
+  ...Array.from({ length: 6 }, () => entry({ conf: 20, outcome: 'no', domain: 'Home' })),
 ];
 
 test('calibration scores resolved predictions once there are 20', async () => {
   const page = await open({ entries: scored });
   await page.click('nav button[data-t=cal]');
-  assert.deepEqual(await page.locator('#calOut .kv strong').allTextContents(), ['20', '63%', '63%']);
-  assert.match(await page.locator('#calOut').textContent(), /Brier score 0\.045/);
-  assert.deepEqual(await page.locator('#calOut .bar').evaluateAll(bars => bars.map(b => b.previousElementSibling.textContent.split(' · ')[0])), ['30–39%', '60–69%', '80–89%']);
-  assert.deepEqual(await page.locator('#calOut tr td:first-child').allTextContents(), ['Work', 'Home']);
+  assert.deepEqual(await page.locator('#calOut .kv strong').allTextContents(), ['21', '66%', '67%']);
+  assert.match(await page.locator('#calOut').textContent(), /Brier score 0\.018/);
+  assert.deepEqual(await page.locator('#calOut .bar').evaluateAll(bars => bars.map(b => b.previousElementSibling.textContent.split(' · ')[0])), ['20–29%', '50–59%', '90–99%']);
 });
 
 test('calibration can be narrowed to one domain', async () => {
   const page = await open({ entries: scored });
   await page.click('nav button[data-t=cal]');
-  await page.selectOption('#calSel', 'Home');
-  assert.equal(await page.locator('#calOut .kv strong').first().textContent(), '10');
-  assert.match(await page.locator('#calOut').textContent(), /Brier score 0\.050/);
+  await page.selectOption('#calSel', 'Work');
+  assert.equal(await page.locator('#calOut .kv strong').first().textContent(), '15');
+  assert.match(await page.locator('#calOut').textContent(), /Brier score 0\.009/);
+});
+
+test('per-domain scores wait until a domain has 15 resolved predictions', async () => {
+  const page = await open({ entries: scored });
+  await page.click('nav button[data-t=cal]');
+  assert.deepEqual(await page.locator('#calOut tr td:first-child').allTextContents(), ['Work']);
+  assert.deepEqual(await page.locator('#calSel option').allTextContents(), ['All', 'Work']);
+  assert.match(await page.locator('#calOut').textContent(), /Home 6\/15/);
+});
+
+test('domain is optional and is filed under General when left blank', async () => {
+  const page = await open();
+  await page.fill('#fDecision', 'Stretch the team');
+  await page.fill('#fClaim', 'Ships by March');
+  await page.click('button[type=submit]');
+  const [saved] = await stored(page);
+  assert.equal(saved?.domain, 'General');
+});
+
+test('quick-pick chips offer the three most-used domains and fill the field', async () => {
+  const many = (domain, n) => Array.from({ length: n }, () => entry({ domain }));
+  const page = await open({ entries: [...many('General', 5), ...many('Hiring', 4), ...many('Timelines', 2), ...many('Budget', 2), ...many('Travel', 1)] });
+  const chips = page.locator('#chips button');
+  assert.deepEqual(await chips.allTextContents(), ['Hiring', 'Budget', 'Timelines']);
+  await chips.filter({ hasText: 'Budget' }).click();
+  assert.equal(await page.inputValue('#fDomain'), 'Budget');
 });
 
 test('backup downloads the whole ledger as dated JSON', async () => {
